@@ -1,0 +1,112 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "material": {
+          "storePassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
+          "certpath": "./keys/common_debug.cer",
+          "keyAlias": "QuickySticker",
+          "keyPassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
+          "profile": "./keys/brewdebugDebug.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "./keys/quickysticker_sign.p12"
+        },
+        "type": "HarmonyOS"
+      },
+      {
+        "name": "release",
+        "material": {
+          "storePassword": "0000001D0EC755001FDDF6DEF0636505347EA5FC8953F63A719025E28F4739D8C168E43CC0E961B52CDE2422FC",
+          "certpath": "./keys/common_sign.cer",
+          "keyAlias": "QuickySticker",
+          "keyPassword": "0000001D0EC755001FDDF6DEF0636505347EA5FC8953F63A719025E28F4739D8C168E43CC0E961B52CDE2422FC",
+          "profile": "./keys/brewreleaseRelease.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "./keys/quickysticker_sign.p12"
+        },
+        "type": "HarmonyOS"
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "pc",
+      "srcPath": "./products/pc",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mine",
+      "srcPath": "./features/mine"
+    },
+    {
+      "name": "common",
+      "srcPath": "./common"
+    },
+    {
+      "name": "commonbusiness",
+      "srcPath": "./features/commonbusiness"
+    },
+    {
+      "name": "widgetcommon",
+      "srcPath": "./features/widgetcommon"
+    },
+    {
+      "name": "brewcommon",
+      "srcPath": "./features/brewcommon"
+    },
+    {
+      "name": "brewformulae",
+      "srcPath": "./features/brewformulae"
+    },
+    {
+      "name": "brewcasks",
+      "srcPath": "./features/brewcasks"
+    },
+    {
+      "name": "brewdiscover",
+      "srcPath": "./features/brewdiscover"
+    },
+    {
+      "name": "brewdetail",
+      "srcPath": "./features/brewdetail"
+    },
+    {
+      "name": "abilitycommon",
+      "srcPath": "./features/abilitycommon"
+    },
+    {
+      "name": "brewsearch",
+      "srcPath": "./features/brewsearch"
+    }
+  ]
+}

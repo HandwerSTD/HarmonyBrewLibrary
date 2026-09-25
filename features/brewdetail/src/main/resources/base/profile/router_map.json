@@ -1,0 +1,9 @@
+{
+  "routerMap": [
+    {
+      "name": "BrewDetailView",
+      "pageSourceFile": "src/main/ets/view/BrewDetailView.ets",
+      "buildFunction": "BrewDetailBuilder"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "模块描述"
+    },
+    {
+      "name": "widget_display_name",
+      "value": "BrewLibrary"
+    },
+    {
+      "name": "PcFormAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "PcFormAbility_label",
+      "value": "label"
+    },
+    {
+      "name": "ArticleServiceCard_desc",
+      "value": "最佳实践文章抢先看"
+    }
+  ]
+}

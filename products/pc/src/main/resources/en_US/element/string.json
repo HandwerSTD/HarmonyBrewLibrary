@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "widget_display_name",
+      "value": "BrewLibrary"
+    },
+    {
+      "name": "PcFormAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "PcFormAbility_label",
+      "value": "label"
+    },
+    {
+      "name": "ArticleServiceCard_desc",
+      "value": "Best Practice Article."
+    }
+  ]
+}

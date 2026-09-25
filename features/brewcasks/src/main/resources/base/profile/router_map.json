@@ -1,0 +1,14 @@
+{
+  "routerMap": [
+    {
+      "name": "BrewCaskListView",
+      "pageSourceFile": "src/main/ets/view/BrewCaskListView.ets",
+      "buildFunction": "BrewCaskListBuilder"
+    },
+    {
+      "name": "BrewCaskCategoryView",
+      "pageSourceFile": "src/main/ets/view/BrewCaskCategoryView.ets",
+      "buildFunction": "BrewCaskCategoryBuilder"
+    }
+  ]
+}

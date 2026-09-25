@@ -1,0 +1,16 @@
+{
+  "color": [
+    {
+      "name": "brew_kind_formula",
+      "value": "#E8971C"
+    },
+    {
+      "name": "brew_kind_cask",
+      "value": "#5B9BD5"
+    },
+    {
+      "name": "brew_icon_box_background",
+      "value": "#F1F3F5"
+    }
+  ]
+}

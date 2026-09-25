@@ -1,0 +1,12 @@
+{
+  "float": [
+    {
+      "name": "brew_detail_label_width",
+      "value": "96.0vp"
+    },
+    {
+      "name": "brew_detail_copy_button_height",
+      "value": "32.0vp"
+    }
+  ]
+}

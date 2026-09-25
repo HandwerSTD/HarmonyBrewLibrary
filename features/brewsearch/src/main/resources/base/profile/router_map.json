@@ -1,0 +1,9 @@
+{
+  "routerMap": [
+    {
+      "name": "BrewSearchResultView",
+      "pageSourceFile": "src/main/ets/view/BrewSearchResultView.ets",
+      "buildFunction": "BrewSearchResultBuilder"
+    }
+  ]
+}

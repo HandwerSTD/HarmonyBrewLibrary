@@ -1,0 +1,20 @@
+{
+  "float": [
+    {
+      "name": "brew_package_row_height",
+      "value": "64.0vp"
+    },
+    {
+      "name": "brew_monogram_size",
+      "value": "40.0vp"
+    },
+    {
+      "name": "brew_card_header_height",
+      "value": "72.0vp"
+    },
+    {
+      "name": "brew_card_header_icon_size",
+      "value": "24.0vp"
+    }
+  ]
+}

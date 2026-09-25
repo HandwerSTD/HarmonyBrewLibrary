@@ -1,0 +1,28 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+**/oh-package-lock.json5
+**/BuildProfile.ets
+# Homebrew mock 生成器的拉取缓存与构建日志（可安全删除）
+/.brewgen
+# 本地工具目录
+/.bitfun
+/.pi
+# Python 生成器运行痕迹
+__pycache__/
+*.pyc
+
+# 外部参考仓库（克隆进来的对照代码，不参与构建、不入库）
+/refs
+
+# 本地签名材料（证书 / Profile / 私钥库 p12），仅本机使用，严禁入库
+/keys

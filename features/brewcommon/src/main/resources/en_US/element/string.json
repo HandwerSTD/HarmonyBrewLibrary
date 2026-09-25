@@ -1,0 +1,516 @@
+{
+  "string": [
+    {
+      "name": "brew_tab_discover",
+      "value": "Discover"
+    },
+    {
+      "name": "brew_tab_formulae",
+      "value": "Formulae"
+    },
+    {
+      "name": "brew_tab_casks",
+      "value": "Casks"
+    },
+    {
+      "name": "brew_tab_mine",
+      "value": "Mine"
+    },
+    {
+      "name": "brew_cat_formula_terminal",
+      "value": "Terminal & Shell"
+    },
+    {
+      "name": "brew_cat_formula_devtools",
+      "value": "Developer Toolchain"
+    },
+    {
+      "name": "brew_cat_formula_network",
+      "value": "Network & Transfer"
+    },
+    {
+      "name": "brew_cat_formula_data",
+      "value": "Data & Databases"
+    },
+    {
+      "name": "brew_cat_formula_cloudnative",
+      "value": "Container & Cloud Native"
+    },
+    {
+      "name": "brew_cat_formula_media",
+      "value": "Media & Image"
+    },
+    {
+      "name": "brew_cat_formula_ai",
+      "value": "AI & Machine Learning"
+    },
+    {
+      "name": "brew_cat_formula_system",
+      "value": "System & Operations"
+    },
+    {
+      "name": "brew_cat_cask_devide",
+      "value": "Development & IDE"
+    },
+    {
+      "name": "brew_cat_cask_browser",
+      "value": "Browser"
+    },
+    {
+      "name": "brew_cat_cask_productivity",
+      "value": "Productivity & Notes"
+    },
+    {
+      "name": "brew_cat_cask_comm",
+      "value": "Communication"
+    },
+    {
+      "name": "brew_cat_cask_design",
+      "value": "Design & Creative"
+    },
+    {
+      "name": "brew_cat_cask_av",
+      "value": "Audio & Video"
+    },
+    {
+      "name": "brew_cat_cask_systemtool",
+      "value": "System Utilities"
+    },
+    {
+      "name": "brew_cat_cask_aivm",
+      "value": "AI · VM & Container"
+    },
+    {
+      "name": "brew_cat_unknown",
+      "value": "Other"
+    },
+    {
+      "name": "brew_label_version",
+      "value": "Version"
+    },
+    {
+      "name": "brew_label_license",
+      "value": "License"
+    },
+    {
+      "name": "brew_label_homepage",
+      "value": "Homepage"
+    },
+    {
+      "name": "brew_label_installs",
+      "value": "Installs"
+    },
+    {
+      "name": "brew_label_installs_30d",
+      "value": "Installs (30d)"
+    },
+    {
+      "name": "brew_label_dependencies",
+      "value": "Dependencies"
+    },
+    {
+      "name": "brew_label_required_by",
+      "value": "Required by"
+    },
+    {
+      "name": "brew_label_install_options",
+      "value": "Install options"
+    },
+    {
+      "name": "brew_label_install_command",
+      "value": "Install command"
+    },
+    {
+      "name": "brew_label_artifacts",
+      "value": "What gets installed"
+    },
+    {
+      "name": "brew_label_requirements",
+      "value": "Requirements"
+    },
+    {
+      "name": "brew_label_auto_updates",
+      "value": "Self-updating app"
+    },
+    {
+      "name": "brew_label_zap",
+      "value": "Cleanup paths"
+    },
+    {
+      "name": "brew_label_tap",
+      "value": "Tap"
+    },
+    {
+      "name": "brew_label_caveats",
+      "value": "Caveats"
+    },
+    {
+      "name": "brew_label_service",
+      "value": "Background service"
+    },
+    {
+      "name": "brew_label_bottle_tags",
+      "value": "Prebuilt for"
+    },
+    {
+      "name": "brew_label_deprecated",
+      "value": "Deprecated"
+    },
+    {
+      "name": "brew_label_disabled",
+      "value": "Disabled"
+    },
+    {
+      "name": "brew_state_installed",
+      "value": "Installed"
+    },
+    {
+      "name": "brew_state_not_installed",
+      "value": "Not installed"
+    },
+    {
+      "name": "brew_state_upgradable",
+      "value": "Upgradable"
+    },
+    {
+      "name": "brew_state_deprecated",
+      "value": "Deprecated"
+    },
+    {
+      "name": "brew_state_disabled",
+      "value": "Disabled"
+    },
+    {
+      "name": "brew_state_bottle",
+      "value": "Bottle"
+    },
+    {
+      "name": "brew_state_source",
+      "value": "From source"
+    },
+    {
+      "name": "brew_state_keg_only",
+      "value": "Keg-only"
+    },
+    {
+      "name": "brew_section_hot",
+      "value": "Trending this week"
+    },
+    {
+      "name": "brew_section_new",
+      "value": "Newly added"
+    },
+    {
+      "name": "brew_section_top10",
+      "value": "Top 10"
+    },
+    {
+      "name": "brew_search_placeholder",
+      "value": "Search packages"
+    },
+    {
+      "name": "brew_search_action",
+      "value": "Search"
+    },
+    {
+      "name": "brew_search_title",
+      "value": "Search"
+    },
+    {
+      "name": "brew_search_history",
+      "value": "Search history"
+    },
+    {
+      "name": "brew_search_discovery",
+      "value": "Discover"
+    },
+    {
+      "name": "brew_search_empty_history",
+      "value": "No search history"
+    },
+    {
+      "name": "brew_search_empty_discovery",
+      "value": "No suggestions"
+    },
+    {
+      "name": "brew_search_no_result",
+      "value": "No packages found"
+    },
+    {
+      "name": "brew_search_result_count",
+      "value": "%d results"
+    },
+    {
+      "name": "brew_search_index_pending",
+      "value": "Local index is not ready — matching by package name only"
+    },
+    {
+      "name": "brew_search_filter_all",
+      "value": "All"
+    },
+    {
+      "name": "brew_search_filter_formula",
+      "value": "Formulae"
+    },
+    {
+      "name": "brew_search_filter_cask",
+      "value": "Casks"
+    },
+    {
+      "name": "brew_artifact_app",
+      "value": "Application"
+    },
+    {
+      "name": "brew_artifact_binary",
+      "value": "Command-line tool"
+    },
+    {
+      "name": "brew_artifact_pkg",
+      "value": "Installer package"
+    },
+    {
+      "name": "brew_artifact_font",
+      "value": "Font"
+    },
+    {
+      "name": "brew_artifact_other",
+      "value": "Other"
+    },
+    {
+      "name": "brew_mine_env",
+      "value": "This machine"
+    },
+    {
+      "name": "brew_mine_overview",
+      "value": "Overview"
+    },
+    {
+      "name": "brew_mine_formulae",
+      "value": "Installed formulae"
+    },
+    {
+      "name": "brew_mine_casks",
+      "value": "Installed casks"
+    },
+    {
+      "name": "brew_mine_outdated",
+      "value": "Upgradable"
+    },
+    {
+      "name": "brew_mine_taps",
+      "value": "Taps"
+    },
+    {
+      "name": "brew_mine_services",
+      "value": "Services"
+    },
+    {
+      "name": "brew_mine_disk",
+      "value": "Disk usage"
+    },
+    {
+      "name": "brew_mine_maintenance",
+      "value": "Maintenance"
+    },
+    {
+      "name": "brew_mine_doctor",
+      "value": "Run brew doctor"
+    },
+    {
+      "name": "brew_mine_cleanup",
+      "value": "Clean up cache"
+    },
+    {
+      "name": "brew_mine_autoremove",
+      "value": "Remove unused dependencies"
+    },
+    {
+      "name": "brew_mine_update",
+      "value": "Update package index"
+    },
+    {
+      "name": "brew_mine_on_request",
+      "value": "Installed on request"
+    },
+    {
+      "name": "brew_mine_as_dependency",
+      "value": "Installed as dependency"
+    },
+    {
+      "name": "brew_action_install",
+      "value": "Install"
+    },
+    {
+      "name": "brew_action_uninstall",
+      "value": "Uninstall"
+    },
+    {
+      "name": "brew_action_upgrade",
+      "value": "Upgrade"
+    },
+    {
+      "name": "brew_action_copy",
+      "value": "Copy"
+    },
+    {
+      "name": "brew_action_view_all",
+      "value": "View all"
+    },
+    {
+      "name": "brew_label_packages_count",
+      "value": "%d packages"
+    },
+    {
+      "name": "brew_label_executables",
+      "value": "Commands provided"
+    },
+    {
+      "name": "brew_label_supported_platforms",
+      "value": "Supported platforms"
+    },
+    {
+      "name": "brew_label_macos_requirement",
+      "value": "macOS requirement"
+    },
+    {
+      "name": "brew_label_build_dependencies",
+      "value": "Build dependencies"
+    },
+    {
+      "name": "brew_label_optional_dependencies",
+      "value": "Optional dependencies"
+    },
+    {
+      "name": "brew_label_uses_from_macos",
+      "value": "Uses from macOS"
+    },
+    {
+      "name": "brew_label_conflicts_with",
+      "value": "Conflicts with"
+    },
+    {
+      "name": "brew_label_category_rank",
+      "value": "Rank in category"
+    },
+    {
+      "name": "brew_label_bundle_version",
+      "value": "Bundle version"
+    },
+    {
+      "name": "brew_label_source",
+      "value": "Source"
+    },
+    {
+      "name": "brew_label_installs_90d",
+      "value": "Installs (90d)"
+    },
+    {
+      "name": "brew_label_installs_365d",
+      "value": "Installs (365d)"
+    },
+    {
+      "name": "brew_label_aliases",
+      "value": "Aliases"
+    },
+    {
+      "name": "brew_label_head_version",
+      "value": "HEAD version"
+    },
+    {
+      "name": "brew_label_versioned_formulae",
+      "value": "Versioned formulae"
+    },
+    {
+      "name": "brew_label_replacement",
+      "value": "Replacement"
+    },
+    {
+      "name": "brew_label_deprecation_reason",
+      "value": "Reason"
+    },
+    {
+      "name": "brew_section_related",
+      "value": "Related"
+    },
+    {
+      "name": "brew_section_same_category",
+      "value": "More in this category"
+    },
+    {
+      "name": "brew_hint_deprecated",
+      "value": "This package is deprecated."
+    },
+    {
+      "name": "brew_hint_disabled",
+      "value": "This package is disabled and cannot be installed."
+    },
+    {
+      "name": "brew_value_yes",
+      "value": "Yes"
+    },
+    {
+      "name": "brew_value_no",
+      "value": "No"
+    },
+    {
+      "name": "brew_format_items",
+      "value": "%d items"
+    },
+    {
+      "name": "brew_version_delta",
+      "value": "%s → %s"
+    },
+    {
+      "name": "brew_discover_metric_trending",
+      "value": "%s installs (30d) · %sx growth"
+    },
+    {
+      "name": "brew_discover_metric_alltime",
+      "value": "%s installs (365d)"
+    },
+    {
+      "name": "brew_discover_metric_fresh",
+      "value": "%s installs (30d)"
+    },
+    {
+      "name": "brew_discover_metric_no_history",
+      "value": "No history yet"
+    },
+    {
+      "name": "brew_discover_snapshot",
+      "value": "Data window %s"
+    },
+    {
+      "name": "brew_board_trending",
+      "value": "Trending now"
+    },
+    {
+      "name": "brew_board_alltime",
+      "value": "All-time favorites"
+    },
+    {
+      "name": "brew_board_fresh",
+      "value": "New & rising"
+    },
+    {
+      "name": "brew_discover_velocity_badge",
+      "value": "↑%s×"
+    },
+    {
+      "name": "brew_discover_featured_rank",
+      "value": "%s · #%d"
+    },
+    {
+      "name": "brew_action_view",
+      "value": "View"
+    },
+    {
+      "name": "brew_discover_installs_label",
+      "value": "%s downloads"
+    },
+    {
+      "name": "brew_fetching_data",
+      "value": "Fetching Homebrew data…"
+    }
+  ]
+}

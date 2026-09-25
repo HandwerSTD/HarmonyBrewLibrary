@@ -1,0 +1,16 @@
+{
+  "float": [
+    {
+      "name": "brew_search_row_height",
+      "value": "64.0vp"
+    },
+    {
+      "name": "brew_search_suggestion_height",
+      "value": "48.0vp"
+    },
+    {
+      "name": "brew_search_section_header_height",
+      "value": "40.0vp"
+    }
+  ]
+}

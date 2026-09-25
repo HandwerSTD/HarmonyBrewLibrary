@@ -1,0 +1,67 @@
+import AppTypeUtilTest from './util/AppTypeUtil.test';
+import BreakpointSystemTest from './util/BreakpointSystem.test';
+import LoggerTest from './util/Logger.test';
+import abilityTest from './Ability.test';
+import ColorUtilTest from './util/ColorUtil.test';
+import ColorPickerUtilTest from './util/ColorPickerUtil.test';
+import DateFormatUtilTest from './util/DateFormatUtil.test';
+import DebounceUtilTest from './util/DebounceUtil.test';
+import DeviceUtilTest from './util/DeviceUtil.test';
+import DynamicInstallManagerTest from './util/DynamicInstallManager.test';
+import FileUtilTest from './util/FileUtil.test';
+import GlobalContextTest from './util/GlobalContext.test';
+import HdsUtilTest from './util/HdsUtil.test';
+import ImageKnifeUtilTest from './util/ImageKnifeUtil.test';
+import ImageUtilTest from './util/ImageUtil.test';
+import MaterialUtilTest from './util/MaterialUtil.test';
+import NetworkUtilTest from './util/NetworkUtil.test';
+import ObservedArrayTest from './util/ObservedArray.test';
+import PasteboardUtilTest from './util/PasteboardUtil.test';
+import RawfileIOUtilTest from './util/RawfileIOUtil.test';
+import ResourceUtilTest from './util/ResourceUtil.test';
+import ShareUtilTest from './util/ShareUtil.test';
+import SubmitInfoUtilTest from './util/SubmitInfoUtil.test';
+import TextOverflowUtilTest from './util/TextOverflowUtil.test';
+import TimeUtilTest from './util/TimeUtil.test';
+import UrlUtilTest from './util/UrlUtil.test';
+import VibratorUtilsTest from './util/VibratorUtils.test';
+import WebUtilTest from './util/WebUtil.test';
+import WindowUtilTest from './util/WindowUtil.test';
+import BundleManagerUtilTest from './util/BundleManagerUtil.test';
+import ProcessUtilTest from './util/ProcessUtil.test';
+
+export default function testsuite() {
+  abilityTest();
+  LoggerTest();
+  BreakpointSystemTest();
+  AppTypeUtilTest();
+  ColorUtilTest();
+  ColorPickerUtilTest();
+  DateFormatUtilTest();
+  DebounceUtilTest();
+  DeviceUtilTest();
+  DynamicInstallManagerTest();
+  FileUtilTest();
+  GlobalContextTest();
+  HdsUtilTest();
+  ImageKnifeUtilTest();
+  ImageUtilTest();
+  MaterialUtilTest();
+  NetworkUtilTest();
+  ObservedArrayTest();
+  PasteboardUtilTest();
+  RawfileIOUtilTest();
+  ResourceUtilTest();
+  ShareUtilTest();
+  SubmitInfoUtilTest();
+  TextOverflowUtilTest();
+  TimeUtilTest();
+  UrlUtilTest();
+  VibratorUtilsTest();
+  WebUtilTest();
+  WindowUtilTest();
+  BundleManagerUtilTest();
+  // The following method will kill the process when executed, and terminal unit test.
+  // It needs to be placed at the last.
+  ProcessUtilTest();
+}

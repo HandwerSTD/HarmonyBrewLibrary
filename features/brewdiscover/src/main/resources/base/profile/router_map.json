@@ -1,0 +1,14 @@
+{
+  "routerMap": [
+    {
+      "name": "BrewDiscoverListView",
+      "pageSourceFile": "src/main/ets/view/BrewDiscoverListView.ets",
+      "buildFunction": "BrewDiscoverListBuilder"
+    },
+    {
+      "name": "BrewDiscoverBoardView",
+      "pageSourceFile": "src/main/ets/view/BrewDiscoverBoardView.ets",
+      "buildFunction": "BrewDiscoverBoardBuilder"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@ohos/brewdetail",
+  "version": "1.0.0",
+  "description": "Homebrew 应用市场 · 包详情页（formula / cask 共用）",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/common": "file:../../common",
+    "@ohos/commonbusiness": "file:../commonbusiness",
+    "@ohos/brewcommon": "file:../brewcommon"
+  }
+}

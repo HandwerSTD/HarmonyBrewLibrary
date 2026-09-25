@@ -1,0 +1,13 @@
+{
+  "name": "@ohos/brewsearch",
+  "version": "1.0.0",
+  "description": "Homebrew 应用市场 · 搜索（侧边栏搜索框 + 结果页）",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/common": "file:../../common",
+    "@ohos/commonbusiness": "file:../commonbusiness",
+    "@ohos/brewcommon": "file:../brewcommon"
+  }
+}

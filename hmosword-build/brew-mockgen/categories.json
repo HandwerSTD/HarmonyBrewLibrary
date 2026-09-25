@@ -1,0 +1,24 @@
+{
+  "_comment": "Homebrew 应用市场 · 分类定义。zhKey 指向 string.json 里的资源键，中文名不落在此文件，避免中英混排失控。",
+  "formula": [
+    { "id": 1, "key": "terminal",    "en": "Terminal & Shell",       "zhKey": "brew_cat_formula_terminal",    "symbol": "sys.symbol.terminal" },
+    { "id": 2, "key": "devtools",    "en": "Developer Toolchain",    "zhKey": "brew_cat_formula_devtools",    "symbol": "sys.symbol.hammer" },
+    { "id": 3, "key": "network",     "en": "Network & Transfer",     "zhKey": "brew_cat_formula_network",     "symbol": "sys.symbol.network" },
+    { "id": 4, "key": "data",        "en": "Data & Databases",       "zhKey": "brew_cat_formula_data",        "symbol": "sys.symbol.cylinder" },
+    { "id": 5, "key": "cloudnative", "en": "Container & Cloud Native","zhKey": "brew_cat_formula_cloudnative", "symbol": "sys.symbol.cloud" },
+    { "id": 6, "key": "media",       "en": "Media & Image",          "zhKey": "brew_cat_formula_media",       "symbol": "sys.symbol.photo" },
+    { "id": 7, "key": "ai",          "en": "AI & Machine Learning",  "zhKey": "brew_cat_formula_ai",          "symbol": "sys.symbol.sparkles" },
+    { "id": 8, "key": "lib",         "en": "Libraries & Frameworks", "zhKey": "brew_cat_formula_lib",         "symbol": "sys.symbol.book_pages" },
+    { "id": 9, "key": "system",      "en": "System & Operations",    "zhKey": "brew_cat_formula_system",      "symbol": "sys.symbol.gearshape" }
+  ],
+  "cask": [
+    { "id": 1, "key": "devide",      "en": "Development & IDE",      "zhKey": "brew_cat_cask_devide",      "symbol": "sys.symbol.chevron_left_slash_chevron_right" },
+    { "id": 2, "key": "browser",     "en": "Browser",                "zhKey": "brew_cat_cask_browser",     "symbol": "sys.symbol.safari" },
+    { "id": 3, "key": "productivity","en": "Productivity & Notes",   "zhKey": "brew_cat_cask_productivity","symbol": "sys.symbol.checklist" },
+    { "id": 4, "key": "comm",        "en": "Communication",          "zhKey": "brew_cat_cask_comm",        "symbol": "sys.symbol.bubble" },
+    { "id": 5, "key": "design",      "en": "Design & Creative",      "zhKey": "brew_cat_cask_design",      "symbol": "sys.symbol.paintbrush" },
+    { "id": 6, "key": "av",          "en": "Audio & Video",          "zhKey": "brew_cat_cask_av",          "symbol": "sys.symbol.play_circle" },
+    { "id": 7, "key": "systemtool",  "en": "System Utilities",       "zhKey": "brew_cat_cask_systemtool",  "symbol": "sys.symbol.wrench_and_screwdriver" },
+    { "id": 8, "key": "aivm",        "en": "AI · VM & Container",    "zhKey": "brew_cat_cask_aivm",        "symbol": "sys.symbol.cpu" }
+  ]
+}

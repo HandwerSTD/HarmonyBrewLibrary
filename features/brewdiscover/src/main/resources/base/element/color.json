@@ -1,0 +1,140 @@
+{
+  "color": [
+    {
+      "name": "brew_board_color_trending_start",
+      "value": "#FFC24D"
+    },
+    {
+      "name": "brew_board_color_trending_end",
+      "value": "#E61C37"
+    },
+    {
+      "name": "brew_board_color_alltime_start",
+      "value": "#8CC6F0"
+    },
+    {
+      "name": "brew_board_color_alltime_end",
+      "value": "#157DB1"
+    },
+    {
+      "name": "brew_board_color_fresh_start",
+      "value": "#8BDCA6"
+    },
+    {
+      "name": "brew_board_color_fresh_end",
+      "value": "#10874C"
+    },
+    {
+      "name": "brew_featured_sym_l_formula",
+      "value": "#A60A0C10"
+    },
+    {
+      "name": "brew_featured_sym_l_cask",
+      "value": "#1B4568"
+    },
+    {
+      "name": "brew_featured_sym_d_formula",
+      "value": "#80F5F7FA"
+    },
+    {
+      "name": "brew_featured_sym_d_cask",
+      "value": "#7FB6E0"
+    },
+    {
+      "name": "brew_featured_ink",
+      "value": "#1A1C1E"
+    },
+    {
+      "name": "brew_featured_ink_secondary",
+      "value": "#3A3E43"
+    },
+    {
+      "name": "brew_featured_ink_on_dark",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "brew_featured_ink_on_dark_secondary",
+      "value": "#CCCCCC"
+    },
+    {
+      "name": "brew_featured_badge_bg_l",
+      "value": "#1A1C1E"
+    },
+    {
+      "name": "brew_featured_badge_bg_d",
+      "value": "#F2F3F5"
+    },
+    {
+      "name": "brew_featured_badge_ink_l",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "brew_featured_badge_ink_d",
+      "value": "#1A1C1E"
+    },
+    {
+      "name": "brew_featured_arrow_bg",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "brew_featured_art_shadow",
+      "value": "#40000000"
+    },
+    {
+      "name": "brew_featured_bg_warm_a",
+      "value": "#FBF1E0"
+    },
+    {
+      "name": "brew_featured_bg_warm_b",
+      "value": "#F5E3C8"
+    },
+    {
+      "name": "brew_featured_bg_blue_a",
+      "value": "#EAF2FA"
+    },
+    {
+      "name": "brew_featured_bg_blue_b",
+      "value": "#D9E8F5"
+    },
+    {
+      "name": "brew_featured_bg_mint_a",
+      "value": "#EAF6EE"
+    },
+    {
+      "name": "brew_featured_bg_mint_b",
+      "value": "#D8EBE0"
+    },
+    {
+      "name": "brew_featured_bg_gray_a",
+      "value": "#D9CFC8"
+    },
+    {
+      "name": "brew_featured_bg_gray_b",
+      "value": "#C4B3AB"
+    },
+    {
+      "name": "brew_featured_bg_purple_a",
+      "value": "#6B3A5E"
+    },
+    {
+      "name": "brew_featured_bg_purple_b",
+      "value": "#4B2842"
+    },
+    {
+      "name": "brew_featured_bg_navy_a",
+      "value": "#16273A"
+    },
+    {
+      "name": "brew_featured_bg_navy_b",
+      "value": "#0E1B29"
+    },
+    {
+      "name": "brew_featured_bg_indigo_a",
+      "value": "#0F2A6B"
+    },
+    {
+      "name": "brew_featured_bg_indigo_b",
+      "value": "#0A1F52"
+    }
+  ]
+}

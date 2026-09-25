@@ -1,0 +1,332 @@
+{
+  "string": [
+    {
+      "name": "mine_title",
+      "value": "我的"
+    },
+    {
+      "name": "about",
+      "value": "关于"
+    },
+    {
+      "name": "setting",
+      "value": "设置"
+    },
+    {
+      "name": "version_information",
+      "value": "版本信息"
+    },
+    {
+      "name": "updated_version",
+      "value": "待更新"
+    },
+    {
+      "name": "latest_version",
+      "value": "已是最新版本"
+    },
+    {
+      "name": "copyright1",
+      "value": "粤A2-20044005号-302A"
+    },
+    {
+      "name": "copyright2",
+      "value": "版权所有 © 2025 华为终端有限公司。保留一切权利。"
+    },
+    {
+      "name": "user_experience",
+      "value": "用户体验调研"
+    },
+    {
+      "name": "user_experience_tips",
+      "value": "让HMOS代码工坊为你提供更好的体验"
+    },
+    {
+      "name": "feedback",
+      "value": "问题与建议"
+    },
+    {
+      "name": "score_title",
+      "value": "根据您的实际体验，您对 HMOS代码工坊 的整体满意度如何？"
+    },
+    {
+      "name": "description_title",
+      "value": "您对 HMOS代码工坊 还有哪些建议？还希望我们能提供哪些功能？"
+    },
+    {
+      "name": "unregistered_title",
+      "value": "登录华为账号"
+    },
+    {
+      "name": "feedback_desc",
+      "value": "当前功能仅做展示"
+    },
+    {
+      "name": "mine_installed",
+      "value": "已安装"
+    },
+    {
+      "name": "mine_outdated",
+      "value": "待更新"
+    },
+    {
+      "name": "mine_updated",
+      "value": "已更新"
+    },
+    {
+      "name": "mine_view_all",
+      "value": "查看全部"
+    },
+    {
+      "name": "mine_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "mine_filter_formulae",
+      "value": "Formulae"
+    },
+    {
+      "name": "mine_filter_casks",
+      "value": "Casks"
+    },
+    {
+      "name": "mine_packages_empty",
+      "value": "本机暂无可显示的包"
+    },
+    {
+      "name": "brew_source_title",
+      "value": "数据源"
+    },
+    {
+      "name": "brew_source_in_use",
+      "value": "使用中"
+    },
+    {
+      "name": "brew_source_builtin",
+      "value": "内置"
+    },
+    {
+      "name": "brew_source_activate",
+      "value": "激活"
+    },
+    {
+      "name": "brew_source_activate_confirm",
+      "value": "将切换到「%s」（%s）。切换会重启应用；当前源的缓存不会被删除。"
+    },
+    {
+      "name": "brew_source_activate_and_restart",
+      "value": "切换并重启"
+    },
+    {
+      "name": "brew_source_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "brew_source_delete",
+      "value": "删除"
+    },
+    {
+      "name": "brew_source_delete_confirm",
+      "value": "删除会一并移除该源的缓存。"
+    },
+    {
+      "name": "brew_source_add",
+      "value": "新增数据源"
+    },
+    {
+      "name": "brew_source_name_hint",
+      "value": "名称"
+    },
+    {
+      "name": "brew_source_name_label",
+      "value": "名称"
+    },
+    {
+      "name": "brew_source_url_hint",
+      "value": "https://host/api"
+    },
+    {
+      "name": "brew_source_url_label",
+      "value": "地址"
+    },
+    {
+      "name": "brew_source_builtin_url_locked",
+      "value": "内置源的地址不可修改"
+    },
+    {
+      "name": "brew_source_dialect_label",
+      "value": "数据格式"
+    },
+    {
+      "name": "brew_source_dialect_auto",
+      "value": "自动识别"
+    },
+    {
+      "name": "brew_source_dialect_upstream",
+      "value": "Homebrew 上游"
+    },
+    {
+      "name": "brew_source_dialect_harmonybrew",
+      "value": "Harmonybrew（%s）"
+    },
+    {
+      "name": "brew_source_dialect_harmonybrew_unknown",
+      "value": "Harmonybrew"
+    },
+    {
+      "name": "brew_source_save",
+      "value": "保存"
+    },
+    {
+      "name": "brew_source_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "brew_source_err_name_empty",
+      "value": "名称不能为空"
+    },
+    {
+      "name": "brew_source_err_url_empty",
+      "value": "地址不能为空"
+    },
+    {
+      "name": "brew_source_err_url_scheme",
+      "value": "地址必须以 http:// 或 https:// 开头"
+    },
+    {
+      "name": "brew_source_err_url_host",
+      "value": "地址缺少主机名"
+    },
+    {
+      "name": "brew_source_err_url_query",
+      "value": "地址不能带查询参数"
+    },
+    {
+      "name": "brew_source_err_url_fragment",
+      "value": "地址不能带锚点"
+    },
+    {
+      "name": "brew_source_err_url_too_long",
+      "value": "地址过长"
+    },
+    {
+      "name": "brew_source_err_save_failed",
+      "value": "保存失败"
+    },
+    {
+      "name": "brew_source_error_invalid",
+      "value": "输入不合法，请检查名称与地址"
+    },
+    {
+      "name": "brew_source_health_err_catalog",
+      "value": "目录数据获取失败"
+    },
+    {
+      "name": "brew_source_health_err_meta",
+      "value": "全量包索引同步失败"
+    },
+    {
+      "name": "brew_source_health_err_hydrate",
+      "value": "部分包数据获取失败"
+    },
+    {
+      "name": "brew_source_reach_unknown",
+      "value": "未验证"
+    },
+    {
+      "name": "brew_source_data_prefix",
+      "value": "数据："
+    },
+    {
+      "name": "brew_source_data_ready",
+      "value": "已就绪"
+    },
+    {
+      "name": "brew_source_data_no_catalog",
+      "value": "目录未获取"
+    },
+    {
+      "name": "brew_source_data_no_index",
+      "value": "全量包索引未同步"
+    },
+    {
+      "name": "brew_source_probing",
+      "value": "正在检查…"
+    },
+    {
+      "name": "brew_source_probe_invalid_url",
+      "value": "地址不合法"
+    },
+    {
+      "name": "brew_source_probe_dns",
+      "value": "域名无法解析"
+    },
+    {
+      "name": "brew_source_probe_timeout",
+      "value": "连接超时"
+    },
+    {
+      "name": "brew_source_probe_tls",
+      "value": "证书校验失败"
+    },
+    {
+      "name": "brew_source_probe_404",
+      "value": "该地址没有 /api 数据"
+    },
+    {
+      "name": "brew_source_probe_http",
+      "value": "服务端拒绝了请求"
+    },
+    {
+      "name": "brew_source_probe_not_api",
+      "value": "不是 Homebrew API（返回网页或非 JSON）"
+    },
+    {
+      "name": "brew_source_probe_unknown",
+      "value": "网络错误"
+    },
+    {
+      "name": "brew_source_probe_http_status",
+      "value": "HTTP 状态码：%d"
+    },
+    {
+      "name": "brew_source_probe_write_failed",
+      "value": "写入配置失败"
+    },
+    {
+      "name": "brew_source_probe_no_context",
+      "value": "无法获取应用上下文"
+    },
+    {
+      "name": "brew_source_test",
+      "value": "测试连接"
+    },
+    {
+      "name": "brew_source_test_ok",
+      "value": "连接正常"
+    },
+    {
+      "name": "brew_source_connect_ok_http",
+      "value": "连接正常 · HTTP %d"
+    },
+    {
+      "name": "brew_source_connect_failed_prefix",
+      "value": "连接失败："
+    },
+    {
+      "name": "brew_source_more",
+      "value": "更多"
+    },
+    {
+      "name": "brew_source_clear_cache",
+      "value": "清空缓存"
+    },
+    {
+      "name": "brew_source_clear_confirm",
+      "value": "只清空当前源的本地缓存，其它源不受影响。"
+    },
+    {
+      "name": "brew_source_edit_url_confirm",
+      "value": "修改地址会清空该源的本地缓存。"
+    }
+  ]
+}

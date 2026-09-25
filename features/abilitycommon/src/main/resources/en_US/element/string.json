@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "tab_mine",
+      "value": "Me"
+    },
+    {
+      "name": "tab_discover",
+      "value": "Discover"
+    },
+    {
+      "name": "tab_formulae",
+      "value": "Formulae"
+    },
+    {
+      "name": "tab_casks",
+      "value": "Casks"
+    },
+    {
+      "name": "tab_search",
+      "value": "Search"
+    }
+  ]
+}

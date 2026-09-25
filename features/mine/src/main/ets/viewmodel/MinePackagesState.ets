@@ -1,0 +1,37 @@
+/*
+ * Copyright (c) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { LoadingModel } from '@ohos/common';
+import type { BrewInstalledPackage } from '@ohos/brewcommon';
+import { PackageListMode } from '../model/MinePackagesModels';
+
+/**
+ * 本机包列表页状态。
+ *
+ * `packages` 与 `filteredPackages` 都作为独立字段存储，而不是渲染时对 `packages` 现算 ——
+ * 与 `BrewCaskCategoryState.categories` 同样的做法。筛选结果直接赋值给一个一级属性，
+ * 刷新时机确定，不依赖「build 里读到的中间值会不会被观察到」。
+ */
+@Observed
+export class MinePackagesState {
+  public loadingModel: LoadingModel = new LoadingModel();
+  public mode: PackageListMode = PackageListMode.ALL;
+  /** 该模式下的全集（未筛选） */
+  public packages: BrewInstalledPackage[] = [];
+  /** 当前筛选后的列表 */
+  public filteredPackages: BrewInstalledPackage[] = [];
+  /** 筛选 chips 选中项：0 全部 / 1 Formulae / 2 Casks */
+  public filterIndex: number = 0;
+}

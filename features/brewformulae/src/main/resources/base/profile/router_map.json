@@ -1,0 +1,14 @@
+{
+  "routerMap": [
+    {
+      "name": "BrewFormulaListView",
+      "pageSourceFile": "src/main/ets/view/BrewFormulaListView.ets",
+      "buildFunction": "BrewFormulaListBuilder"
+    },
+    {
+      "name": "BrewFormulaCategoryView",
+      "pageSourceFile": "src/main/ets/view/BrewFormulaCategoryView.ets",
+      "buildFunction": "BrewFormulaCategoryBuilder"
+    }
+  ]
+}

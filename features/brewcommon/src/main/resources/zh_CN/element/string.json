@@ -1,0 +1,520 @@
+{
+  "string": [
+    {
+      "name": "brew_tab_discover",
+      "value": "发现"
+    },
+    {
+      "name": "brew_tab_formulae",
+      "value": "Formulae"
+    },
+    {
+      "name": "brew_tab_casks",
+      "value": "Casks"
+    },
+    {
+      "name": "brew_tab_mine",
+      "value": "我的"
+    },
+    {
+      "name": "brew_cat_formula_terminal",
+      "value": "终端与 Shell"
+    },
+    {
+      "name": "brew_cat_formula_devtools",
+      "value": "开发工具链"
+    },
+    {
+      "name": "brew_cat_formula_network",
+      "value": "网络与传输"
+    },
+    {
+      "name": "brew_cat_formula_data",
+      "value": "数据与数据库"
+    },
+    {
+      "name": "brew_cat_formula_cloudnative",
+      "value": "容器与云原生"
+    },
+    {
+      "name": "brew_cat_formula_media",
+      "value": "媒体与图像"
+    },
+    {
+      "name": "brew_cat_formula_ai",
+      "value": "AI 与机器学习"
+    },
+    {
+      "name": "brew_cat_formula_lib",
+      "value": "库与框架"
+    },
+    {
+      "name": "brew_cat_formula_system",
+      "value": "系统与运维"
+    },
+    {
+      "name": "brew_cat_cask_devide",
+      "value": "开发与 IDE"
+    },
+    {
+      "name": "brew_cat_cask_browser",
+      "value": "浏览器"
+    },
+    {
+      "name": "brew_cat_cask_productivity",
+      "value": "效率与笔记"
+    },
+    {
+      "name": "brew_cat_cask_comm",
+      "value": "通讯与协作"
+    },
+    {
+      "name": "brew_cat_cask_design",
+      "value": "设计与创意"
+    },
+    {
+      "name": "brew_cat_cask_av",
+      "value": "音视频"
+    },
+    {
+      "name": "brew_cat_cask_systemtool",
+      "value": "系统工具"
+    },
+    {
+      "name": "brew_cat_cask_aivm",
+      "value": "AI·虚拟机与容器"
+    },
+    {
+      "name": "brew_cat_unknown",
+      "value": "其他"
+    },
+    {
+      "name": "brew_label_version",
+      "value": "版本"
+    },
+    {
+      "name": "brew_label_license",
+      "value": "许可协议"
+    },
+    {
+      "name": "brew_label_homepage",
+      "value": "主页"
+    },
+    {
+      "name": "brew_label_installs",
+      "value": "安装量"
+    },
+    {
+      "name": "brew_label_installs_30d",
+      "value": "近 30 天安装量"
+    },
+    {
+      "name": "brew_label_dependencies",
+      "value": "依赖"
+    },
+    {
+      "name": "brew_label_required_by",
+      "value": "被以下包依赖"
+    },
+    {
+      "name": "brew_label_install_options",
+      "value": "安装选项"
+    },
+    {
+      "name": "brew_label_install_command",
+      "value": "安装命令"
+    },
+    {
+      "name": "brew_label_artifacts",
+      "value": "安装内容"
+    },
+    {
+      "name": "brew_label_requirements",
+      "value": "系统要求"
+    },
+    {
+      "name": "brew_label_auto_updates",
+      "value": "应用可自我更新"
+    },
+    {
+      "name": "brew_label_zap",
+      "value": "可清理残留项"
+    },
+    {
+      "name": "brew_label_tap",
+      "value": "来源 tap"
+    },
+    {
+      "name": "brew_label_caveats",
+      "value": "安装提示"
+    },
+    {
+      "name": "brew_label_service",
+      "value": "后台服务"
+    },
+    {
+      "name": "brew_label_bottle_tags",
+      "value": "预编译平台"
+    },
+    {
+      "name": "brew_label_deprecated",
+      "value": "已废弃"
+    },
+    {
+      "name": "brew_label_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "brew_state_installed",
+      "value": "已安装"
+    },
+    {
+      "name": "brew_state_not_installed",
+      "value": "未安装"
+    },
+    {
+      "name": "brew_state_upgradable",
+      "value": "可升级"
+    },
+    {
+      "name": "brew_state_deprecated",
+      "value": "已废弃"
+    },
+    {
+      "name": "brew_state_disabled",
+      "value": "已停用"
+    },
+    {
+      "name": "brew_state_bottle",
+      "value": "预编译安装"
+    },
+    {
+      "name": "brew_state_source",
+      "value": "源码构建"
+    },
+    {
+      "name": "brew_state_keg_only",
+      "value": "Keg-only"
+    },
+    {
+      "name": "brew_section_hot",
+      "value": "本周热门"
+    },
+    {
+      "name": "brew_section_new",
+      "value": "新收录"
+    },
+    {
+      "name": "brew_section_top10",
+      "value": "Top 10"
+    },
+    {
+      "name": "brew_search_placeholder",
+      "value": "搜索内容"
+    },
+    {
+      "name": "brew_search_action",
+      "value": "搜索"
+    },
+    {
+      "name": "brew_search_title",
+      "value": "搜索"
+    },
+    {
+      "name": "brew_search_history",
+      "value": "搜索历史"
+    },
+    {
+      "name": "brew_search_discovery",
+      "value": "搜索发现"
+    },
+    {
+      "name": "brew_search_empty_history",
+      "value": "暂无搜索历史"
+    },
+    {
+      "name": "brew_search_empty_discovery",
+      "value": "暂无推荐"
+    },
+    {
+      "name": "brew_search_no_result",
+      "value": "没有找到相关包"
+    },
+    {
+      "name": "brew_search_result_count",
+      "value": "共 %d 个结果"
+    },
+    {
+      "name": "brew_search_index_pending",
+      "value": "本地索引未就绪，当前仅按包名匹配"
+    },
+    {
+      "name": "brew_search_filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "brew_search_filter_formula",
+      "value": "Formulae"
+    },
+    {
+      "name": "brew_search_filter_cask",
+      "value": "Casks"
+    },
+    {
+      "name": "brew_artifact_app",
+      "value": "应用程序"
+    },
+    {
+      "name": "brew_artifact_binary",
+      "value": "命令行工具"
+    },
+    {
+      "name": "brew_artifact_pkg",
+      "value": "安装包"
+    },
+    {
+      "name": "brew_artifact_font",
+      "value": "字体"
+    },
+    {
+      "name": "brew_artifact_other",
+      "value": "其他"
+    },
+    {
+      "name": "brew_mine_env",
+      "value": "本机环境"
+    },
+    {
+      "name": "brew_mine_overview",
+      "value": "概览"
+    },
+    {
+      "name": "brew_mine_formulae",
+      "value": "已安装 Formulae"
+    },
+    {
+      "name": "brew_mine_casks",
+      "value": "已安装 Casks"
+    },
+    {
+      "name": "brew_mine_outdated",
+      "value": "可升级"
+    },
+    {
+      "name": "brew_mine_taps",
+      "value": "Tap 源"
+    },
+    {
+      "name": "brew_mine_services",
+      "value": "后台服务"
+    },
+    {
+      "name": "brew_mine_disk",
+      "value": "占用空间"
+    },
+    {
+      "name": "brew_mine_maintenance",
+      "value": "维护"
+    },
+    {
+      "name": "brew_mine_doctor",
+      "value": "运行 brew doctor 自检"
+    },
+    {
+      "name": "brew_mine_cleanup",
+      "value": "清理下载缓存"
+    },
+    {
+      "name": "brew_mine_autoremove",
+      "value": "移除无用依赖"
+    },
+    {
+      "name": "brew_mine_update",
+      "value": "更新软件包索引"
+    },
+    {
+      "name": "brew_mine_on_request",
+      "value": "主动安装"
+    },
+    {
+      "name": "brew_mine_as_dependency",
+      "value": "作为依赖安装"
+    },
+    {
+      "name": "brew_action_install",
+      "value": "安装"
+    },
+    {
+      "name": "brew_action_uninstall",
+      "value": "卸载"
+    },
+    {
+      "name": "brew_action_upgrade",
+      "value": "升级"
+    },
+    {
+      "name": "brew_action_copy",
+      "value": "复制"
+    },
+    {
+      "name": "brew_action_view_all",
+      "value": "查看全部"
+    },
+    {
+      "name": "brew_label_packages_count",
+      "value": "%d 个包"
+    },
+    {
+      "name": "brew_label_executables",
+      "value": "提供的命令"
+    },
+    {
+      "name": "brew_label_supported_platforms",
+      "value": "支持的平台"
+    },
+    {
+      "name": "brew_label_macos_requirement",
+      "value": "系统版本要求"
+    },
+    {
+      "name": "brew_label_build_dependencies",
+      "value": "构建依赖"
+    },
+    {
+      "name": "brew_label_optional_dependencies",
+      "value": "可选依赖"
+    },
+    {
+      "name": "brew_label_uses_from_macos",
+      "value": "复用 macOS 内置库"
+    },
+    {
+      "name": "brew_label_conflicts_with",
+      "value": "冲突"
+    },
+    {
+      "name": "brew_label_category_rank",
+      "value": "分类内排名"
+    },
+    {
+      "name": "brew_label_bundle_version",
+      "value": "Bundle 版本"
+    },
+    {
+      "name": "brew_label_source",
+      "value": "源码"
+    },
+    {
+      "name": "brew_label_installs_90d",
+      "value": "近 90 天安装量"
+    },
+    {
+      "name": "brew_label_installs_365d",
+      "value": "近 365 天安装量"
+    },
+    {
+      "name": "brew_label_aliases",
+      "value": "别名"
+    },
+    {
+      "name": "brew_label_head_version",
+      "value": "开发版"
+    },
+    {
+      "name": "brew_label_versioned_formulae",
+      "value": "历史版本"
+    },
+    {
+      "name": "brew_label_replacement",
+      "value": "替代品"
+    },
+    {
+      "name": "brew_label_deprecation_reason",
+      "value": "废弃原因"
+    },
+    {
+      "name": "brew_section_related",
+      "value": "相关推荐"
+    },
+    {
+      "name": "brew_section_same_category",
+      "value": "同分类其他包"
+    },
+    {
+      "name": "brew_hint_deprecated",
+      "value": "该包已废弃，不建议在新项目中使用"
+    },
+    {
+      "name": "brew_hint_disabled",
+      "value": "该包已停用，无法安装"
+    },
+    {
+      "name": "brew_value_yes",
+      "value": "是"
+    },
+    {
+      "name": "brew_value_no",
+      "value": "否"
+    },
+    {
+      "name": "brew_format_items",
+      "value": "%d 项"
+    },
+    {
+      "name": "brew_version_delta",
+      "value": "%s → %s"
+    },
+    {
+      "name": "brew_discover_metric_trending",
+      "value": "%s 次安装（30天）· 增速 %s×"
+    },
+    {
+      "name": "brew_discover_metric_alltime",
+      "value": "%s 次安装（365天）"
+    },
+    {
+      "name": "brew_discover_metric_fresh",
+      "value": "%s 次安装（30天）"
+    },
+    {
+      "name": "brew_discover_metric_no_history",
+      "value": "暂无历史"
+    },
+    {
+      "name": "brew_discover_snapshot",
+      "value": "数据窗口 %s"
+    },
+    {
+      "name": "brew_board_trending",
+      "value": "今日热门"
+    },
+    {
+      "name": "brew_board_alltime",
+      "value": "历史最佳"
+    },
+    {
+      "name": "brew_board_fresh",
+      "value": "新上架与上升"
+    },
+    {
+      "name": "brew_discover_velocity_badge",
+      "value": "↑%s×"
+    },
+    {
+      "name": "brew_discover_featured_rank",
+      "value": "%s · 第 %d 名"
+    },
+    {
+      "name": "brew_action_view",
+      "value": "查看"
+    },
+    {
+      "name": "brew_discover_installs_label",
+      "value": "下载量 %s"
+    },
+    {
+      "name": "brew_fetching_data",
+      "value": "正在获取 Homebrew 数据…"
+    }
+  ]
+}

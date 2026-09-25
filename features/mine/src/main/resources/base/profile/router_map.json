@@ -1,0 +1,34 @@
+{
+  "routerMap": [
+    {
+      "name": "MineView",
+      "pageSourceFile": "src/main/ets/view/MineView.ets",
+      "buildFunction": "MineViewBuilder"
+    },
+    {
+      "name": "MineSettingsView",
+      "pageSourceFile": "src/main/ets/view/MineSettingView.ets",
+      "buildFunction": "MineSettingBuilder"
+    },
+    {
+      "name": "AboutView",
+      "pageSourceFile": "src/main/ets/view/AboutView.ets",
+      "buildFunction": "AboutViewBuilder"
+    },
+    {
+      "name": "MinePackagesView",
+      "pageSourceFile": "src/main/ets/view/MinePackagesView.ets",
+      "buildFunction": "MinePackagesViewBuilder"
+    },
+    {
+      "name": "BrewSourceSettingView",
+      "pageSourceFile": "src/main/ets/view/BrewSourceSettingView.ets",
+      "buildFunction": "BrewSourceSettingBuilder"
+    },
+    {
+      "name": "BrewSourceEditView",
+      "pageSourceFile": "src/main/ets/view/BrewSourceEditView.ets",
+      "buildFunction": "BrewSourceEditBuilder"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@ohos/brewdiscover",
+  "version": "1.0.0",
+  "description": "Homebrew 应用市场 · Discover 入口（三张榜）",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/common": "file:../../common",
+    "@ohos/commonbusiness": "file:../commonbusiness",
+    "@ohos/brewcommon": "file:../brewcommon"
+  }
+}

@@ -1,0 +1,332 @@
+{
+  "string": [
+    {
+      "name": "mine_title",
+      "value": "Mine"
+    },
+    {
+      "name": "about",
+      "value": "about"
+    },
+    {
+      "name": "setting",
+      "value": "Setting"
+    },
+    {
+      "name": "version_information",
+      "value": "Version information"
+    },
+    {
+      "name": "updated_version",
+      "value": "To be updated"
+    },
+    {
+      "name": "latest_version",
+      "value": "The latest version"
+    },
+    {
+      "name": "copyright1",
+      "value": "粤A2-20044005号-302A"
+    },
+    {
+      "name": "copyright2",
+      "value": "Copyright © 2025 Huawei Device Co., Ltd. All rights reserved."
+    },
+    {
+      "name": "user_experience",
+      "value": "user experience"
+    },
+    {
+      "name": "user_experience_tips",
+      "value": "Let sample_in_HarmonyOS provide you with a better experience."
+    },
+    {
+      "name": "feedback",
+      "value": "feedback"
+    },
+    {
+      "name": "score_title",
+      "value": "Based on your actual experience, how would you rate your overall satisfaction with Sample_in_HarmonyOS?"
+    },
+    {
+      "name": "description_title",
+      "value": "What other suggestions do you have for Sample_in_HarmonyOS? What features would you like us to provide?"
+    },
+    {
+      "name": "unregistered_title",
+      "value": "Login to Huawei account"
+    },
+    {
+      "name": "feedback_desc",
+      "value": "This feature is for display purposes only"
+    },
+    {
+      "name": "mine_installed",
+      "value": "Installed"
+    },
+    {
+      "name": "mine_outdated",
+      "value": "Updates available"
+    },
+    {
+      "name": "mine_updated",
+      "value": "Updated"
+    },
+    {
+      "name": "mine_view_all",
+      "value": "View all"
+    },
+    {
+      "name": "mine_filter_all",
+      "value": "All"
+    },
+    {
+      "name": "mine_filter_formulae",
+      "value": "Formulae"
+    },
+    {
+      "name": "mine_filter_casks",
+      "value": "Casks"
+    },
+    {
+      "name": "mine_packages_empty",
+      "value": "No packages to show"
+    },
+    {
+      "name": "brew_source_title",
+      "value": "Data sources"
+    },
+    {
+      "name": "brew_source_in_use",
+      "value": "In use"
+    },
+    {
+      "name": "brew_source_builtin",
+      "value": "Built-in"
+    },
+    {
+      "name": "brew_source_activate",
+      "value": "Activate"
+    },
+    {
+      "name": "brew_source_activate_confirm",
+      "value": "Switch to %s (%s). Switching restarts the app; the current source's cache is kept."
+    },
+    {
+      "name": "brew_source_activate_and_restart",
+      "value": "Switch and restart"
+    },
+    {
+      "name": "brew_source_edit",
+      "value": "Edit"
+    },
+    {
+      "name": "brew_source_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "brew_source_more",
+      "value": "More"
+    },
+    {
+      "name": "brew_source_delete_confirm",
+      "value": "Deleting removes this source's cache."
+    },
+    {
+      "name": "brew_source_add",
+      "value": "Add data source"
+    },
+    {
+      "name": "brew_source_name_hint",
+      "value": "Name"
+    },
+    {
+      "name": "brew_source_name_label",
+      "value": "Name"
+    },
+    {
+      "name": "brew_source_url_hint",
+      "value": "https://host/api"
+    },
+    {
+      "name": "brew_source_url_label",
+      "value": "Address"
+    },
+    {
+      "name": "brew_source_builtin_url_locked",
+      "value": "The built-in source's address can't be changed"
+    },
+    {
+      "name": "brew_source_dialect_label",
+      "value": "Data format"
+    },
+    {
+      "name": "brew_source_dialect_auto",
+      "value": "Detected automatically"
+    },
+    {
+      "name": "brew_source_dialect_upstream",
+      "value": "Homebrew upstream"
+    },
+    {
+      "name": "brew_source_dialect_harmonybrew",
+      "value": "Harmonybrew (%s)"
+    },
+    {
+      "name": "brew_source_dialect_harmonybrew_unknown",
+      "value": "Harmonybrew"
+    },
+    {
+      "name": "brew_source_save",
+      "value": "Save"
+    },
+    {
+      "name": "brew_source_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "brew_source_err_name_empty",
+      "value": "Name cannot be empty"
+    },
+    {
+      "name": "brew_source_err_url_empty",
+      "value": "Address cannot be empty"
+    },
+    {
+      "name": "brew_source_err_url_scheme",
+      "value": "Address must start with http:// or https://"
+    },
+    {
+      "name": "brew_source_err_url_host",
+      "value": "Address is missing a host"
+    },
+    {
+      "name": "brew_source_err_url_query",
+      "value": "Address must not contain a query string"
+    },
+    {
+      "name": "brew_source_err_url_fragment",
+      "value": "Address must not contain a fragment"
+    },
+    {
+      "name": "brew_source_err_url_too_long",
+      "value": "Address is too long"
+    },
+    {
+      "name": "brew_source_err_save_failed",
+      "value": "Save failed"
+    },
+    {
+      "name": "brew_source_error_invalid",
+      "value": "Invalid input, check name and URL"
+    },
+    {
+      "name": "brew_source_health_err_catalog",
+      "value": "Failed to load the catalog"
+    },
+    {
+      "name": "brew_source_health_err_meta",
+      "value": "Package index sync failed"
+    },
+    {
+      "name": "brew_source_health_err_hydrate",
+      "value": "Some package data failed to load"
+    },
+    {
+      "name": "brew_source_reach_unknown",
+      "value": "Not verified"
+    },
+    {
+      "name": "brew_source_data_prefix",
+      "value": "Data: "
+    },
+    {
+      "name": "brew_source_data_ready",
+      "value": "Ready"
+    },
+    {
+      "name": "brew_source_data_no_catalog",
+      "value": "Catalog not fetched"
+    },
+    {
+      "name": "brew_source_data_no_index",
+      "value": "Package index not synced"
+    },
+    {
+      "name": "brew_source_probing",
+      "value": "Checking…"
+    },
+    {
+      "name": "brew_source_probe_invalid_url",
+      "value": "Invalid address"
+    },
+    {
+      "name": "brew_source_probe_dns",
+      "value": "Cannot resolve the host"
+    },
+    {
+      "name": "brew_source_probe_timeout",
+      "value": "Connection timed out"
+    },
+    {
+      "name": "brew_source_probe_tls",
+      "value": "Certificate check failed"
+    },
+    {
+      "name": "brew_source_probe_404",
+      "value": "No /api data at this address"
+    },
+    {
+      "name": "brew_source_probe_http",
+      "value": "Server rejected the request"
+    },
+    {
+      "name": "brew_source_probe_not_api",
+      "value": "Not a Homebrew API (returned a web page or non-JSON)"
+    },
+    {
+      "name": "brew_source_probe_unknown",
+      "value": "Network error"
+    },
+    {
+      "name": "brew_source_probe_http_status",
+      "value": "HTTP status: %d"
+    },
+    {
+      "name": "brew_source_probe_write_failed",
+      "value": "Failed to save configuration"
+    },
+    {
+      "name": "brew_source_probe_no_context",
+      "value": "Application context unavailable"
+    },
+    {
+      "name": "brew_source_test",
+      "value": "Test connection"
+    },
+    {
+      "name": "brew_source_test_ok",
+      "value": "Connection OK"
+    },
+    {
+      "name": "brew_source_connect_ok_http",
+      "value": "Connection OK · HTTP %d"
+    },
+    {
+      "name": "brew_source_connect_failed_prefix",
+      "value": "Connection failed: "
+    },
+    {
+      "name": "brew_source_clear_cache",
+      "value": "Clear cache"
+    },
+    {
+      "name": "brew_source_clear_confirm",
+      "value": "Only this source's local cache is cleared; other sources are unaffected."
+    },
+    {
+      "name": "brew_source_edit_url_confirm",
+      "value": "Changing the address clears this source's local cache."
+    }
+  ]
+}

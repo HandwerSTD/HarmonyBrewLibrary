@@ -1,0 +1,36 @@
+{
+  "float": [
+    {
+      "name": "brew_discover_hero_height",
+      "value": "112.0vp"
+    },
+    {
+      "name": "brew_discover_hero_symbol_size",
+      "value": "88.0vp"
+    },
+    {
+      "name": "brew_discover_featured_height",
+      "value": "400.0vp"
+    },
+    {
+      "name": "brew_discover_featured_row_height",
+      "value": "72.0vp"
+    },
+    {
+      "name": "brew_discover_arrow_size",
+      "value": "40.0vp"
+    },
+    {
+      "name": "brew_discover_featured_content_height",
+      "value": "176.0vp"
+    },
+    {
+      "name": "brew_featured_art_symbol_size",
+      "value": "140.0vp"
+    },
+    {
+      "name": "brew_featured_art_symbol_top",
+      "value": "42.0vp"
+    }
+  ]
+}
