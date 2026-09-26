@@ -36,14 +36,29 @@ export class PreferenceManager {
     return PreferenceManager.instance;
   }
 
-  private initPreference(storeName: string): void {
+  /**
+   * 用已知的 Context 提前打开存储。
+   *
+   * 启动早期 AppStorage 里可能还没有 UIContext（它是在 loadContent 回调里才写进去的），
+   * 此时只靠懒加载会初始化失败且只落一条日志，后续 getValue 一路返回 null，
+   * 表现就是「明明存过，却读不到」。
+   */
+  public initWithContext(context: Context): void {
+    if (this.preferences) {
+      return;
+    }
+    this.initPreference(PREFERENCES_NAME, context);
+  }
+
+  private initPreference(storeName: string, context?: Context): void {
     const uiContext: UIContext | undefined = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
+    const hostContext: Context | undefined = uiContext?.getHostContext() ?? context;
     try {
-      if (!uiContext) {
-        Logger.error(TAG, `initPreference failed, cause uiContext is undefined.`);
+      if (!hostContext) {
+        Logger.error(TAG, `initPreference failed, cause hostContext is undefined.`);
         return;
       }
-      this.preferences = preferences.getPreferencesSync(uiContext.getHostContext() as Context, { name: storeName });
+      this.preferences = preferences.getPreferencesSync(hostContext, { name: storeName });
     } catch (err) {
       Logger.error(TAG, `initPreference failed, err code:${err.code},msg:${err.message}`);
     }

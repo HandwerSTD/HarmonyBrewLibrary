@@ -45,18 +45,41 @@ export class AccountService {
     return AccountService.instance;
   }
 
+  /**
+   * 进程启动时恢复华为账号登录态。
+   *
+   * 登录信息在 selectHuaweiAccountToLogin() 里写进 preferences，但只有这里会读回来；
+   * 之前没有任何地方调用本方法，于是重启后 userLogin 恒为 false ——
+   * 这就是「登录状态没被持久化、重启后登录消失」的根因。
+   * 调用方必须保证在首屏 UI 之前完成（见 InitCenter.initAfterAgreement）。
+   *
+   * 本方法不会 reject：账号异常不应该把启动流程卡死，调用方按 isLogin 决定 UI 即可。
+   */
   public serviceInit(): Promise<InitResult> {
     this.subscribeAccountLoginState();
-    this.userAccount = this.preferenceManager.getValue(USER_ACCOUNT) as UserAccount ?? this.userAccount;
+    const cachedAccount: UserAccount | null = this.preferenceManager.getValue<UserAccount>(USER_ACCOUNT);
+    const cachedLogin: boolean | null = this.preferenceManager.getValue<boolean>(USER_LOGIN);
+    if (cachedAccount) {
+      this.userAccount = cachedAccount;
+    }
+    // 本地没有登录记录时不必再问一次华为账号状态：空 unionId 查询必然失败，
+    // 而失败路径又会去清一遍状态，纯属多余的往返。
+    if (cachedLogin !== true || this.userAccount.unionId === '') {
+      this.userLogin = false;
+      return Promise.resolve<InitResult>({
+        isLogin: false,
+        needUpdate: true,
+      });
+    }
     const loginStateRequest: authentication.StateRequest = {
       idType: authentication.IdType.UNION_ID,
       idValue: this.userAccount.unionId,
     };
-    return new Promise<InitResult>((resolve, reject) => {
+    return new Promise<InitResult>((resolve) => {
       new authentication.HuaweiIDProvider().getHuaweiIDState(loginStateRequest)
         .then((result: authentication.StateResult) => {
           if (result.state !== authentication.State.AUTHORIZED) {
-            this.userLogin = false;
+            // 华为账号侧确认未授权，才真正清掉本地登录态。
             this.clearAccountInfo();
             resolve({
               isLogin: false,
@@ -72,10 +95,15 @@ export class AccountService {
           }
         })
         .catch((error: BusinessError) => {
-          this.userLogin = false;
-          this.clearAccountInfo();
+          // 查询失败只说明这一次问不到华为账号状态，不等于用户退出了登录。
+          // 这里保留本地缓存的登录态：否则断网或账号服务抖动一次启动就会把登录「弄丢」，
+          // 正是本次要修的问题。下一次启动时成功查到 UNAUTHORIZED 会自己纠正回来。
           Logger.error(TAG, `Get HuaweiID state failed, cause code: ${error.code}, message: ${error.message}.`);
-          reject(error);
+          this.userLogin = true;
+          resolve({
+            isLogin: true,
+            needUpdate: true,
+          });
         });
     });
   }

@@ -31,7 +31,7 @@ export { UpdateService } from './src/main/ets/updateservice/UpdateService';
 
 export { UserAccount } from './src/main/ets/accountservice/model/UserAccount';
 
-export { AccountService } from './src/main/ets/accountservice/AccountService';
+export { AccountService, InitResult } from './src/main/ets/accountservice/AccountService';
 
 export { LoginSheetViewBuilder } from './src/main/ets/accountservice/component/AccountSheetView'
 
