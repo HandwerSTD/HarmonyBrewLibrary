@@ -18,7 +18,7 @@
         "description": "$string:hmos_app_name",
         "icon": "$media:hmos_layered_image",
         "label": "$string:hmos_app_name",
-        "startWindowIcon": "$media:ic_start_icon_800",
+        "startWindowIcon": "$media:ic_foreground",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
         "minWindowWidth": 1080,
