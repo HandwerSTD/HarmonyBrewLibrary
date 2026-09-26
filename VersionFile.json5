@@ -1,5 +1,5 @@
 {
-  version: "1.0.0",
+  version: "1.0.1",
   "dependencies": {
     "hypium-version": "1.0.19",
     "hamock-version": "1.0.0",
