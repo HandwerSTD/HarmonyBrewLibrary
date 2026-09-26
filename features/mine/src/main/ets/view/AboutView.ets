@@ -15,6 +15,7 @@
 
 import { BundleInfoData, CommonConstants, ResourceUtil, StorageKey } from '@ohos/common';
 import { AboutItemCard } from '../component/AboutItemCard';
+import { MineConstant } from '../constant/CommonConstants';
 import { AboutVM, ViewRegistrationInfoEvent } from '../viewmodel/AboutVM';
 
 @Component
@@ -48,13 +49,15 @@ export struct AboutView {
         })
 
         Column() {
-          Text($r('app.string.copyright1'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_emphasize'))
-            .fontSize($r('sys.float.Body_S'))
-            .onClick(() => {
-              this.viewModel.sendEvent(new ViewRegistrationInfoEvent());
-            })
+          if (MineConstant.SHOW_REGISTRATION_NO) {
+            Text($r('app.string.copyright1'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('sys.color.font_emphasize'))
+              .fontSize($r('sys.float.Body_S'))
+              .onClick(() => {
+                this.viewModel.sendEvent(new ViewRegistrationInfoEvent());
+              })
+          }
           Text($r('app.string.copyright2'))
             .fontColor($r('sys.color.font_secondary'))
             .fontWeight(FontWeight.Regular)

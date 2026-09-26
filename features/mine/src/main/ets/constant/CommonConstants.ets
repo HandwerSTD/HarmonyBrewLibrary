@@ -15,4 +15,10 @@
 
 export class MineConstant {
   public static readonly BUTTON_CLICK_THROTTLE: number = 1000;
+  /**
+   * 备案号（`app.string.copyright1`）是否在「关于」页展示。
+   * 上架审核前先隐藏：点击跳转 beian.miit.gov.cn 的入口随之一起关掉。
+   * 恢复时改回 true 即可，资源 / 事件 / `miitUrl` 配置都还留着。
+   */
+  public static readonly SHOW_REGISTRATION_NO: boolean = false;
 }
