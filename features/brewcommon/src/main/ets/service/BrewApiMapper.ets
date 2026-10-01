@@ -160,8 +160,8 @@ const ARTIFACT_TYPES: string[] = [
  * 剩下的一切（版本/依赖/bottle/artifacts/caveats/生命周期/热度）都由现网单条覆盖。
  * 实测：详情页与归一化器对 `contentType` / `recommendList` **零引用**，所以它们一并删掉。
  *
- * 代价（写成事实，不当成意外）：`BREW_DATA_MODE=SNAPSHOT` 或现网失败时，
- * 详情页降级成骨架里这几个字段（依赖/artifacts/caveats 那些段落直接不渲染）——
+ * 代价（写成事实，不当成意外）：现网单条失败时，详情页降级成骨架里这几个字段
+ * （依赖/artifacts/caveats 那些段落直接不渲染）——
  * 归一化器本来就是按“字段为空就不加这一段”写的，所以降级是完整可渲染的页面，不是错误页。
  */
 export class BrewApiMapper {
@@ -173,8 +173,8 @@ export class BrewApiMapper {
    * 分类 = `BrewTaxonomy`（策展覆盖 → 关键词 → 兜底）、名次 = 浏览集内的名次。
    * 其余一切（版本/依赖/bottle/artifacts/caveats/生命周期/热度/描述）都由现网单条覆盖。
    *
-   * 代价（写成事实，不当成意外）：`BREW_DATA_MODE=SNAPSHOT` 或现网失败时，
-   * 详情页只剩骨架字段（依赖/artifacts/caveats 那些段落直接不渲染）——
+   * 代价（写成事实，不当成意外）：现网单条失败时，详情页只剩骨架字段
+   * （依赖/artifacts/caveats 那些段落直接不渲染）——
    * 归一化器本来就是按“字段为空就不加这一段”写的，所以降级后是完整可渲染的页面，不是错误页。
    */
   public static formulaBase(token: string, id: number, categoryKey: string, installs30d: number): BrewFormulaDetail {

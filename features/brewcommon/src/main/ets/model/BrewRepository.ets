@@ -13,24 +13,29 @@ import { BrewMetaSync } from '../service/BrewMetaSync';
 import { BrewTaxonomy } from '../constant/BrewTaxonomy';
 import { BrewApiMapper } from '../service/BrewApiMapper';
 import type { LiveCaskDoc, LiveFormulaDoc } from '../service/BrewApiMapper';
-import { BREW_CATALOG_MEMBERSHIP, BREW_CATALOG_TOP_N, BREW_DATA_MODE, BREW_SEARCH_LIMIT, BrewDataMode } from '../constant/BrewConstants';
+import { BREW_CATALOG_TOP_N, BREW_SEARCH_LIMIT } from '../constant/BrewConstants';
 import type {
   BrewCaskCard,
   BrewCaskCategory,
   BrewCaskDetail,
   BrewCaskPageData,
   BrewCategoryCard,
-  BrewDiscoverBoard,
-  BrewDiscoverPageData,
   BrewFormulaDetail,
   BrewFormulaPageData,
-  BrewInstalledPackage,
   BrewPageData,
   BrewPackageItem,
 } from './BrewModels';
-// 这两个是**类**（要 new），必须值导入，不能 import type
-import { BrewDiscoverBoardKey, BrewDiscoverEntry, BrewDiscoverFeatured, BrewDiscoverMeta, BrewKind } from './BrewModels';
-import type { LiveAnalytics } from '../service/BrewApiMapper';
+// 这三个是**类**（要 new），必须值导入，不能 import type
+import {
+  BrewDiscoverBoard,
+  BrewDiscoverBoardKey,
+  BrewDiscoverEntry,
+  BrewDiscoverFeatured,
+  BrewDiscoverMeta,
+  BrewDiscoverPageData,
+  BrewKind,
+} from './BrewModels';
+import { BREW_CATALOG_BOARDS } from '../service/BrewCatalogAlgo';
 import { BrewSearchEngine, BrewSearchEntry, BrewSearchHit } from './BrewSearchEngine';
 
 const TAG: string = '[BrewRepository]';
@@ -47,14 +52,15 @@ const SIBLING_PAGE_SIZE: number = 100;
 /**
  * Repository 层。
  *
- * **数据分两层，职责不同：**
- *   - **骨架**（分类 / 成员 / 卡片版面 / 图标 / id）：内置 rawfile 快照。官方 API 没有分类字段，
- *     这部分不能联网；读 rawfile 也比读 Preference 快，所以**不做页面级缓存**；
- *   - **包自身属性**（版本 / 描述 / 依赖 / 安装量 / 生命周期）：现网请求，
+ * 2026-10 起**只有一条数据通道**（原先的「内置 rawfile 快照」通道已整条删除）：
+ *   - **榜与分类的成员 / 卡片版面 / 图标 / id**：设备端用「目录（聚合端点） + 词表」现算，
+ *     见 `BrewService.getCatalog` 与 `BrewBrowseBuilder`；
+ *   - **包自身属性**（版本 / 描述 / 依赖 / 安装量 / 生命周期）：现网单条请求，
  *     由 `BrewService` 带 TTL 缓存（键 = token）。
  *
  * 现网值的填充（hydrate）发生在**本层返回之前**，所以 VM 与 UI 完全不知道数据来自哪里 ——
  * 这正是 docs/brew-api-design.md §7 当初留的改动面：对外签名与返回类型不变。
+ * 目录拿不到时本层给**空页 / 空榜**（不抛错），由 UI 走空态。
  *
  * 单例 + getInstance()，与 ComponentListModel / ComponentDetailModel 一致。
  */
@@ -76,10 +82,9 @@ export class BrewFormulaModel {
   /**
    * 分类卡首页。
    *
-   * **不再吃 Preference 页面缓存**：骨架（分类 / 成员 / 图标 / 版面）来自内置 rawfile，
-   * 读它比读 Preference 还快，没有缓存的必要；而真正需要缓存的是**现网字段**，
+   * **不做页面级缓存**：骨架（分类 / 成员 / 图标 / 版面）是设备端用「目录 + 词表」现算的，
+   * 缓存整页会挡住新结果（Discover 吃过这个亏）；真正需要缓存的是**现网字段**，
    * 那部分由 `BrewService` 的单条 TTL 缓存负责（键 = token）。
-   * 这样也避开了“缓存了整页 → 现网值永远进不来”这类毛病（榜单页吃过这个亏，见 BrewDiscoverModel 注释）。
    */
   public getFormulaPage(currentPage: number, pageSize: number): Promise<BrewPageData<BrewFormulaPageData>> {
     return this.service.buildFormulaPage(currentPage, pageSize)
@@ -88,7 +93,7 @@ export class BrewFormulaModel {
           // 设备端拼页时已经拉过一遍现网单条（分类必须看 desc），所以这里不再 hydrate 第二遍
           return built;
         }
-        // 拿不到目录（无网 / SNAPSHOT 模式）→ 空页。内置 page 快照已删除（C 档），
+        // 拿不到目录 → 空页。内置 page 快照已删除（C 档），
         // 所以这里没有回落对象：让 UI 走它自己的空态，而不是抛错变成失败态。
         Logger.info(TAG, 'formula browse empty (catalog unavailable)');
         return BrewBrowseBuilder.emptyFormulaPage(pageSize);
@@ -109,7 +114,7 @@ export class BrewFormulaModel {
    */
   public getFormulaDetail(componentId: number, token: string): Promise<BrewFormulaDetail> {
     const id: number = componentId > 0 ? componentId : BrewBrowseBuilder.tokenId(token);
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE || token.length === 0) {
+    if (token.length === 0) {
       return Promise.resolve(this.degradedFormula(token, id));
     }
     return this.service.getLiveFormulaDoc(token)
@@ -150,10 +155,10 @@ export class BrewFormulaModel {
    * 用同分类的**现网**名次校正详情页上的 `categoryRank / categorySize`。
    *
    * 为什么必须校正：详情页同时展示「近 30 天安装量」与「分类内第 N 名」，
-   * 安装量已经是现网值、名次若仍是快照值，两者就会对不上 ——
-   * 而列表页的名次是同一次 hydrate 后重算的，详情页跟着它才一致。
+   * 安装量取自目录，而名次是浏览页在**同一次构页**里算出来的 —— 详情页跟着它才一致
+   * （两处各算一次迟早对不上：成员集合会随目录刷新而变）。
    *
-   * 失败时保留快照名次（不报错）：名次是展示值，不值得把详情页变成错误态。
+   * 失败时保留骨架名次（不报错）：名次是展示值，不值得把详情页变成错误态。
    */
   private alignCategoryRank(detail: BrewFormulaDetail): Promise<BrewFormulaDetail> {
     return this.getFormulaPage(1, SIBLING_PAGE_SIZE)
@@ -258,7 +263,7 @@ export class BrewCaskModel {
   /** 同 getFormulaDetail（cask 的现网单条口径是 `analytics.install`、版本字段是 `version`）。 */
   public getCaskDetail(componentId: number, token: string): Promise<BrewCaskDetail> {
     const id: number = componentId > 0 ? componentId : BrewBrowseBuilder.tokenId(token);
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE || token.length === 0) {
+    if (token.length === 0) {
       return Promise.resolve(this.degradedCask(token, id));
     }
     return this.service.getLiveCaskDoc(token)
@@ -367,40 +372,13 @@ export class BrewCaskModel {
   }
 }
 
-/** 本机状态（Mine）。纯 Mock，未来接 brew 命令输出。 */
-export class BrewLocalModel {
-  private static instance: BrewLocalModel;
-  private service: BrewService = new BrewService();
-
-  private constructor() {
-  }
-
-  public static getInstance(): BrewLocalModel {
-    if (!BrewLocalModel.instance) {
-      BrewLocalModel.instance = new BrewLocalModel();
-    }
-    return BrewLocalModel.instance;
-  }
-
-  public getInstalledFormulae(): Promise<BrewInstalledPackage[]> {
-    return this.service.getInstalledFormulae();
-  }
-
-  public getInstalledCasks(): Promise<BrewInstalledPackage[]> {
-    return this.service.getInstalledCasks();
-  }
-
-  public getOutdated(): Promise<BrewInstalledPackage[]> {
-    return this.service.getOutdated();
-  }
-}
-
 /**
- * Discover 三张榜。
+ * Discover 六张榜（Formulae / Casks 各 趋势 / 历史 / 新星）。
  *
- * 与其它 Model 一样：先吃 Preference 缓存，未命中再请求，成功后回写。
- * 榜单页与「查看全部」二级页共用同一份数据，第二次进二级页会直接命中缓存，
- * 所以二级页可以只收一个 boardId、自己去取整份数据（见 BrewDiscoverBoardParams）。
+ * 骨架（哪几张榜、id 顺序）在代码里构造，**成员唯一来源是设备端目录**：
+ * 内置回落快照已于 2026-10 删除，所以目录拿不到时就是空榜（VM 过滤后页面走空态）。
+ * 榜单页与「查看全部」二级页共用同一份数据 —— 各自进页面时重新取一次，
+ * 命中目录的进程内/Preference 缓存，不会重发探针。
  */
 export class BrewDiscoverModel {
   private static instance: BrewDiscoverModel;
@@ -417,93 +395,100 @@ export class BrewDiscoverModel {
   }
 
   /**
-   * **刻意不吃 Preference 缓存**，与其它 Model 的做法相反 —— 这是有意的。
+   * **刻意不缓存整页**，与其它 Model 的做法相反 —— 这是有意的。
    *
-   * 榜单是"算法在某个时间点的一次冻结快照"，页面的全部意义就是让人看到**当前**那一份。
-   * 走缓存会造成一个很难查的故障：生成器更新了 `brew-discover-page.json`，
-   * 但 App 一直返回上一次写进 Preference 的旧副本，新内容静默不生效 ——
-   * 补「单 App 大图卡」时就真踩到了：字段已经产出、装机也成功，
-   * 页面上却只有榜卡，看起来像"代码没生效"，其实是缓存在挡。
-   *
-   * 快照只有 ~21KB，读 rawfile 的成本可以忽略；
-   * 接真实 API 时应改为**带 TTL 的缓存**（见 docs/brew-discover-algo.md §7 的刷新频率建议），
-   * 而不是"永久缓存直到写失败"。
+   * 榜单是"算法在某个时间点的一次冻结"，页面的全部意义就是让人看到**当前**那一份；
+   * 而它的成员来自目录（`BrewService.getCatalog`），那一层已经带 TTL + 条件请求缓存。
+   * 若在本层再缓存一份整页，就会出现「目录更新了、页面还显示上一次组装结果」这类静默不生效。
    */
   public getDiscoverPage(): Promise<BrewDiscoverPageData> {
-    const tProbe0: number = Date.now();
-    return this.service.getDiscoverPage().then((page: BrewDiscoverPageData) => {
-      const tSnapshot: number = Date.now();
-      BrewLoadLog.info('discover_snapshot', 'rawfile', tSnapshot - tProbe0,
-        'boards=' + page.boards.length + ' featured=' + (page.featured?.length ?? 0) +
-        ' snapshotDate=' + page.snapshotDate + '（内置回落快照，不走网络）');
-      return this.service.getCatalog().then((catalog: BrewCatalog | undefined) => {
-        const tCatalog: number = Date.now();
-        BrewDiscoverModel.auditCatalogMembers(page, catalog);
-        // 拿不到目录（或开关关闭）→ 继续用内置快照成员，页面不受影响
-        const fromCatalog: boolean = catalog !== undefined && BREW_CATALOG_MEMBERSHIP;
-        if (fromCatalog) {
-          BrewDiscoverModel.applyCatalogMembers(page, catalog!);
-        }
-        BrewDiscoverModel.fillCategoryKeys(page);
-        const tApply: number = Date.now();
-        return this.hydratePage(page, fromCatalog).then((hydrated: BrewDiscoverPageData) => {
-          BrewLoadLog.info('discover_page', 'assembled', Date.now() - tProbe0,
-            'snapshotMs=' + (tSnapshot - tProbe0) + ' getCatalogMs=' + (tCatalog - tSnapshot) +
-            ' membersApplyMs=' + (tApply - tCatalog) + ' hydrateMs=' + (Date.now() - tApply) +
-            ' membersFromCatalog=' + fromCatalog + ' boards=' + hydrated.boards.length);
-          // 数据已上屏 → 撤掉常驻提示（与 `getCatalog`/`hydrate*Docs` 里的 `willFetch` 成对）。
-          // Discover 的等待是「目录探针（最长、实测 17.4s）+ live hydrate」两段，
-          // 所以只在**整页组装完**时才 settle —— 在 `fetchCatalog` 那一步就撤会把第二段漏在外面。
-          BrewNetNotice.settle('discover_page', 'boards=' + hydrated.boards.length +
-            ' membersFromCatalog=' + fromCatalog);
-          return hydrated;
-        });
+    const tStart: number = Date.now();
+    const page: BrewDiscoverPageData = BrewDiscoverModel.emptyDiscoverPage();
+    return this.service.getCatalog().then((catalog: BrewCatalog | undefined) => {
+      const tCatalog: number = Date.now();
+      if (catalog === undefined) {
+        // 成员唯一来源拿不到 → 骨架里的六张榜全空。**不抛错**：VM 过滤掉空榜后页面走空态，
+        // 与 Formulae / Casks 的 C 档行为一致。恢复只需重进页签（getCatalog 会重新探针）。
+        Logger.info(TAG, 'discover empty (catalog unavailable)');
+        BrewLoadLog.warn('discover_page', 'empty-catalog', Date.now() - tStart,
+          '目录拿不到 → 榜成员为空、Discover 走空态（getCatalogMs=' + (tCatalog - tStart) + '）');
+        // ⚠ 必须与 `getCatalog` / `hydrate*Docs` 里的 `willFetch` **成对**：
+        // 目录取数会先发一条「正在获取」，不 settle 的话常驻提示会一直挂着不消失。
+        BrewNetNotice.settle('discover_page', 'boards=0 members=0 catalog=undefined');
+        return page;
+      }
+      BrewDiscoverModel.applyCatalogMembers(page, catalog);
+      BrewDiscoverModel.fillCategoryKeys(page);
+      const tApply: number = Date.now();
+      return this.hydratePage(page).then((hydrated: BrewDiscoverPageData) => {
+        BrewLoadLog.info('discover_page', 'assembled', Date.now() - tStart,
+          'getCatalogMs=' + (tCatalog - tStart) + ' membersApplyMs=' + (tApply - tCatalog) +
+          ' hydrateMs=' + (Date.now() - tApply) + ' boards=' + hydrated.boards.length);
+        // 数据已上屏 → 撤掉常驻提示（与 `getCatalog`/`hydrate*Docs` 里的 `willFetch` 成对）。
+        // Discover 的等待是「目录探针（最长、实测 17.4s）+ live hydrate」两段，
+        // 所以只在**整页组装完**时才 settle —— 在 `fetchCatalog` 那一步就撤会把第二段漏在外面。
+        BrewNetNotice.settle('discover_page', 'boards=' + hydrated.boards.length +
+          ' entries=' + BrewDiscoverModel.entryCount(hydrated));
+        return hydrated;
       });
     });
   }
 
   /**
-   * 目录对账：把**设备端现算**的六张榜（聚合端点 -> 全量分布 -> 算法）与内置快照的成员逐榜对比，打一行差异。
+   * 榜骨架（内置快照已于 2026-10 删除，所以骨架在代码里构造）。
    *
-   * 为什么要留这一行：它是「成员能不能用现网」的判断依据 —— 榜是按**全球分布**算的，
-   * 而能点进详情的包只有内置的 240 个（`id` 是样例工程的本地主键，官方 API 没有），
-   * 所以关键数字是“前 N 名里有多少能落到内置详情”（`resolved`）。实测 10/10，
-   * 且 `same=10/10`（六张榜里只有 cask/trending 差一个），所以切换是安全的。
-   * 榜单成员以后若换成“全球前十”的语义，`resolved` 会下降 —— 那行日志会告警。
+   * **顺序与 id 与旧快照 / 生成器逐字一致**：kind 外层（formula 先、cask 后）、
+   * 内层 `BREW_CATALOG_BOARDS`（trending / alltime / fresh），`id = sequence = 1..6`。
+   * 之所以死守这个顺序：`id` 是榜单二级页的路由参数（`BrewDiscoverBoardParams.boardId`
+   * → 按 `board.id` find），骨架恒为 6 张榜 → `BrewDiscoverBoardVM` 永远找得到对应的那张。
+   * 成员此时是空数组（`entryCount = 0`），由 `applyCatalogMembers` 填。
    */
-  private static auditCatalogMembers(page: BrewDiscoverPageData, catalog: BrewCatalog | undefined): void {
-    if (catalog === undefined) {
-      Logger.info(TAG, 'catalog unavailable, discover members stay from snapshot');
-      return;
-    }
-    const topN: number = page.topN > 0 ? page.topN : BREW_CATALOG_TOP_N;
-    const diffs: string[] = [];
-    page.boards.forEach((board: BrewDiscoverBoard) => {
-      const liveTokens: string[] = BrewService.catalogRows(catalog, board.kind, board.boardKey)
-        .slice(0, topN).map((row: CatalogEntry) => row.token);
-      const snapshotTokens: string[] = board.entries.map((entry: BrewDiscoverEntry) => entry.token);
-      const added: string[] = liveTokens.filter((token: string) => snapshotTokens.indexOf(token) < 0);
-      const dropped: string[] = snapshotTokens.filter((token: string) => liveTokens.indexOf(token) < 0);
-      diffs.push(`${board.kind}/${board.boardKey} live=${liveTokens.length} ` +
-        `same=${liveTokens.length - added.length}/${snapshotTokens.length}` +
-        (added.length > 0 ? ` +[${added.join(',')}]` : '') +
-        (dropped.length > 0 ? ` -[${dropped.join(',')}]` : ''));
+  private static emptyDiscoverPage(): BrewDiscoverPageData {
+    const page: BrewDiscoverPageData = new BrewDiscoverPageData();
+    page.topN = BREW_CATALOG_TOP_N;
+    page.snapshotDate = '';
+    page.meta = {};
+    page.featured = [];
+    let id: number = 0;
+    [BrewKind.FORMULA, BrewKind.CASK].forEach((kind: string) => {
+      BREW_CATALOG_BOARDS.forEach((pair: string[]) => {
+        id++;
+        const board: BrewDiscoverBoard = new BrewDiscoverBoard();
+        board.id = id;
+        board.sequence = id;
+        board.kind = kind;
+        board.boardKey = pair[0];
+        board.entries = [];
+        board.entryCount = 0;
+        page.boards.push(board);
+      });
     });
-    Logger.info(TAG, `catalog members vs snapshot: ${diffs.join(' | ')}`);
+    return page;
+  }
+
+  /** 整页条目数（settle 文案与判据行用：一眼看出「组上来了但没东西」） */
+  private static entryCount(page: BrewDiscoverPageData): number {
+    let total: number = 0;
+    page.boards.forEach((board: BrewDiscoverBoard) => {
+      total += board.entries.length;
+    });
+    return total;
   }
 
   /**
    * 把榜成员换成设备端现算的结果。
    *
    * 四条规则：
-   *   1. **不再按白名单过滤**（C 档的变化）：`id` 由 token 的稳定哈希给出，详情页也能
-   *      只用现网单条渲染，所以"榜上的包点不进去"这个问题从根上消失了 ——
-   *      榜现在就是**全球前 N**，不再是"内置 240 个里的前 N"；
+   *   1. **不过滤白名单**：`id` 由 token 的稳定哈希给出，详情页也只用现网单条渲染，
+   *      所以「榜上的包点不进去」从根上不存在 —— 榜就是**全球前 N**；
    *   2. `name` / `desc` / `categoryKey` 先留空：可读名与描述都在现网单条里，由紧随其后的
    *      hydrate 覆盖。⚠ `categoryKey` 的留空**不代表它依赖 desc** —— 它由
    *      `fillCategoryKeys` 在 hydrate 之前就补好，理由见那里；
    *   3. `meta` 与 `snapshotDate` 一并换成**现网实测值**：页面下方那句“基于最近可用数据”
-   *      的日期就来自它，成员来自现网而日期还写快照日会是自相矛盾的。
+   *      的日期就来自它（骨架里 `snapshotDate` 是空串），不会出现“空成员配快照日”的自相矛盾；
+   *   4. 数字（30d / 365d / 增速 / score）**直接用目录给的**：它们本来就是这台设备上
+   *      算出来的（见 `BrewCatalogAlgo`），不需要也不应该在 hydrate 里按单条重算
+   *      （重算口径一旦与目录不同步，就会出现「榜里第 1 名的安装量比第 3 名少」）。
    */
   private static applyCatalogMembers(page: BrewDiscoverPageData, catalog: BrewCatalog): void {
     const topN: number = page.topN > 0 ? page.topN : BREW_CATALOG_TOP_N;
@@ -553,19 +538,6 @@ export class BrewDiscoverModel {
   }
 
   /**
-   * 榜单的现网化。
-   *
-   * **成员与门槛来自快照，数字与顺序来自现网** —— 这是刻意的分工：
-   *   - 成员（哪 10 个包上榜）由聚合端点在全球宇宙（formula 7,976 个 family）上算出，
-   *     还要按分位标定阈值、按 family 去重（见 docs/brew-discover-algo.md §3/§4/§5）。
-   *     客户端没有全球分布，重算不了 —— **重算会得到另一张榜**，不是“更准的同一张榜”；
-   *   - 数字（30d / 365d / 增速 / 名次）只需要**这个包自己**的数据，单条详情接口里就有，
-   *     所以能刷成现网值。
-   *
-   * 刷新后重新排序，否则会出现“第 1 名的安装量比第 3 名少”这种看得到的矛盾。
-   * 各榜排序口径与 `check_algo.py` 一致（trending 按 score，alltime 按 365d，fresh 按 30d）。
-   */
-  /**
    * 补 `categoryKey`：**在 hydration 之前**跑，且只补空值。
    *
    * 为什么必须提前补：`categoryKey` 原先只在 hydration 的回填里赋值（`applyFormulaEntry` /
@@ -577,7 +549,7 @@ export class BrewDiscoverModel {
    * 只看 `kind + token`，且策展表本来就是照着 Discover 榜单那批 token 建的 ——
    * 实测榜单 48 条 **48 条全部命中策展层**，所以 `desc` 传空串也能得到正确分类。
    *
-   * 只补空值：目录/快照里若已带分类，不覆盖。hydration 之后仍会按 `desc` 重算一次，
+   * 只补空值：目录成员里若已带分类，不覆盖。hydration 之后仍会按 `desc` 重算一次，
    * 对**未被策展覆盖**的 token 能得到比兜底档更细的分类。
    */
   private static fillCategoryKeys(page: BrewDiscoverPageData): void {
@@ -594,10 +566,17 @@ export class BrewDiscoverModel {
     Logger.info(TAG, `categoryKey filled before hydration: ${filled} entries`);
   }
 
-  private hydratePage(page: BrewDiscoverPageData, membersFromCatalog: boolean): Promise<BrewDiscoverPageData> {
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE) {
-      return Promise.resolve(page);
-    }
+  /**
+   * 榜的现网化：**只回填文案与分类，不碰数字、不重排序**。
+   *
+   * 成员、名次、数字都已经是目录在本机算出来的（`applyCatalogMembers`，口径见
+   * docs/brew-discover-algo.md §3/§4/§5）。这里拉单条只为把 `name` / `desc` 从 token
+   * 换成可读文案 —— 两者互不影响：拉不到就保留 token 当 `name`（`applyCatalogMembers` 已填）。
+   *
+   * **为什么不重排序**：目录给的名次就是榜的权威顺序（各榜口径与 `check_algo.py` 一致），
+   * 客户端再排一遍等于引入第二次口径；两处一旦漂移，就会出现「第 1 名的安装量比第 3 名少」。
+   */
+  private hydratePage(page: BrewDiscoverPageData): Promise<BrewDiscoverPageData> {
     const formulaTokens: string[] = [];
     const caskTokens: string[] = [];
     page.boards.forEach((board: BrewDiscoverBoard) => {
@@ -610,17 +589,14 @@ export class BrewDiscoverModel {
           const isCask: boolean = board.kind === BrewKind.CASK;
           board.entries.forEach((entry: BrewDiscoverEntry) => {
             if (isCask) {
-              BrewDiscoverModel.applyCaskEntry(entry, caskDocs[entry.token], board.boardKey, !membersFromCatalog);
+              BrewDiscoverModel.applyCaskEntry(entry, caskDocs[entry.token]);
             } else {
-              BrewDiscoverModel.applyFormulaEntry(entry, formulaDocs[entry.token], board.boardKey, !membersFromCatalog);
+              BrewDiscoverModel.applyFormulaEntry(entry, formulaDocs[entry.token]);
             }
           });
-          if (!membersFromCatalog) {
-            BrewDiscoverModel.sortBoard(board);
-          }
         });
         // 大图卡是“各榜前 N 名”的选择结果（FEATURED_RULE，编辑口径），
-        // 榜重排后必须重新选一遍，否则卡上的“第 1 名”会指到榜里不是第 1 的那个包
+        // 必须在 hydrate **之后**重选：卡上要展示的 `name` / `desc` 是刚回填进来的。
         page.featured = BrewDiscoverModel.buildFeatured(page);
         return page;
       });
@@ -628,10 +604,10 @@ export class BrewDiscoverModel {
   }
 
   /**
-   * 大图卡的选取规则，与 `generate.py` 的 `FEATURED_RULE` **逐字对应**。
+   * 大图卡的选取规则，与 `docs/brew-discover-algo.md` 的 FEATURED_RULE 逐字对应。
    *
-   * 顺序也不能改：生成器是按 kind 外层循环（formula 先、cask 后）依次 append 的，
-   * 所以已发布的快照里 featured 的顺序就是这份规则展开后的顺序。
+   * 顺序也不能改：它按 kind 外层（formula 先、cask 后）展开，页面上大图卡与榜卡的混排
+   * 顺序（`BrewDiscoverFeedItem.mix`）就是由它与 `boards` 的顺序共同决定的。
    */
   private static readonly FEATURED_RULE: FeaturedRule[] = [
     { kind: BrewKind.FORMULA, boardKey: BrewDiscoverBoardKey.TRENDING, count: 2 },
@@ -667,8 +643,7 @@ export class BrewDiscoverModel {
     return featured;
   }
 
-  private static applyFormulaEntry(entry: BrewDiscoverEntry, doc: LiveFormulaDoc | undefined,
-    boardKey: string, metricsFromLive: boolean): void {
+  private static applyFormulaEntry(entry: BrewDiscoverEntry, doc: LiveFormulaDoc | undefined): void {
     if (doc === undefined || doc === null) {
       return;
     }
@@ -676,16 +651,9 @@ export class BrewDiscoverModel {
     entry.name = doc.name ?? entry.name;
     // 分类只能看 desc 算（官方 API 无分类字段）——所以必须在拿到现网 doc 之后补
     entry.categoryKey = BrewTaxonomy.categoryOf(BrewKindText.FORMULA, entry.token, entry.desc);
-    if (!metricsFromLive) {
-      return;
-    }
-    const analytics: LiveAnalytics = doc.analytics ?? {};
-    BrewDiscoverModel.applyMetrics(entry, analytics.install_on_request?.['30d'],
-      analytics.install_on_request?.['365d'], boardKey);
   }
 
-  private static applyCaskEntry(entry: BrewDiscoverEntry, doc: LiveCaskDoc | undefined,
-    boardKey: string, metricsFromLive: boolean): void {
+  private static applyCaskEntry(entry: BrewDiscoverEntry, doc: LiveCaskDoc | undefined): void {
     if (doc === undefined || doc === null) {
       return;
     }
@@ -695,47 +663,6 @@ export class BrewDiscoverModel {
       entry.name = names[0];
     }
     entry.categoryKey = BrewTaxonomy.categoryOf(BrewKindText.CASK, entry.token, entry.desc);
-    if (!metricsFromLive) {
-      return;
-    }
-    const analytics: LiveAnalytics = doc.analytics ?? {};
-    BrewDiscoverModel.applyMetrics(entry, analytics.install?.['30d'],
-      analytics.install?.['365d'], boardKey);
-  }
-
-  /**
-   * 与 `check_algo.py` §3 同一套公式 + 与生成器同一套取整。
-   *
-   * `prior = (365d − 30d) / 11`（此前 11 个月的月均，**分母不加 max(1, ·)**），
-   * `velocity = 30d / prior`，`score = log1p(velocity) × log1p(30d)`。
-   * `prior <= 0`（无历史）时 velocity/prior 均为 0 —— 保留“0 就是无历史”这个语义。
-   */
-  private static applyMetrics(entry: BrewDiscoverEntry, bucket30: Record<string, number> | undefined,
-    bucket365: Record<string, number> | undefined, boardKey: string): void {
-    const vol: number = BrewApiMapper.installCount(bucket30, entry.token);
-    const year: number = BrewApiMapper.installCount(bucket365, entry.token);
-    const prior: number = (year - vol) / 11;
-    entry.installs30d = vol;
-    entry.installs365d = year;
-    entry.priorMonthly = prior > 0 ? Math.round(prior * 10) / 10 : 0;
-    entry.velocity = prior > 0 ? Math.round(vol / prior * 100) / 100 : 0;
-    // score 只在趋势榜有意义（模型注释与生成器同口径），其余榜写 0
-    entry.score = boardKey === BrewDiscoverBoardKey.TRENDING ?
-      Math.round(Math.log1p(entry.velocity) * Math.log1p(vol) * 100) / 100 : 0;
-  }
-
-  /** 按各榜口径重排并重新编号（1 起算） */
-  private static sortBoard(board: BrewDiscoverBoard): void {
-    if (board.boardKey === BrewDiscoverBoardKey.TRENDING) {
-      board.entries.sort((a: BrewDiscoverEntry, b: BrewDiscoverEntry) => b.score - a.score);
-    } else if (board.boardKey === BrewDiscoverBoardKey.ALLTIME) {
-      board.entries.sort((a: BrewDiscoverEntry, b: BrewDiscoverEntry) => b.installs365d - a.installs365d);
-    } else {
-      board.entries.sort((a: BrewDiscoverEntry, b: BrewDiscoverEntry) => b.installs30d - a.installs30d);
-    }
-    board.entries.forEach((entry: BrewDiscoverEntry, index: number) => {
-      entry.rank = index + 1;
-    });
   }
 }
 

@@ -476,4 +476,4 @@ export class FormulaContent extends BaseData {
 | 图标版权 | 包图标来自各自官网，正式发布前需确认授权策略 |
 | 数据来源署名 | 使用 formulae.brew.sh 数据需注明来源与许可 |
 | `brew-discover` 对齐 | **待补仓库地址**：拿到后只需替换 `lexicon.json` + `overrides.json` |
-| HarmonyOS 上读本机 brew | Homebrew 是 macOS/Linux 工具，HarmonyOS 本机不会真的装 brew → 本轮纯 Mock，未来需明确数据来源路径 |
+| HarmonyOS 上读本机 brew | Homebrew 是 macOS/Linux 工具，HarmonyOS 本机不会真的装 brew。**2026-10：不再是「纯 Mock」，而是「无本机数据」** —— 虚构的 `brew-local-*.json` 与整条 Mock 链路已删除，`MinePackagesUtil.loadSets` 返回空集（「我的」页三块与二级页 **UI 保壳**、显示 0 个包 / 空列表，签名未变）。未来要接的是**真实的本机安装记录**（Harmonybrew 侧安装历史，或可执行命令行 + 权限），而不是再产一份 mock |

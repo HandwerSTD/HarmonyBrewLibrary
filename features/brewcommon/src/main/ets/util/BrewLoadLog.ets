@@ -28,8 +28,7 @@ const TAG: string = '[brew-load]';
  * | `live_data` | 单条 doc 缓存整体 | Preference `brew_live_data` |
  * | `live_docs` | 一批单条 doc 的 hydrate（缓存命中 + 下载） | 网络 / 内存 |
  * | `dataset_stamps` | 数据集版本戳（Last-Modified / ETag 基准） | Preference `brew_live_dataset` |
- * | `discover_snapshot` | Discover 的内置回落快照 | rawfile |
- * | `discover_page` | Discover 首页整页（快照 + 目录 + hydrate） | 组装 |
+ * | `discover_page` | Discover 首页整页（目录 + hydrate） | 组装 |
  * | `formula_page` | Formulae 首页构页（分类 + 建卡） | 组装 |
  * | `cask_page` | Casks 首页构页 | 组装 |
  *
@@ -41,7 +40,6 @@ const TAG: string = '[brew-load]';
  * | `pref` | 从 Preference 读到（新鲜度由调用方另行判断） |
  * | `pref-fresh` | 读到且在新鲜窗口内 → 直接用 |
  * | `pref-stale` | 读到但已超新鲜窗口 → 接下来会探针/条件请求 |
- * | `rawfile` | 读内置 rawfile 快照 |
  * | `assembled` | 由已加载的各部分组装而成（Discover 整页） |
  * | `origin` | 冷启动原点标记（`kind=cold_start` 专用，`ms` 恒为 0） |
  * | `in-flight` | 复用了在途请求（没发新请求） |

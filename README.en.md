@@ -61,7 +61,7 @@ keys/                     Local signing material (git-ignored, not in the repo)
 - DevEco Studio 6.x (HarmonyOS 6.1.0 / API 23 SDK)
 - A 2in1 (PC) device or the DevEco previewer
 - Node 24+: only for the search engine check script
-- Python 3: only for regenerating the mock data
+- Python 3: only for validating the curated list / board algorithm invariants
 
 ## Build and run
 
@@ -78,20 +78,19 @@ devecocli run                       # build + install + launch (device required)
 ## Development checks
 
 ```bash
-# Regenerate mock data (pull real data from formulae.brew.sh -> rawfile/mockdata)
-python3 hmosword-build/brew-mockgen/generate.py            # incremental, reuses .brewgen/cache
-python3 hmosword-build/brew-mockgen/generate.py --refresh  # force full re-fetch
-python3 hmosword-build/brew-mockgen/generate.py --check    # verify tokens only
+# Validate the curated token list (tokens.json: structure + still upstream?)
+python3 hmosword-build/brew-mockgen/generate.py            # zero requests when .brewgen/cache hits
+python3 hmosword-build/brew-mockgen/generate.py --refresh  # ignore cache, re-fetch
+python3 hmosword-build/brew-mockgen/generate.py --local    # structure only, no network
 
-python3 hmosword-build/brew-mockgen/check_types.py         # field type consistency (exit code 0/1)
-python3 hmosword-build/brew-mockgen/check_algo.py --data .brewgen/discover   # board algorithm invariants
+python3 hmosword-build/brew-mockgen/check_algo.py --fetch --data .brewgen/analytics   # board algorithm invariants
 
 node hmosword-build/brew-search/check_engine.mjs           # executable check for the search engine
 devecocli check lint                                       # ArkTS lint
 ```
 
 hypium-based unit tests live in `features/*/src/ohosTest/` and require a connected device.
-When you change `features/brewcommon/src/main/ets/service/BrewApiMapper.ets`, you must update `hmosword-build/brew-mockgen/generate.py` as well: the snapshot fields and the live fields are produced by the same normalization rules, and divergence makes the same package look different in the list and on the detail page.
+The app ships **no** bundled brew data snapshot (removed 2026-10): all data comes from the on-device catalog (aggregation endpoints) and live single-package requests, so there is no "regenerate the data" step in this repo. The authoritative implementation of the board algorithm is `hmosword-build/brew-mockgen/check_algo.py` plus `docs/brew-discover-algo.md`; when you change the normalization rules in `BrewApiMapper.ets`, only the taxonomy has to stay in sync — with `classify()` in `generate.py` and `BrewTaxonomy.ets` on the device.
 
 ## Documentation
 

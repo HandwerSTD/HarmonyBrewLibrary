@@ -48,7 +48,7 @@ export class BrewDiscoverFeedItem {
    *
    * 规则：按 `boards` 的顺序展开，每张榜先吐**归属它**的 featured，再吐榜卡本身。
    * 归属按 `kind + boardKey` 匹配（`BrewDiscoverFeatured` 这两个字段就是从榜上带下来的）。
-   * 以内置快照为例，结果是：
+   * 以目录现算出的六张榜为例，结果是：
    *
    * ```
    * 序号 0  1  2  3  4  5  6  7  8  9  10

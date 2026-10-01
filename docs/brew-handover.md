@@ -66,14 +66,18 @@
 ### 2.2 改数据后必须做的两件事
 
 ```bash
-# 1) 重新产出 mock 数据（会联网拉 formulae.brew.sh）
-python3 hmosword-build/brew-mockgen/generate.py          # 增量（用 .brewgen/cache）
-python3 hmosword-build/brew-mockgen/generate.py --refresh # 全量重拉
+# 1) 校验策展清单（会联网拉 formulae.brew.sh；命中 .brewgen/cache 时零请求）
+python3 hmosword-build/brew-mockgen/generate.py          # 结构校验 + 逐个 token 问上游
+python3 hmosword-build/brew-mockgen/generate.py --refresh # 忽略缓存，全量重拉
+python3 hmosword-build/brew-mockgen/generate.py --local   # 只做结构校验，完全不联网
 
-# 2) 两个自检
-python3 hmosword-build/brew-mockgen/check_types.py       # 字段类型一致性（退出码 0/1）
-python3 hmosword-build/brew-mockgen/check_algo.py --data .brewgen/discover   # 算法不变量
+# 2) 榜单算法不变量
+python3 hmosword-build/brew-mockgen/check_algo.py --fetch --data .brewgen/analytics
 ```
+
+> 2026-10 起**没有「重新产出数据」这一步**：应用不内置任何 brew 数据快照，
+> 数据只来自设备端目录（聚合端点）与现网单条（见 §4.1）。`generate.py` 已从
+> 「生成 4 份 JSON」收敛为「校验 `tokens.json` 策展清单」，`check_types.py` 随 mock 一并删除。
 
 ### 2.3 每轮必查的两项（`BUILD SUCCESSFUL` 不够）
 
@@ -101,7 +105,7 @@ python3 -c "import json;print(len(json.load(open('products/pc/build/default/inte
 |---|---|---|
 | `products/pc` | 唯一 product | 入口 Ability / MainPage。**products 已从 7 个收敛为 1 个** |
 | `abilitycommon` | 原有 | 侧边栏与页签容器（`HomeView` / `TabBarModel`）、资源 |
-| `common` | 原有 | 请求层 `MockRequest` / `TriggerEnums` / `PageEnum` / `StorageKey` |
+| `common` | 原有 | Preference / 路由 / 账号 / 事件。**2026-10 起不再有请求层**（`MockRequest` / `TriggerEnums` 已删） |
 | `commonbusiness` | 原有 | `BaseHomeView` / `BaseHomeViewModel`（模糊标题栏、section、返回键都在这里） |
 | `componentlibrary` `devpractices` `exploration` `mine` `widgetcommon` | 原有 | 【组件/样例/实践/我的】对照入口；**`mine` 是就地改造**，其余未动 |
 | `brewcommon` | **新增** | Homebrew 共享层：模型 / 常量 / 服务 / 仓库 / **共享 UI 原子**。多源与按源缓存按其职责拆成：`constant/BrewSourceConstants.ets`、`model/BrewSourceModels.ets`、`service/BrewSourceUrl|Store|Prefs|Probe|Restart|CacheEpoch|CacheAdmin|Diagnostics.ets`、`util/objkeys.ts`（见 `brew-api-design.md` §7.5.1） |
@@ -146,40 +150,47 @@ python3 -c "import json;print(len(json.load(open('products/pc/build/default/inte
 
 ### 4.1 mock 数据（`common/src/main/resources/rawfile/mockdata/`）
 
+> **2026-10：整个目录已删除，连同整条 Mock 请求链路**（`common/constant/TriggerEnums.ets`、
+> `common/storagemanager/MockRequest.ets`、两处导出）。应用不再内置任何 brew 数据，
+> 数据只来自**设备端目录（聚合端点）**与**现网单条**。下面的表保留为历史记录（~~删除线~~ = 已删）。
+
 | 文件 | 内容 |
 |---|---|
 | ~~`brew-formula-page.json` / `brew-cask-page.json`~~ | **已删除（2026-09 C 档）**。首页分类卡改由设备端用**目录 + 词表**现算（`BrewBrowseBuilder` + `BrewTaxonomy`），成员不再锁死在内置 240 个包里。**代价：无网时两个页签是空态（没有回落快照）** |
-| ~~`brew-formula-details.json` / `brew-cask-details.json`~~ | **已删除（2026-09）**。详情页骨架改为从**首页条目的那 14 个字段**合成（`BrewApiMapper.formulaBaseOf` / `caskBaseOf`），其余字段全部由现网单条覆盖。删掉的是 **443.6 KB**，代价是 `SNAPSHOT` 模式下详情页降级（只剩骨架字段，其余段落不渲染） |
+| ~~`brew-formula-details.json` / `brew-cask-details.json`~~ | **已删除（2026-09）**。详情页骨架改为从**首页条目的那 14 个字段**合成（`BrewApiMapper.formulaBaseOf` / `caskBaseOf`），其余字段全部由现网单条覆盖。删掉的是 **443.6 KB**，代价是现网失败时详情页降级（只剩骨架字段，其余段落不渲染） |
 | ~~`brew-formula-banner.json` / `brew-cask-banner.json`~~ | **已删除（2026-09）**。两个端点从来没有 UI 调用点（两个首页的 `bannerHeight` 被固定为 0，Homebrew 也没有横幅素材），属死路径 |
-| `brew-discover-page.json` | Discover：`featured`（5 张单 App 大图卡）+ 6 张榜（每榜 Top10）+ 快照元信息。**注意角色已变**：榜单成员与数字现在由设备端现算（见 §4.3 / `brew-api-design.md` §7.4.1），这份快照只当①目录拿不到时的回落 ②`id` / `categoryKey` / `desc` 的来源 |
-| `brew-local-formulae.json` / `brew-local-casks.json` / `brew-local-outdated.json` | Mine 页的本机包集合（`MinePackagesUtil.loadSets`） |
+| ~~`brew-discover-page.json`~~ | **已删除（2026-10）**。它是 Discover 的**回落快照**：目录拿不到时当成员用，目录可用时被目录成员覆盖。回落一并删掉后，六张榜的**骨架改为代码构造**（`BrewRepository.emptyDiscoverPage`，`id = sequence = 1..6` 与旧快照逐字一致，二级页路由不受影响），成员唯一来源 = 设备端目录；目录拿不到 → **空榜**（`loadDiscover` 过滤空榜后页面走空态）。榜算法口径的权威实现在 `check_algo.py` + `brew-discover-algo.md` |
+| ~~`brew-local-formulae.json` / `brew-local-casks.json` / `brew-local-outdated.json`~~ | **已删除（2026-10）**。HarmonyOS 上没有 brew，也没有可执行的本机包管理接口，这三份数据本就是虚构的。`MinePackagesUtil.loadSets` 改为 `Promise.resolve(new MinePackageSets())`：**Mine 的三个区块与二级页 UI 结构全部保留，显示 0 个包 / 空列表**（签名未变，将来接上真实数据源只需改这一个方法） |
 | ~~`brew-local-overview.json` / `brew-local-taps.json` / `brew-local-services.json`~~ | **已删除（2026-09）**。`BrewLocalModel.getOverview/getTaps/getServices` 在 UI 侧**没有任何调用点**，整条链路（Repository → Service → rawfile）一并删除，`TriggerEnums.BREW_LOCAL_OVERVIEW/_TAPS/_SERVICES` 同时移除；`generate.py` 也已停止产出 |
 | ~~`intent-framework-pages-list.json`（含 2in1/phone/tablet 三份）~~、~~`vision-sample-list.json`~~、~~`wearable-sample-list.json`~~ | **已删除（2026-09）**。`TriggerEnums.INTENT_FRAMEWORK_PAGE_LIST` / `VERSION_SAMPLE_TRIGGER` / `WEARABLE_SAMPLE_TRIGGER` 从未被任何代码引用（也无 insightIntent 声明），`rawfile/{main_pages_list,router_config,insight_intent_page_type}.json` 与 `abilitycommon/rawfile/InsightIntentDecoratorJSON.json` 同批删除 |
 | ~~`phone/**`、`tablet/**`~~ | **已删除（2026-09）**。唯一 entry 模块 `products/pc` 的 `deviceTypes` 只有 `2in1`，而 `MockRequest` 只拼 `mockdata/<deviceType>/<trigger>.json`（无回落）—— 这两个目录永远不会被解析。仅保留 `2in1/sample-*.json` 与 `2in1/new-contents.json` |
 
-规模：brew mock 现在只剩 **4 个文件、约 44 KB**：1 个 Discover 回落快照 + 3 个本机包集合。
-本次清理共删除 **21 个 mock 文件、约 786 KB**（含上面的 intent / 设备目录 / 本地状态三类），
-并同步移除了 `TriggerEnums` 里 17 个无调用点的成员与 `BrewService` 的 8 个死方法。
+规模：brew mock **已于 2026-10 归零**（最后 4 个文件、约 44 KB 同批删除，整个 `rawfile/` 目录已不存在）。
+前一轮（2026-09）先删除 **21 个 mock 文件、约 786 KB**（intent / 设备目录 / 本地状态三类），
+并同步移除了 `TriggerEnums` 里 17 个无调用点的成员与 `BrewService` 的 8 个死方法；
+本轮再删除最后 4 个 brew 文件，并删掉 `TriggerEnums` / `MockRequest` 两个文件本身
+（brew 是它们的唯一调用方）与 `BrewDataMode` / `BREW_DATA_MODE` / `BREW_CATALOG_MEMBERSHIP` 三个开关。
 分类体系（8+8）与词表在代码里（`BrewTaxonomy.ets`，由 `gen_taxonomy.py` 从 `lexicon.json` / `tokens.json` 生成；
 `categories.json` 是分类定义）。
 
-**所有端点的口径统一在 `brewcommon/service/BrewService.ets`**，读的是 `TriggerEnums` 里的
-trigger 名；接真实 API 时只改 Service 内部实现，UI 与模型不动。
+**所有 brew 端点的口径统一在 `brewcommon/service/BrewService.ets`**，读的是**真实网络**（`BrewHttp`）
+而不是 trigger 名；`TriggerEnums` 这层间接已经不存在了。
 
 ### 4.2 生成器（`hmosword-build/brew-mockgen/`）
 
 | 文件 | 作用 |
 |---|---|
-| `generate.py` | 主生成器。现在只产出两份东西：**Discover 回落快照**（`build_discover`，用 `token_id()` 与设备端算同一个 id）与**本机状态**（`build_local`，从 `tokens.json` 顺序 + 每包文档派生）。page / details / banner 三类产物都已删除（C 档）。保留 `classify()` 作为分类口径的**参考实现** —— 设备端 `BrewTaxonomy.classify` 必须与它一致 |
+| `generate.py` | **已停产（2026-10）**，现在只做**策展清单校验**（结构合法 + 逐个 token 问上游是否还在，退出码 0/1），不再产出任何文件。`fetch()` 为它供数（落 `.brewgen/cache`）。保留 `classify()` / `subject_terms()` / `form_bucket()` 等作为分类口径的**参考实现** —— `eval_lexicon.py` 直接 import 它们，设备端 `BrewTaxonomy.ets` 也必须与它们一致 |
 | `tokens.json` | **策展清单**：`token -> 分类 key`（override 层）。含 `_discover_*` 溯源键 |
 | `categories.json` | 17 个分类定义（9 formula + 8 cask），含 symbol 映射。改分类要同时改 `BrewConstants` 的三张表 + 双语字串 + `BrewBrowseBuilder.CATEGORY_EN`（漏了最后一张 → 卡片英文名会显示成 key；`gen_taxonomy.py --check` 现在会报） |
 | `lexicon.json` | **分类主路径**（2026-09 起）：`<kind>` 关键词 + `_subjects` 主题词；改完跑 `gen_taxonomy.py` 重生成 `.ets`，跑 `eval_lexicon.py` 看兜底率 |
-| `check_types.py` | 字段类型自检（JSON 形状与 ArkTS 声明不符时编译器不报错，所以需要它） |
-| `check_algo.py` | Discover 算法的**参考实现 + 不变量自检**（生成器调用它，避免文档/代码两套）。设备端有一份移植（`BrewCatalogAlgo.ets`），**两边必须同步改** |
+| ~~`check_types.py`~~ | **已删除（2026-10）**。它扫的是 `rawfile/mockdata/`，而那个目录已经不存在了 |
+| `check_algo.py` | Discover 算法的**参考实现 + 不变量自检**（榜单口径的唯一权威）。自带 `--fetch`，数据管道独立于生成器。设备端有一份移植（`BrewCatalogAlgo.ets`），**两边必须同步改** |
 
 **生成器是确定性的**：同一份输入重复运行，产物字节级一致。
-这条性质被当作正确性判据用（"重产出只改了受影响的文件"）。
-为此 Discover 产物的时间戳用 `snapshotDate`（数据窗口结束日）而不是墙钟时间。
+这条性质曾被当作正确性判据用（"重产出只改了受影响的文件"），当时靠的是 Discover 产物用
+`snapshotDate`（数据窗口结束日）而不是墙钟时间。**2026-10 起已无产物**，这条性质随产物一同退场；
+`check_algo.py` 的自检（`--fetch --data .brewgen/analytics`）取代了它成为榜单口径的验证手段。
 
 ### 4.3 Discover 算法（要点，细节看 `brew-discover-algo.md`）
 
@@ -344,8 +355,10 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 `BrewCatalogAlgo` 现算六张榜），`id` 用 token 的稳定哈希，`name`/`desc`/`categoryKey` 由随后的
 现网 hydrate 覆盖（分类要看 desc）。**不再按白名单过滤** —— 榜现在是真·全球前 N，
 不在内置清单里的包也能点进详情（详情页只用现网单条 + 词表渲染）。
-目录彻底拿不到时回落内置快照（`brew-discover-page.json`，22.8 KB）。
-日志判据：`catalog members applied, 47 entries on screen, window=2026-09-18`。
+目录彻底拿不到时**没有回落**（内置快照已于 2026-10 删除）：六张榜保持骨架但成员为空，
+`loadDiscover` 过滤掉空榜后页面走空态（与 Formulae / Casks 的 C 档行为一致），
+日志判据变为 `discover empty (catalog unavailable)`。
+正常路径的判据：`catalog members applied, 47 entries on screen, window=2026-09-18`。
 
 ---
 
@@ -375,7 +388,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 | 症状 | 章节 | 一句话 |
 |---|---|---|
 | `sys.symbol.*` 名字不存在 | §10.6 | 资源名只有写成 `$r()` 字面量才会被编译校验；**只能实测** |
-| JSON 形状与 ArkTS 声明不符 | §8 | 编译器看声明不看 JSON → 用 `check_types.py` |
+| ~~JSON 形状与 ArkTS 声明不符~~ | §8 | 已随 mock 一并退场（2026-10）：JSON 不再入库，编译器只看声明与代码 |
 | 版面"就是不像" | §9.11 | **用 `ui layout` 量，不靠猜**；判断依据是"两边量出来是否一样" |
 | 符号检查误判为"没编进去" | §9.5.1 | `strings` 的 grep **不要加 `^...$` 锚点** |
 | 纯图标控件"没渲染" | §9.5.1 | simplified 模式不列无文字的 Button → 用 `--mode full` |
@@ -410,8 +423,8 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 2. **清理死代码**：`features/brewformulae/.../BrewMarketPlaceholderView.ets` 与
    `brew_placeholder_*` 文案已无引用（两个占位页都被真实页面替换了）。
 3. **数据署名**：使用 `formulae.brew.sh` 数据需注明来源与许可。
-4. **删除对照资源**（可选）：`mockdata/` 下 `component-*` / `sample-*` / `discovery-*` 等
-   与对照入口绑定的文件。
+4. **删除对照资源**：~~（可选）`mockdata/` 下 `component-*` / `sample-*` / `discovery-*` 等
+   与对照入口绑定的文件~~ —— **已完成（2026-10）**：`rawfile/mockdata/` 整个目录已不存在。
 
 ### 8.2 待办（合并 `§11` 与后续新增）
 
@@ -430,9 +443,9 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 |---|---|
 | **搜索** | **已实现**（`features/brewsearch`；spec `docs/superpowers/specs/2026-09-21-brew-search-design.md`）。**2026-09-24 修订**：历史改为用户真实搜索记录并落盘（`brew_search_history`）、发现改为设备端目录真实热门（`BrewSearchModel.hotTokens`，宁空不摆假词）、搜索改为显式触发（回车 / 点「搜索」，不再输入即搜）。仍不做：搜索联想 / 拼音纠错（无数据源）、结果分页（一次取前 `BREW_SEARCH_LIMIT` = 50） |
 | **浏览分页** | 现在是硬裁切前 100（`BREW_BROWSE_LIMIT`）。分页要做的是"每页条数 + 向下翻"，语义不变（分类与名次始终在**取到的这一批**内计算）。**已另立 spec：`brew-catalog-fullsync-spec.md`**（先把"分类依赖现拉 desc"这个根因去掉，cap 的技术限制随之消失） |
-| **无网时两个页签是空态** | C 档删掉了内置 page 快照，所以无网/`SNAPSHOT` 模式下 Formulae 与 Casks 没有内容（Discover 还有回落快照）。要给评审留离线演示就得再产一份很瘦的回落 |
+| **无网时三个页签都是空态** | 内置快照已于 2026-10 全部删除（page / details / discover / local），所以无网时 Formulae、Casks、Discover 都走空态，Mine 恒显示 0 个包。这是**已知取舍**（用户已接受）：失去「断网评审演示」能力，换来「屏幕上每个数字都是真的」。要留离线演示得重新产一份很瘦的回落，并**连同 `MockRequest` / `TriggerEnums` 一起回来** |
 | **词表对"库/工具链"覆盖不足** | 实测顶部 100 个包里约一半落进兜底（`openssl@3` / `protobuf` / `neovim` / `poppler` / `pipx` … 关键词确实判不出来）。这些包在界面上会出现在 `系统与运维`/`系统工具`。要改善就补 `lexicon.json` 的关键词（改完要重新生成 `BrewTaxonomy.ets`） |
-| **本机包行不可点** | 本机数据只有 token，没有商店目录的包 id，而详情页按 id 加载。要做需先加"按 token 查 id" |
+| **本机包行不可点** | 本机数据只有 token，没有商店目录的包 id，而详情页按 id 加载。要做需先加"按 token 查 id"。**2026-10 现状：本机包集合恒为空**（HarmonyOS 上没有 brew），所以这个待办的答案是「先接上真实本机数据源」 |
 | **本机状态徽标** | `installed` / `outdated` / `pinned` 已建模但未使用（需接 `brew info --json`） |
 | ~~Mine 的 taps / services~~ | **已处理（2026-09 删除）**：`brew-local-taps.json` / `brew-local-services.json` 与 `overview` 一样从未被 UI 调用，三个文件 + `BrewLocalModel` 的三个方法 + `TriggerEnums` 成员已一并删除 |
 | **Cask 图标/截图** | **本轮暂不接入（2026-09-21 需求方决定）**，维持代码画的视觉。⚠️ "无可用来源（`appcasks` 实测 404）"**是错的**：候选源 `App-Fair/appcasks` 未归档、带 `cask-<token>/AppIcon.png`，只是**覆盖率没量化**。重启时第 1 步是全量 7,745 个 cask 对账（详见 `brew-discover-algo.md` §1.2/§8） |
@@ -514,7 +527,7 @@ cfe173a 下掉 details/banner 两类 mock（-446 KB），详情骨架改由首�
 
 这个项目里**绝大多数返工都源于"看起来对"而不是"量出来对"**。
 涉及资源名、版面数值、跨模块引用这类"字符串/数字即契约"的东西，
-必须有独立的验证手段：`check_types.py` / `check_algo.py` / `ui layout` / `ui screenshot`。
+必须有独立的验证手段：`check_algo.py` / `generate.py`（策展清单校验）/ `ui layout` / `ui screenshot`。
 `§9` 整节都在讲这件事，值得先读一遍再动手。
 
 ### 8.6 设备连接的坑（本次踩到）

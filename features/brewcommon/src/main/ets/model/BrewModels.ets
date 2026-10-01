@@ -7,7 +7,7 @@
  *
  * 设计原则
  * 1. 字段命名保留 Homebrew API 原生语义（token / tap / bottle / artifacts / dependsOn / kegOnly …），
- *    未来把 MockRequest 换成真实 HTTP 请求时，解析层零改动。
+ *    未来接真实 HTTP 请求时，解析层零改动。
  * 2. 卡片条目额外提供 BaseData 展示槽位（title / subTitle），以便复用现有卡片渲染器：
  *      subTitle -> primaryText  放 token
  *      title    -> secondaryText 放英文 desc
@@ -288,7 +288,7 @@ export interface BrewPageParam {
   pageSize: number;
 }
 
-/** 单条查询参数。MockRequest 依据 singleId 在 body 数组里按 id 命中。 */
+/** 单条查询参数。上层用 `token` 定位包（详情取现网单条），不再按 id 在 body 数组里命中。 */
 export interface BrewSingleIdParam {
   singleId: number;
 }
@@ -416,12 +416,4 @@ export interface BrewDiscoverBoardParams {
  */
 export interface BrewCategoryParams {
   categoryKey: string;
-}
-
-/** mock 响应信封，对齐 common/model/ResponseData.ets */
-export interface BrewResponseData<T> {
-  success: boolean;
-  code: string;
-  msg: string;
-  body: T;
 }

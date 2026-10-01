@@ -59,7 +59,7 @@ keys/                     本机签名材料（已 gitignore，不入库）
 - DevEco Studio 6.x（HarmonyOS 6.1.0 / API 23 SDK）
 - 2in1（PC）设备或 DevEco 预览器
 - Node 24+：仅运行搜索引擎检查脚本时需要
-- Python 3：仅重新生成 mock 数据时需要
+- Python 3：仅校验策展清单 / 榜单算法不变量时需要
 
 ## 构建与运行
 
@@ -76,20 +76,19 @@ devecocli run                       # 编译 + 安装 + 启动（需已连接设
 ## 开发自检
 
 ```bash
-# 重新生成 mock 数据（从 formulae.brew.sh 拉真数据 → rawfile/mockdata）
-python3 hmosword-build/brew-mockgen/generate.py            # 增量，复用 .brewgen/cache
-python3 hmosword-build/brew-mockgen/generate.py --refresh  # 强制重新拉取
-python3 hmosword-build/brew-mockgen/generate.py --check    # 只校验 token，不产出
+# 校验策展清单 tokens.json（分类/token 是否合法、是否还在上游）
+python3 hmosword-build/brew-mockgen/generate.py            # 命中 .brewgen/cache 时零请求
+python3 hmosword-build/brew-mockgen/generate.py --refresh  # 忽略缓存，重新拉一遍
+python3 hmosword-build/brew-mockgen/generate.py --local    # 只做结构校验，完全不联网
 
-python3 hmosword-build/brew-mockgen/check_types.py         # 字段类型一致性（退出码 0/1）
-python3 hmosword-build/brew-mockgen/check_algo.py --data .brewgen/discover   # 榜单算法不变量
+python3 hmosword-build/brew-mockgen/check_algo.py --fetch --data .brewgen/analytics   # 榜单算法不变量
 
 node hmosword-build/brew-search/check_engine.mjs           # 搜索引擎可执行检查
 devecocli check lint                                       # ArkTS 代码检查
 ```
 
 `features/*/src/ohosTest/` 下是基于 hypium 的单元测试，需连接设备后运行。
-改动 `features/brewcommon/src/main/ets/service/BrewApiMapper.ets` 时，必须同步改 `hmosword-build/brew-mockgen/generate.py`——快照与现网字段由同一套归一化规则产出，两边不一致会让同一个包在列表与详情页显示成两种样子。
+应用不内置任何 brew 数据快照（2026-10 起），数据只来自设备端目录（聚合端点）与现网单条，所以本仓库里没有「重新生成数据」这一步。榜单算法口径的权威实现在 `hmosword-build/brew-mockgen/check_algo.py` + `docs/brew-discover-algo.md`；改动 `BrewApiMapper.ets` 的归一化规则时，只需让分类口径与 `generate.py` 里的 `classify()`（以及设备端 `BrewTaxonomy.ets`）保持一致。
 
 ## 文档
 

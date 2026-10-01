@@ -13,24 +13,12 @@ import { BrewKind } from '../model/BrewModels';
 
 export { BrewKind };
 
-// ---------------------------------------------------------------- 数据源开关
+// ---------------------------------------------------------------- 数据来源
 
-/**
- * 数据**模式**（不是「数据源」）。
- * - `REMOTE`：现网 API 取字段，失败回落内置快照（默认）
- * - `SNAPSHOT`：完全用内置快照，一个网络请求都不发
- *
- * 为什么改名：`BrewDataMode` 这个名字现在属于「多数据源」特性
- * （`BrewSource*`，见 docs/superpowers/specs/2026-09-23-brew-multi-source-design.md）。
- * 本枚举表达的是「走不走网络」，与「用哪个源」是两个维度。
- */
-export enum BrewDataMode {
-  REMOTE = 'remote',
-  SNAPSHOT = 'snapshot',
-}
-
-/** 当前数据模式。切到 SNAPSHOT 即可完全离线运行（无网络请求、无等待）。 */
-export const BREW_DATA_MODE: BrewDataMode = BrewDataMode.REMOTE;
+// 2026-10：内置 brew 数据快照（`rawfile/mockdata/*.json`）与 Mock 请求链路已整条删除，
+// 数据只来自设备端目录（聚合端点）与现网单条。「走不走网络 / 用哪个源」的开关随之取消：
+// 用哪个源是 `BrewSource*` 的事（见 docs/superpowers/specs/2026-09-23-brew-multi-source-design.md），
+// 走不走网络由取数失败时的空态策略决定，不再是常量。
 
 // ---------------------------------------------------------------- 性能打点开关
 
@@ -147,7 +135,7 @@ export const BREW_LIVE_FRESH_MS: number = 60 * 60 * 1000;
 /** 数据集版本戳的存储 key（Last-Modified / ETag 基准，跨进程保留） */
 export const BREW_LIVE_DATASET_KEY: string = 'brew_live_dataset';
 
-/** 现网数据的 Preference 存储 key（与 MockRequest 的 rawfile trigger 名分开，避免相互覆盖） */
+/** 现网数据的 Preference 存储 key。2026-10 起 brew 只剩这一类存储（内置 mock 的 rawfile 链路已删） */
 export const BREW_LIVE_STORAGE_KEY: string = 'brew_live_data';
 
 /**
@@ -194,7 +182,7 @@ export const BREW_CATALOG_STORAGE_KEY: string = 'brew_catalog';
  */
 export const BREW_CATALOG_FRESH_MS: number = 6 * 60 * 60 * 1000;
 
-/** 每张榜展示的条数（与 generate.py 的 DISCOVER_TOP_N 一致） */
+/** 每张榜展示的条数（与 `check_algo.py` 的榜口径、`brew-discover-algo.md` 一致） */
 export const BREW_CATALOG_TOP_N: number = 10;
 
 /**
@@ -204,15 +192,6 @@ export const BREW_CATALOG_TOP_N: number = 10;
  * 还要能把榜补满到 TOP_N。留多少直接决定补位能力：40 条是实测够用的量。
  */
 export const BREW_CATALOG_KEEP: number = 40;
-
-/**
- * 榜成员是否改成「设备端现算」。关掉即退回内置快照成员（改动前的行为）。
- *
- * 实测（2026-09-18 窗口）：六张榜的前 N 名**全部**能落到内置详情（join 命中 10/10），
- * 且与快照成员 5/6 张榜完全一致（cask/trending 差 1 个：`+grok-bot -lm-studio-bionic`，
- * 后者已不在现网前十）—— 所以切换既不会让榜缩水，也不会出现“点不进去”的条目。
- */
-export const BREW_CATALOG_MEMBERSHIP: boolean = true;
 
 /**
  * **降级**浏览集的请求预算：只在元数据索引**不可信**（`covered < BREW_INDEX_MIN_TRUST`，
@@ -301,13 +280,9 @@ export const BREW_PAGE_INFLIGHT_JOIN_MS: number = BREW_BROWSE_HYDRATE_MS + 20000
 /** 聚合单文件最大 ~3.9 MB（365d）、gzip 后 ~750 KB，给足读取时间 */
 export const BREW_CATALOG_TIMEOUT_MS: number = 30000;
 
-/**
- * mock 数据 trigger 统一由 common 的 TriggerEnums 声明（值即 rawfile/mockdata/<trigger>.json 的文件名）。
- * brew 现在只保留两类：
- *   TriggerEnums.BREW_DISCOVER_PAGE                         —— Discover 六张榜的**回落快照**
- *   TriggerEnums.BREW_LOCAL_FORMULAE / _CASKS / _OUTDATED   —— Mine 页的本机包集合
- * Formulae / Casks 首页的 page 快照与详情快照已删除：成员由目录 + 词表现算，详情由现网单条渲染。
- */
+// 2026-10：内置 mock 数据与其 trigger 枚举（`common` 的 `TriggerEnums` / `MockRequest`）已整条删除，
+// 本层不再有「内置快照」这种数据来源：成员由目录 + 词表现算，详情由现网单条渲染，
+// Discover 的榜骨架在代码里构造（`BrewRepository.emptyDiscoverPage`）。
 
 /** 分类 key。与 mockgen/categories.json、页面 JSON 的 categoryKey 一一对应。 */
 export enum FormulaCategoryKey {

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
-import { HmosRequest, Logger, TriggerEnums } from '@ohos/common';
+import { Logger } from '@ohos/common';
 import { BrewSourcePrefs } from './BrewSourcePrefs';
 import {
   BREW_BROWSE_HYDRATE_LIMIT,
@@ -12,7 +12,6 @@ import {
   BREW_CATALOG_STORAGE_KEY,
   BREW_CATALOG_TIMEOUT_MS,
   BREW_CATALOG_TOP_N,
-  BREW_DATA_MODE,
   BREW_HYDRATE_CONCURRENCY,
   BREW_HYDRATE_TIMEOUT_MS,
   BREW_INDEX_MIN_TRUST,
@@ -25,7 +24,6 @@ import {
   BREW_LIVE_STORAGE_KEY,
   BREW_MISS_TTL_MS,
   BREW_PAGE_INFLIGHT_JOIN_MS,
-  BrewDataMode,
 } from '../constant/BrewConstants';
 import { BrewHttp } from './BrewHttp';
 import type { BrewHttpResult } from './BrewHttp';
@@ -63,10 +61,8 @@ import type {
   BrewCaskCategory,
   BrewCaskPageData,
   BrewCategoryCard,
-  BrewDiscoverPageData,
   BrewFormulaDetail,
   BrewFormulaPageData,
-  BrewInstalledPackage,
   BrewPackageItem,
   BrewPageData,
 } from '../model/BrewModels';
@@ -120,7 +116,7 @@ interface MissingSplit {
   ghosts: number;
 }
 
-/** 目录里一个榜的一条：只有 token 与数字。`id` / `desc` / `categoryKey` 是内置快照的东西，join 时补 */
+/** 目录里一个榜的一条：只有 token 与数字。`id` / `desc` / `categoryKey` 由 join 时补 */
 export interface CatalogEntry {
   token: string;
   vol30d: number;
@@ -132,7 +128,7 @@ export interface CatalogEntry {
   score: number;
 }
 
-/** 一个 kind 的窗口与规模元信息（对应快照 meta，外加门槛实测值） */
+/** 一个 kind 的窗口与规模元信息（目录 meta，外加门槛实测值） */
 export interface CatalogKindMeta {
   windowStart: string;
   windowEnd: string;
@@ -192,13 +188,15 @@ interface DatasetStamp {
 /**
  * Homebrew 数据服务。
  *
- * 两条通道：
- *   - **内置快照**（`HmosRequest` 读 rawfile/mockdata/<trigger>.json）：
- *     分类体系、分类内排名、本地 id 这些官方 API 没有的东西只能靠它；
- *   - **现网**（`BrewHttp` 请求 formulae.brew.sh）：官方字段（版本/依赖/分析量/artifacts）。
+ * 2026-10 起只有**一条通道**（原先的「内置快照」通道已整条删除，见 `BrewConstants` 顶部注释）：
+ *   - **设备端目录**（聚合端点，`BrewCatalogAlgo`）：全量宇宙的安装量与三张榜 → 榜成员、
+ *     分类内成员、搜索词池、详情页的安装量；
+ *   - **现网单条**（`BrewHttp` 请求 formulae.brew.sh 的 `/api/<kind>/<token>.json`）：
+ *     官方字段（版本/依赖/分析量/artifacts）—— 目录里没有这些。
  *
- * 上层（Repository / VM / UI）不需要知道现在走的是哪条 —— 签名与返回类型完全不变，
- * 这正是 docs/brew-api-design.md §7 预留的改动面。
+ * 上层（Repository / VM / UI）不需要知道成员是从哪来的 —— 签名与返回类型完全不变，
+ * 这正是 docs/brew-api-design.md §7 预留的改动面。目录拿不到时**返回 `undefined` / 空页**
+ * 而不是抛错，由 UI 走空态（与 docs/brew-api-design.md 的 C 档口径一致）。
  *
  * **页面加载路径**严禁请求 `formula.json` / `cask.json`（解压后 32.4 MB，见 §7），
  * 只允许单条 `/formula/<token>.json`（~5 KB）与 `/analytics/*`（已按需缓存）；
@@ -343,18 +341,6 @@ export class BrewService {
       `catalogFailed=${s.catalogFailed}`;
   }
 
-  // ------------------------------------------------------------ 远端：Discover
-
-  /**
-   * Discover 三张榜（Formulae / Casks 各 趋势 / 历史 / 新星）。
-   *
-   * 整份只有 ~16KB 且页面加载后基本不变，直接走请求 + Preference 缓存，
-   * 不做分页 —— 分页参数对这个体积没有意义。
-   */
-  public getDiscoverPage(): Promise<BrewDiscoverPageData> {
-    return HmosRequest.getInstance().request<BrewDiscoverPageData>(TriggerEnums.BREW_DISCOVER_PAGE);
-  }
-
   // ------------------------------------------------------------ 现网：单条详情
 
   /**
@@ -388,9 +374,6 @@ export class BrewService {
    * 否则日志里看不到“现网挂了”，只会看到页面一直显示旧值。
    */
   private getLiveDoc<T extends Object>(cacheKey: string, kind: string, token: string): Promise<T> {
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE) {
-      return Promise.reject(new Error('remote data source disabled'));
-    }
     const cache: Record<string, LiveCacheEntry> = BrewService.ensureCache();
     const hit: LiveCacheEntry | undefined = cache[cacheKey];
     if (hit !== undefined && hit !== null && BrewService.isFresh(hit)) {
@@ -781,21 +764,17 @@ export class BrewService {
    * 以及浏览用的「按安装量降序」token 表（`topTokens`）。
    *
    * 为什么值得单独一层：三张榜的成员必须从**全量分布**里算（门槛是全球分位、还要 family 去重），
-   * 而内置快照只能冻结某一刻的成员。接上聚合端点后，成员变成每次刷新现算 —— 这是
-   * 「榜上是谁」从 mock 变现网的唯一途径，顺带拿到全量 token 名单（搜索的前提）。
+   * 客户端只有这一份全量分布（内置快照已于 2026-10 删除），所以成员只能是每次刷新现算的。
    *
    * 数据量与传输（均实测）：4 个端点 raw 1.9 MB / **gzip 358 KB**，且带条件请求，
    * 全 304 时 **0 字节**（源站每天只重新生成一次，所以大多数刷新都是 0 字节）。
    * 与本层现有的单条 hydrate 相比：240 条单条 gzip 合计约 292 KB 且只覆盖白名单 ——
    * 即「多花 66 KB，从 240 个包变成 1.3 万个包」。
    *
-   * 失败时返回 `undefined` 而不抛错：目录是「更准的成员来源」，拿不到就沿用内置快照（现状），
+   * 失败时返回 `undefined` 而不抛错：目录是**唯一的成员来源**，拿不到就返回空页 / 空态，
    * 页面不该因为聚合端点抖动而变成错误态。
    */
   public getCatalog(): Promise<BrewCatalog | undefined> {
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE) {
-      return Promise.resolve(undefined);
-    }
     // 世代号在**操作入口**捕获：`fetchCatalog` 的两个成功分支都会走到 `saveCatalog`。
     // 清空发生在这次取数开始之后的话，这次的结果（可能已是旧源的目录）必须丢弃。
     BrewService.catalogEpoch = BrewCacheEpoch.current();
@@ -1174,9 +1153,9 @@ export class BrewService {
     const tStart: number = Date.now();
     const catalog: BrewCatalog | undefined = BrewService.ensureCatalog();
     const tCatalog: number = Date.now();
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE || catalog === undefined) {
+    if (catalog === undefined) {
       BrewLoadLog.warn('formula_page', 'empty-catalog', Date.now() - tStart,
-        'brew_catalog 缺失、或 BREW_DATA_MODE 不是 REMOTE → 页面空态。' +
+        'brew_catalog 缺失 → 页面空态。' +
         '浏览页从不自己拉目录（只有 Discover 的 getCatalog 会），' +
         '所以首次安装后若没进过 Discover，这里会一直是空态');
       return Promise.resolve(undefined);
@@ -1300,9 +1279,9 @@ export class BrewService {
     const tStart: number = Date.now();
     const catalog: BrewCatalog | undefined = BrewService.ensureCatalog();
     const tCatalog: number = Date.now();
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE || catalog === undefined) {
+    if (catalog === undefined) {
       BrewLoadLog.warn('cask_page', 'empty-catalog', Date.now() - tStart,
-        'brew_catalog 缺失、或 BREW_DATA_MODE 不是 REMOTE → 页面空态。' +
+        'brew_catalog 缺失 → 页面空态。' +
         '浏览页从不自己拉目录（只有 Discover 的 getCatalog 会），' +
         '所以首次安装后若没进过 Discover，这里会一直是空态');
       return Promise.resolve(undefined);
@@ -1414,7 +1393,7 @@ export class BrewService {
    *
    * 搜索要的就是这一份数据，但 `browseRows` 是 `private static` —— TS 的 private 是
    * **类作用域**而不是模块作用域，跨类（`BrewSearchModel`）拿不到，所以在类内部开一个口子。
-   * 返回空数组表示「没有这份数据」：目录没拿到（无网 / SNAPSHOT 模式），或者 kind 在目录里
+   * 返回空数组表示「没有这份数据」：目录没拿到（无网 / 首次安装），或者 kind 在目录里
    * 没有对应的 key。两种情况调用方的处理相同 —— 回落 desc 索引。
    */
   public searchRows(kind: string): CatalogEntry[] {
@@ -1452,20 +1431,6 @@ export class BrewService {
     return total;
   }
 
-  // ------------------------------------------------------------ 本机状态（Mine）
-
-  public getInstalledFormulae(): Promise<BrewInstalledPackage[]> {
-    return HmosRequest.getInstance().request<BrewInstalledPackage[]>(TriggerEnums.BREW_LOCAL_FORMULAE);
-  }
-
-  public getInstalledCasks(): Promise<BrewInstalledPackage[]> {
-    return HmosRequest.getInstance().request<BrewInstalledPackage[]>(TriggerEnums.BREW_LOCAL_CASKS);
-  }
-
-  public getOutdated(): Promise<BrewInstalledPackage[]> {
-    return HmosRequest.getInstance().request<BrewInstalledPackage[]>(TriggerEnums.BREW_LOCAL_OUTDATED);
-  }
-
   // ------------------------------------------------------------ 现网：批量 hydrate
 
   /**
@@ -1475,7 +1440,7 @@ export class BrewService {
    * 超时后**返回已经拿到的部分**，剩下的请求继续在后台跑完并写进 TTL 缓存
    * （下一次进页面就命中缓存）—— 不把“现网”变成“网差就打不开页面”。
    *
-   * 单个 token 失败只记日志：列表里少一个现网值而已，值仍是内置快照的。
+   * 单个 token 失败只记日志：列表里少一个现网值而已，条目仍来自目录。
    */
   public hydrateFormulaDocs(tokens: string[], timeoutMs: number = BREW_HYDRATE_TIMEOUT_MS):
     Promise<Record<string, LiveFormulaDoc>> {
@@ -1505,10 +1470,6 @@ export class BrewService {
    * 只影响「弹不弹」，与 spec §5.2 的取舍一致。
    */
   private static noticeLiveDocs(kind: string, tokens: string[]): void {
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE) {
-      // SNAPSHOT 模式：`hydrate` 会直接早退，一个请求都不发（spec §5.3）
-      return;
-    }
     // 去重口径与 `hydrate` 逐字一致（空 token 丢弃、重复只算一次），否则预测的分母会偏大
     const unique: string[] = [];
     tokens.forEach((token: string) => {
@@ -1557,7 +1518,7 @@ export class BrewService {
       }
     });
     const result: Record<string, T> = {};
-    if (BREW_DATA_MODE !== BrewDataMode.REMOTE || unique.length === 0) {
+    if (unique.length === 0) {
       return Promise.resolve(result);
     }
     const deadline: number = Date.now() + timeoutMs;

@@ -3,8 +3,11 @@
 # Discover 推荐算法（现网口径）
 
 > 本文定义 **Discover 页签接真实 API 时的推荐算法**，是这套口径的唯一权威来源。
-> 样例工程当前读的是**这份算法在某个时间点的一次冻结快照**（构建期生成，见 §7），
-> 不是另一套并行实现 —— 所以这里的公式改了，快照要重新生成，不能只改一边。
+> 样例工程**就是按这份公式在设备端现算的**（`BrewCatalogAlgo.ets`，见 §7.0），
+> 可执行参照实现是 `hmosword-build/brew-mockgen/check_algo.py` —— 两边是同一套口径的两个实现，
+> 所以这里的公式改了，两边都要改，不能只改一边。
+> **2026-10：构建期冻结快照（`brew-discover-page.json`）已删除**（详见 §7.5），
+> 目录拿不到时 Discover 走空态而不是回落。
 >
 > **修订说明**：本文是初稿的重写。初稿的数据源盘点方向正确、`install` vs `install-on-request`
 > 的论证也是对的（已实测证实），但算法主体有几处会直接导致"今日热门"失效的设计错误。
@@ -229,21 +232,25 @@ Cask **4 个**（`cleanmymac-cli` 2053、`grok-bot` 1371、`crisp` 515、`homebr
 
 ### 6.1 单 App 大图卡的选取（`featured`）
 
-除了三张榜，快照还产出一个 `featured` 数组 —— **一张卡就是一个包**（初稿 §3.1 里
+除了三张榜，页面还有一个 `featured` 数组 —— **一张卡就是一个包**（初稿 §3.1 里
 `[大图卡片] 今日热门 ← 横向滚动 2-3 张` 那一行，§3.2 列的字段也全是单 App 的：
 图标 / 名称 / 一句话描述 / 安装量趋势 / 类别标签 / 排名徽章）。
 
-选取规则是**编辑口径**，因此写进生成器落进数据（`generate.py` 的 `FEATURED_RULE`），
+选取规则是**编辑口径**，因此落成代码（设备端 `BrewRepository.FEATURED_RULE`），
 UI 不参与挑选、只做渲染 —— 与三张榜同理，换规则只改一处：
 
-```python
-FEATURED_RULE = (
-    ('formula', 'trending', 2),   # 趋势榜 Formulae 前 2
-    ('cask',    'trending', 1),   # 趋势榜 Casks 前 1
-    ('formula', 'fresh',    1),   # 新星榜 Formulae 前 1
-    ('cask',    'fresh',    1),   # 新星榜 Casks 前 1
-)                                 # 共 5 张
+```typescript
+private static readonly FEATURED_RULE: FeaturedRule[] = [
+  { kind: BrewKind.FORMULA, boardKey: BrewDiscoverBoardKey.TRENDING, count: 2 },  // 趋势榜 Formulae 前 2
+  { kind: BrewKind.FORMULA, boardKey: BrewDiscoverBoardKey.FRESH, count: 1 },     // 新星榜 Formulae 前 1
+  { kind: BrewKind.CASK, boardKey: BrewDiscoverBoardKey.TRENDING, count: 1 },     // 趋势榜 Casks 前 1
+  { kind: BrewKind.CASK, boardKey: BrewDiscoverBoardKey.FRESH, count: 1 },        // 新星榜 Casks 前 1
+];                                                                                 // 共 5 张
 ```
+
+> 2026-10：规则原先写在生成器（`generate.py` 的 `FEATURED_RULE`）里随快照落进数据，
+> 快照删除后它搬到了设备端。**顺序不能改** —— 页面上大图卡与榜卡的混排顺序由它决定
+> （`BrewDiscoverFeedItem.mix`：大图卡紧跟它所属的那张榜）。
 
 `featured` 的条目比榜单条目多两个字段：`kind` / `boardKey` —— 用来显示「今日热门 · #1」
 这类来源徽章，并决定卡片的主题色（与它来源的那张榜同色）。
@@ -276,22 +283,21 @@ FEATURED_RULE = (
 >   对账方式：设备端每次刷新会逐榜打前 10 名（`catalog top <kind>/<boardKey>`），
 >   与 `python3 check_algo.py --fetch --print-top 10` 的输出逐名比对 —— 已实测一致（见 §7.4）。
 >
-> 内置快照（`brew-discover-page.json`）**没有退休**，但角色变了：它是
-> ① 取不到目录时的回落；② `id` / `categoryKey` / `desc` 三个字段的**唯一来源**
-> （本地主键与分类是自建词表，官方 API 没有）。见 §7.5。
+> ~~内置快照（`brew-discover-page.json`）**没有退休**，但角色变了：它是
+> ① 取不到目录时的回落；② `id` / `categoryKey` / `desc` 三个字段的**唯一来源**~~
+> **2026-10：快照已删除。** 榜骨架改为代码构造（`BrewRepository.emptyDiscoverPage`，
+> `id = sequence = 1..6`），`id` / `categoryKey` / `desc` 都由设备端现算（§7.5），
+> 目录拿不到就是**空榜**（页面走空态），不再有回落。
 
-**算法定义在现网 API 上，现在由设备端与生成器双方实现同一份口径。**
+**算法定义在现网 API 上，现在由设备端与 `check_algo.py` 双方实现同一份口径。**
 
 - 两端都拉 **4 个聚合端点**（`install-on-request/homebrew-core/{30d,365d}` +
   `cask-install/homebrew-cask/{30d,365d}`）——**只要两个窗口**，90d 只在初稿那个已删掉的
   `recent_installs = 30d − 90d/3` 里用过；
-- 生成期的产物（`mockdata/brew-discover-page.json`）仍必须是**确定的**：同一份输入重复生成
-  字节级一致 —— “重产出只改了受影响的文件”这条判据靠它；
-- 快照的**日期与窗口必须写进文件**，否则页面上说的“最近可用数据”无从核对。
-  Discover 产物的 `snapshotDate` 取**数据窗口结束日**，不是墙钟时间 —— 后者会让
-  “同输入重复生成字节级一致”这条性质失效。设备端现算出的 `snapshotDate` 是**同一个口径**
-  （取聚合文件里的 `end_date`），所以刷新后页面上那个日期会自动从快照日变成当天窗口，
-  不会出现“成员是今天的、日期写的是快照日”的自相矛盾。
+- ~~生成期的产物（`mockdata/brew-discover-page.json`）仍必须是**确定的**~~（2026-10：已无生成期产物）。
+  现在唯一需要「确定性」的是 `check_algo.py` 自己的阈值标定与不变量，那由它自己的自检覆盖；
+- 设备端 `snapshotDate` 取**数据窗口结束日**（聚合文件里的 `end_date`），不是墙钟时间 ——
+  所以页面上那个日期会随刷新自动变成当天窗口，不会出现“成员是今天的、日期写的是快照日”的自相矛盾。
 
 ### 7.1 为什么必须用聚合端点，而不是现有详情数据
 
@@ -315,19 +321,18 @@ FEATURED_RULE = (
 代价是榜上的包可能不在现有详情数据里 → **必须把新出现的包补进详情**，否则点进去没有页面。
 所以 Discover 快照的产物是两部分：三张榜 + 为榜上新包补的详情条目。
 
-### 7.2 落地产物与生成器接线
+### 7.2 ~~落地产物与生成器接线~~（2026-10：已无生成期产物）
 
 | 产物 | 内容 |
 |---|---|
-| `mockdata/brew-discover-page.json` | 6 张榜（formula/cask × 趋势/历史/新星），每榜 Top 10；`meta` 带窗口起止、`total_items`/`total_count`、候选数与门槛值；`snapshotDate` = 数据窗口结束日 |
-| ~~`mockdata/brew-{formula,cask}-details.json`~~ | **已删除（2026-09）**：当时为了让榜上的新包"点得进去"而补详情；现在详情骨架直接来自首页条目，不需要单独的详情文件 |
+| ~~`mockdata/brew-discover-page.json`~~ | **已删除（2026-10）**。6 张榜（formula/cask × 趋势/历史/新星）现在由设备端现算，`meta` 带窗口起止、`total_items`/`total_count`、候选数与门槛值，`snapshotDate` = 数据窗口结束日 |
+| ~~`mockdata/brew-{formula,cask}-details.json`~~ | **已删除（2026-09）**：当时为了让榜上的新包"点得进去"而补详情；现在详情骨架直接来自现网单条 + 词表，不需要单独的详情文件 |
 
-接线：`generate.py` 的 `build_discover()` 负责拉聚合端点 + join package id（id/分类/描述从 **page 条目**来），
-**算法本身在 `check_algo.py`**，生成器只是调用它 —— 避免"文档一套、生成器一套"。
-榜上出现但首页快照里没有的包，生成器会**打印警告**（`unmapped`）—— 设备端遇到同样的情形是
-**直接不上屏**（拿不到本地 id 就点不进去），见 §7.5。
-
-那条警告是刻意保留的：它把"榜上有包但点不进去"从运行期问题变成生成期可见的报告项。
+~~接线：`generate.py` 的 `build_discover()` 负责拉聚合端点 + join package id，
+**算法本身在 `check_algo.py`**，生成器只是调用它~~ ——
+**现状**：只有设备端（`BrewService.getCatalog` + `BrewCatalogAlgo`）与 `check_algo.py` 两份实现，
+算法口径的权威就是这两者（见 §7.0 的同步要求）。榜上的包一律能点进详情（`id` 来自 token 哈希），
+所以「榜上有包但点不进去」这个旧问题已不存在。
 
 **已观察到的固有不稳定性**：新星榜的绝对量很小（本次 306 ~ 2050），窗口滚动一天就会换人
 （第一次算出 7 个、第二次只剩 4 个，`whisper.cpp` 进、`leaf-markdown-viewer` 等出）。
@@ -370,25 +375,37 @@ catalog top formula/trending: 1.gascity=1170:18.23 2.sonic=11931:5.75 …
 - 顺序对等时（Ø 值相同的并列条目）两边的遍历顺序不同 —— 取整/并列只在尾部的实际数据上没出现，
   但换窗口后可能出现，对账时要看 token 而不是只看名次。
 
-### 7.5 内置快照现在承担什么（别把 `brew-discover-page.json` 当废数据删掉）
+### 7.5 ~~内置快照现在承担什么~~（2026-10：快照已删除，成员唯一来源 = 目录）
 
-成员现网化之后，榜单需要从快照里拿的只剩三样东西，而这三样**官方 API 根本没有**：
+~~成员现网化之后，榜单需要从快照里拿的只剩三样东西，而这三样**官方 API 根本没有**~~：
 
-| 字段 | C 档之前 | C 档之后 |
-|---|---|---|
-| `id` | 只能来自快照（生成器分配） | **`token_id(token)` 哈希**，生成器与设备端同一个函数 |
-| `categoryKey` | 只能来自快照（词表只在构建期跑过） | **`BrewTaxonomy`**（词表已移植到设备端） |
-| `desc` | 快照里那份（离线可渲染） | **现网单条**（拿不到就留空，见 §7.5 上面的说明） |
+| 字段 | C 档之前 | C 档之后 | **2026-10 现状** |
+|---|---|---|---|
+| `id` | 只能来自快照（生成器分配） | `token_id(token)` 哈希 | **设备端** `BrewBrowseBuilder.tokenId(token)`（生成器侧已删） |
+| `categoryKey` | 只能来自快照（词表只在构建期跑过） | `BrewTaxonomy`（词表已移植到设备端） | 不变 |
+| `desc` | 快照里那份（离线可渲染） | 现网单条（拿不到就留空） | 不变 |
 
-也就是说：**榜单条目现在没有一项必须来自快照**，快照只剩"目录拿不到时的回落"这一个作用。
+**「快照只当目录拿不到时的回落」这个最后的角色也没有了。** 现在的链路是：
 
-C 档之后**这条限制已经取消**：`id` 由 `token_id(token)`（FNV-1a）给出，详情页也能只用
-现网单条 + `BrewTaxonomy` 渲染，所以榜可以就是**全球前 N**，不再跟任何"能点进去的白名单"求交。
-日志里的判据跟着变成一行成员对照（`catalog members vs snapshot: <kind>/<boardKey> live=10 +[…] -[…]`），
-它现在的作用是**看这次刷新换了谁**，而不是"能不能切"。
+```
+emptyDiscoverPage()（代码骨架，6 张榜 id=1..6，entries=[]）
+  → service.getCatalog()
+       ├─ undefined → 记 'discover empty (catalog unavailable)' + settle → 返回空骨架
+       │              （VM 过滤空榜 → feed 为空 → 页面空态）
+       └─ 有值     → applyCatalogMembers（成员/名次/数字/meta/snapshotDate 全部来自目录）
+                     → fillCategoryKeys → hydratePage（只回填 name/desc/categoryKey）
+                     → buildFeatured
+```
 
-保留这段历史的原因：它记录了"成员曾被白名单锁住"这个阶段，以及当时的实测数字
-（六张榜前 N 名 100% 能落到内置详情，所以那次切换是安全的）。
+顺带删掉的：`auditCatalogMembers`（对账日志，没有快照可对）、`sortBoard` / `applyMetrics`
+（目录给的数字与名次就是权威顺序，客户端再排一遍等于引入第二次口径）。
+
+C 档之后**白名单限制已经取消**：`id` 由 token 的稳定哈希给出，详情页也能只用
+现网单条 + `BrewTaxonomy` 渲染，所以榜就是**全球前 N**，不跟任何"能点进去的白名单"求交。
+
+保留这段历史的原因：它记录了"成员曾被白名单锁住"、以及"快照曾是唯一的离线兜底"这两个阶段，
+以及当时的实测数字（六张榜前 N 名 100% 能落到内置详情，所以那次切换是安全的）。
+⚠️ 别把这段读成"快照还在"或"还可以当回落" —— 它已经不在了。
 
 ---
 

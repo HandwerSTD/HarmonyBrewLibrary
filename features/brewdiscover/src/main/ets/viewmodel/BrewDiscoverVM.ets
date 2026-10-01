@@ -197,7 +197,11 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
     WindowUtil.updateStatusBarColor(isDark);
     this.discoverModel.getDiscoverPage()
       .then((result: BrewDiscoverPageData) => {
-        const boards: BrewDiscoverBoard[] = result.boards ?? [];
+        // **空榜不上屏**：骨架恒为 6 张榜（boardId 1..6 稳定，二级页照旧按 id 路由），
+        // 但目录拿不到时六张榜都没有成员。过滤后 feed 为空 → SUCCESS + 0 项，页面走空态，
+        // 而不是摆出 6 张只有标题的空榜卡。
+        const boards: BrewDiscoverBoard[] = (result.boards ?? [])
+          .filter((b: BrewDiscoverBoard) => b.entries.length > 0);
         const featured: BrewDiscoverFeatured[] = result.featured ?? [];
         // 两类卡混排：每张大图卡排在**它所属那张榜**的前面（规则与理由见 mix 的注释）。
         // 旧写法是「featured 一段 + boards 一段」的两段拼接 —— 大图卡全挤在首屏，

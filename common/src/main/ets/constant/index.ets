@@ -24,8 +24,6 @@ export {
   ProductSeriesEnum,
 } from './CommonEnums';
 
-export { TriggerEnums } from './TriggerEnums';
-
 export { RequestErrorCode } from './RequestErrorCode';
 
 export { PC_ABILITY } from './FormCardConstant';

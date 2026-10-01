@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { BrewKind, BrewLocalModel } from '@ohos/brewcommon';
+import { BrewKind } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { MinePackageSets, PackageListMode } from '../model/MinePackagesModels';
 
@@ -23,30 +23,19 @@ import { MinePackageSets, PackageListMode } from '../model/MinePackagesModels';
  */
 export class MinePackagesUtil {
   /**
-   * 一次取齐三个集合。三个请求并发发起，任一失败则整体失败（都来自同一个本地 mock，
-   * 失败基本只会是资源读取问题，此时整块内容都不该显示）。
+   * 一次取齐三个集合。**当前恒为空集**（2026-10 起）。
+   *
+   * 为什么是空集：HarmonyOS 上没有 brew，也没有可执行的本机包管理接口（不像 macOS 能跑
+   * `brew list` / `brew outdated`），而原读的那三份内置 mock（`brew-local-*.json`）已随
+   * 整条 mock 链路删除。所以本机包数据**只能**来自将来真机上可用的能力（e.g. 命令行 +
+   * 权限，或 Harmonybrew 侧的安装记录）。
+   *
+   * 所以这里是**空态保壳**而不是删代码：「我的」页的三个区块、「本机包」二级页、筛选 chips
+   * 全部保留，显示 0 个包 / 空列表。签名不变 → 将来接上真实数据源时只需改这一个方法，
+   * `pick` / `filter` / `byName` 与全部 UI 都不用动。
    */
   public static loadSets(): Promise<MinePackageSets> {
-    const model: BrewLocalModel = BrewLocalModel.getInstance();
-    return Promise.all([
-      model.getInstalledFormulae(),
-      model.getInstalledCasks(),
-      model.getOutdated(),
-    ]).then((result: BrewInstalledPackage[][]) => {
-      const all: BrewInstalledPackage[] = result[0].concat(result[1]);
-      const outdated: BrewInstalledPackage[] = result[2];
-      const outdatedFullNames: Set<string> = new Set<string>();
-      outdated.forEach((pkg: BrewInstalledPackage) => {
-        outdatedFullNames.add(pkg.fullName);
-      });
-
-      const sets: MinePackageSets = new MinePackageSets();
-      sets.installed = MinePackagesUtil.byName(all);
-      sets.outdated = MinePackagesUtil.byName(outdated);
-      sets.updated = all.filter((pkg: BrewInstalledPackage) => !outdatedFullNames.has(pkg.fullName));
-      sets.updated.sort((a: BrewInstalledPackage, b: BrewInstalledPackage) => b.installedAt - a.installedAt);
-      return sets;
-    });
+    return Promise.resolve(new MinePackageSets());
   }
 
   /** 按模式取对应的集合 */

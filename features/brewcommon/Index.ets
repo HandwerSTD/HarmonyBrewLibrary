@@ -49,7 +49,6 @@ export type {
   BrewPageData,
   BrewPageParam,
   BrewRequirement,
-  BrewResponseData,
   BrewSingleIdParam,
 } from './src/main/ets/model/BrewModels';
 
@@ -57,7 +56,6 @@ export {
   BrewCaskModel,
   BrewDiscoverModel,
   BrewFormulaModel,
-  BrewLocalModel,
   BrewSearchModel,
   BrewSearchResult,
 } from './src/main/ets/model/BrewRepository';

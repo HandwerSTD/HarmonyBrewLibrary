@@ -13,8 +13,6 @@
  * limitations under the License.
  */
 
-export { MockRequest as HmosRequest } from './src/main/ets/storagemanager/MockRequest';
-
 export { PreferenceManager } from './src/main/ets/storagemanager/PreferenceManager';
 
 export { PreferenceCacheHelper } from './src/main/ets/storagemanager/PreferenceCacheHelper';
