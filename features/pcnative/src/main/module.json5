@@ -1,0 +1,9 @@
+{
+  "module": {
+    "name": "pcnative",
+    "type": "har",
+    "deviceTypes": [
+      "2in1"
+    ]
+  }
+}

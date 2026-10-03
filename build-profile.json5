@@ -107,6 +107,10 @@
     {
       "name": "brewsearch",
       "srcPath": "./features/brewsearch"
+    },
+    {
+      "name": "pcnative",
+      "srcPath": "./features/pcnative"
     }
   ]
 }
