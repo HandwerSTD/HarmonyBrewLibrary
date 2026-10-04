@@ -31,6 +31,7 @@ import {
   BrewInstalledLoader,
   BrewKind,
   BrewPackageRow,
+  brewCommandStatusText,
   brewContentTopInset,
   brewTitleBarStyle,
 } from '@ohos/brewcommon';
@@ -203,13 +204,17 @@ export struct BrewDetailView {
     }
   }
 
-  /** 命令结束时补一条提示。Sheet 关着才弹 —— Sheet 里已经有状态标签了 */
+  /** 命令结束时补一条提示。Sheet 关着才弹 —— Sheet 里已经有状态行了 */
   private onCommandStateChanged(): void {
     const status: BrewCommandStatus = this.commandState.status;
     if (status === this.lastCommandStatus) {
       return;
     }
     this.lastCommandStatus = status;
+    if (status !== BrewCommandStatus.DONE && status !== BrewCommandStatus.INTERRUPTED &&
+      status !== BrewCommandStatus.TIMEOUT && status !== BrewCommandStatus.FAILED) {
+      return;
+    }
     if (this.commandSheetShown) {
       return;
     }
@@ -217,15 +222,7 @@ export struct BrewDetailView {
     if (!BrewCommandRunner.getInstance().claimEndNotice()) {
       return;
     }
-    if (status === BrewCommandStatus.DONE) {
-      Toast.showToast($r('app.string.brew_cmd_status_done'));
-    } else if (status === BrewCommandStatus.INTERRUPTED) {
-      Toast.showToast($r('app.string.brew_cmd_status_interrupted'));
-    } else if (status === BrewCommandStatus.TIMEOUT) {
-      Toast.showToast($r('app.string.brew_cmd_status_timeout'));
-    } else if (status === BrewCommandStatus.FAILED) {
-      Toast.showToast($r('app.string.brew_cmd_status_failed'));
-    }
+    Toast.showToast(brewCommandStatusText(this.commandState));
   }
 
   @Builder
@@ -392,7 +389,7 @@ export struct BrewDetailView {
     .bindSheet(this.commandSheetShown, this.CommandSheetBuilder(),
       MaterialUtil.getMaterialOptions<SheetOptions>({
         originOption: {
-          showClose: true,
+          showClose: false,
           preferType: (this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
             !AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT)) ? SheetType.BOTTOM : SheetType.CENTER,
           height: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ?

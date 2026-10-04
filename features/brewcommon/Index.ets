@@ -125,6 +125,7 @@ export {
   BrewCommandStartResult,
   BrewCommandState,
   BrewCommandStatus,
+  brewCommandStatusText,
 } from './src/main/ets/model/BrewCommandModels';
 
 // 执行 Sheet 的内容组件，两个页面共用一份。

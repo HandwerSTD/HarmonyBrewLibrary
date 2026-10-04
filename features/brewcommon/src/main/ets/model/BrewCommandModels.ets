@@ -101,6 +101,36 @@ export class BrewCommandState {
   }
 }
 
+/**
+ * 状态行的文案。Sheet 的文本尾部与两个页面的结束提示共用同一套写法。
+ *
+ * 终态写成方括号里的短句，像 shell 打完一条命令之后回显的状态行：完成与失败带上退出码，
+ * 中断与超时本身已经说明是谁结束了命令，再挂一个退出码只会让人以为命令是自己退出的。
+ * 从未执行过命令时返回空字符串。
+ */
+export function brewCommandStatusText(state: BrewCommandState): ResourceStr {
+  if (state.status === BrewCommandStatus.RUNNING) {
+    return state.interruptSentAt > 0 ?
+      $r('app.string.brew_cmd_status_interrupting') : $r('app.string.brew_cmd_status_running');
+  }
+  if (state.status === BrewCommandStatus.DONE) {
+    return $r('app.string.brew_cmd_status_done', state.exitCode);
+  }
+  if (state.status === BrewCommandStatus.INTERRUPTED) {
+    return $r('app.string.brew_cmd_status_interrupted');
+  }
+  if (state.status === BrewCommandStatus.TIMEOUT) {
+    return $r('app.string.brew_cmd_status_timeout');
+  }
+  if (state.status === BrewCommandStatus.FAILED) {
+    // 退出码为负数表示通道没给出退出码（任务记录中途消失），这种情况不编一个退出码出来
+    return state.exitCode >= 0 ?
+      $r('app.string.brew_cmd_status_failed', state.exitCode) :
+      $r('app.string.brew_cmd_status_failed_unknown');
+  }
+  return '';
+}
+
 /** 一次启动请求。`args` 必须由 `BrewCommandGenerator` 的参数级方法产出 */
 export class BrewCommandRequest {
   public title: ResourceStr;

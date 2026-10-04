@@ -538,27 +538,31 @@
     },
     {
       "name": "brew_cmd_status_running",
-      "value": "Running"
+      "value": "[Running]"
     },
     {
       "name": "brew_cmd_status_interrupting",
-      "value": "Interrupting…"
+      "value": "[Interrupting…]"
     },
     {
       "name": "brew_cmd_status_done",
-      "value": "Finished"
+      "value": "[Done, exit code %d]"
     },
     {
       "name": "brew_cmd_status_interrupted",
-      "value": "Interrupted"
+      "value": "[Interrupted]"
     },
     {
       "name": "brew_cmd_status_failed",
-      "value": "Failed"
+      "value": "[Failed, exit code %d]"
+    },
+    {
+      "name": "brew_cmd_status_failed_unknown",
+      "value": "[Failed]"
     },
     {
       "name": "brew_cmd_status_timeout",
-      "value": "Timed out"
+      "value": "[Timed out]"
     },
     {
       "name": "brew_cmd_omitted_lines",

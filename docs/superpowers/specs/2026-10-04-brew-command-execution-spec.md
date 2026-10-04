@@ -113,20 +113,18 @@
 .bindSheet(this.commandSheetShown, this.CommandSheetBuilder(), SheetOptions)
 ```
 
-`SheetOptions` 沿用 `MineView` 里登录 Sheet 的写法：`MaterialUtil.getMaterialOptions<SheetOptions>`（`CustomImmersiveStyle.ULTRA_THICK` + 透明底色），`preferType` 窄屏 `SheetType.BOTTOM` / 宽屏 `SheetType.CENTER`，`height` 宽屏按 `CommonConstants.SHEET_HEIGHT_RATIO_XL`、其余 `SheetSize.LARGE`，`width` 宽屏 `CommonConstants.SHEET_WIDTH_XL`，`showClose: true`，`onWillDisappear` 里把 `commandSheetShown` 置回 `false`。
+`SheetOptions` 沿用 `MineView` 里登录 Sheet 的写法：`MaterialUtil.getMaterialOptions<SheetOptions>`（`CustomImmersiveStyle.ULTRA_THICK` + 透明底色），`preferType` 窄屏 `SheetType.BOTTOM` / 宽屏 `SheetType.CENTER`，`height` 宽屏按 `CommonConstants.SHEET_HEIGHT_RATIO_XL`、其余 `SheetSize.LARGE`，`width` 宽屏 `CommonConstants.SHEET_WIDTH_XL`，`showClose: false`（关闭入口在标题栏菜单里），`onWillDisappear` 里把 `commandSheetShown` 置回 `false`。
 
-**内容**（`BrewCommandSheet`，放在 `features/brewcommon`）：
+**内容**（`BrewCommandSheet`，放在 `features/brewcommon`）。标题栏与「我的 - 设置」同源：`Navigation`（`titleMode(Mini)` + `hideBackButton(true)`）给标题栏，`Navigation.title()` 给标题（这次执行在做什么），`Navigation.menus()` 给两个操作：
 
-| 区域 | 内容 |
+| 位置 | 内容 |
 | --- | --- |
-| 头部 | 标题（更新全部 / 安装 `<token>` / 升级 `<token>`）+ 状态标签（运行中 / 正在中断… / 已完成 / 已中断 / 执行失败 / 执行超时） |
-| 命令行 | 用户可读的命令（如 `brew upgrade --formula`），`Body_S` + 次要色，长命令换行 |
-| 日志区 | `List` + `ForEach` 逐行渲染；stdout 用 `font_primary`，stderr 用 `font_secondary`；单行 `Body_S`，长行换行；最多保留 1000 行，超出时顶部显示「已省略前 N 行」 |
-| 底部 | 运行中：「中断」；中断发出后 5 秒内禁用；超过宽限期仍在运行：「强制终止」；结束后：「关闭」 |
+| 标题栏菜单 | trash（`sys.symbol.trash`）结束命令：第一次点击发 SIGINT，宽限期之后再点发 SIGTERM / SIGKILL；命令没在跑、或正处在宽限期内时不可点。xmark（`sys.symbol.xmark`）关闭 Sheet |
+| 内容区 | 一整块等宽文本：第一行是 `$ <命令>`（空一行接输出），后面每行一个 `Span`；黑底（`Color.Black`）、白字（`Color.White`）、字体 `JetBrains Mono NL`、行高 1.5 倍；stderr 行用 `sys.color.warning`；最多保留 1000 行，超出时命令行之后显示「已省略前 N 行」；命令结束之后在文本末尾追加状态行，写法是方括号里的短句：`[运行中]` / `[正在中断…]` / `[已完成 退出码 %d]` / `[已中断]` / `[执行超时]` / `[执行失败 退出码 %d]`（通道没给出退出码时是 `[执行失败]`） |
 
 组件入参：`@ObjectLink state: BrewCommandState`（`@Prop` 会深拷贝整个对象，1000 行日志每 200ms 复制一次不可接受），加上 `onInterrupt` / `onForceKill` / `onClose` 三个回调，由页面接到 `BrewCommandRunner` 与 `commandSheetShown`。
 
-**自动滚动**：用户停在底部时跟随新行滚动到底；用户上滑离开底部后停止跟随；滚回底部后恢复跟随。一批日志只安排一次滚动：一次轮询可能落地上百行，逐行排定时器会把滚动任务堆起来。
+**自动滚动**：日志文本放在 `Scroll` 里（`Scroller`），新行落地时滚到底；用户上滑离开底部后停止跟随（用 `Scroller.isAtEnd()` 判定），滚回底部后恢复跟随。一批日志只安排一次滚动：一次轮询可能落地上百行，逐行排定时器会把滚动任务堆起来。
 
 **行处理**：
 
@@ -134,9 +132,9 @@
 - 行内出现 `\r` 时只保留最后一个 `\r` 之后的内容（brew 的下载进度用 `\r` 重绘同一行，逐条追加会把进度碎片铺满整个日志区）；
 - 剥离 ANSI 转义序列（`ESC [ … 字母`）。
 
-**关闭行为**：Sheet 可随时关闭（下滑、点遮罩、右上角关闭按钮、返回键）。关闭不影响命令：任务状态在单例里，输出继续被收进行缓冲；页面按钮显示「执行中…」，点击重新打开 Sheet 并看到完整输出。
+**关闭行为**：Sheet 可随时关闭（下滑、点遮罩、返回键，或标题栏菜单里的 xmark）。关闭不影响命令：任务状态在单例里，输出继续被收进行缓冲；页面按钮显示「执行中…」，点击重新打开 Sheet 并看到完整输出。
 
-**结束提示**：命令结束时如果 Sheet 没有打开，页面弹一条 Toast（已完成 / 执行失败 / 已中断 / 执行超时）。两个页面可能同时存活（详情页压在「我的」页上），所以由 `BrewCommandRunner.claimEndNotice()` 决定哪一页弹：同一次命令结束只弹一次。
+**结束提示**：命令结束时如果 Sheet 没有打开，页面弹一条 Toast，文案与 Sheet 文本末尾的状态行同源（`brewCommandStatusText(state)`，如 `[已完成 退出码 0]`）。两个页面可能同时存活（详情页压在「我的」页上），所以由 `BrewCommandRunner.claimEndNotice()` 决定哪一页弹：同一次命令结束只弹一次。
 
 ### 3.4 中断与强制终止
 

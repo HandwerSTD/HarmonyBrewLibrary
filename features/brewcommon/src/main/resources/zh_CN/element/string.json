@@ -542,27 +542,31 @@
     },
     {
       "name": "brew_cmd_status_running",
-      "value": "运行中"
+      "value": "[运行中]"
     },
     {
       "name": "brew_cmd_status_interrupting",
-      "value": "正在中断…"
+      "value": "[正在中断…]"
     },
     {
       "name": "brew_cmd_status_done",
-      "value": "已完成"
+      "value": "[已完成 退出码 %d]"
     },
     {
       "name": "brew_cmd_status_interrupted",
-      "value": "已中断"
+      "value": "[已中断]"
     },
     {
       "name": "brew_cmd_status_failed",
-      "value": "执行失败"
+      "value": "[执行失败 退出码 %d]"
+    },
+    {
+      "name": "brew_cmd_status_failed_unknown",
+      "value": "[执行失败]"
     },
     {
       "name": "brew_cmd_status_timeout",
-      "value": "执行超时"
+      "value": "[执行超时]"
     },
     {
       "name": "brew_cmd_omitted_lines",

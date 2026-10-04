@@ -2,25 +2,38 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
+import { SymbolGlyphModifier, TextModifier } from '@kit.ArkUI';
 import { CommonConstants } from '@ohos/common';
-import {
-  BrewCommandLine,
-  BrewCommandState,
-  BrewCommandStatus,
-} from '../model/BrewCommandModels';
+import { BrewCommandLine, BrewCommandState, BrewCommandStatus, brewCommandStatusText } from '../model/BrewCommandModels';
 
-/** 底部按钮高度。与「我的」页及其它二级页的操作按钮同高 */
-const ACTION_BUTTON_HEIGHT: number = 32;
+/** 日志字体。设备自带的等宽字体；取不到时系统回退到默认字体 */
+const LOG_FONT_FAMILY: string = 'monospace';
+
+/** 终端观感：整页黑底，正文白字，stderr 行用 warning 色 */
+const SHEET_BACKGROUND: ResourceColor = Color.Black;
+const LOG_TEXT_COLOR: ResourceColor = Color.White;
+
+/** 日志行高倍数。等宽字体配 1.5 倍行高，长输出更容易按行扫读 */
+const LOG_LINE_HEIGHT: number = 1.5;
+
+/** 标题栏图标尺寸 */
+const MENU_ICON_SIZE: number = 20;
 
 /**
  * brew 命令执行 Sheet 的内容组件。「我的 - 待更新」页与包详情页各绑一份，内容共用本组件。
  *
+ * 形态与「我的 - 设置」同源：标题栏由 `Navigation` 提供（`title` 给标题，`menus` 给操作），
+ * 两个操作放在标题栏的菜单里 —— trash 结束命令、xmark 关闭 Sheet。因此 Sheet 自身不显示关闭
+ * 图标（`SheetOptions.showClose` 为 false），底部也没有按钮行；关掉 Sheet 不影响命令执行，
+ * 重新打开看到的是完整输出。
+ *
+ * 内容区是一整块等宽文本（`Text` + `Span`）：第一行是真正跑的命令行，后面是输出行；
+ * 黑底白字，stderr 行用 warning 色，命令结束之后把状态文案追加在文本末尾。
+ * 整块文本放在 `Scroll` 里，可以随时回看历史输出。
+ *
  * 入参用 `@ObjectLink` 而不是 `@Prop`：`@Prop` 对对象做深拷贝，日志每 200ms 增一批行，
  * 1000 行每 200ms 复制一次不可接受。三个回调由页面接到 `BrewCommandRunner` 与 Sheet 的开关上 ——
  * 本组件不碰单例，命令状态与命令生命周期都留在页面与 `BrewCommandRunner` 那一侧。
- *
- * Sheet 可随时关闭：命令状态在 `BrewCommandRunner` 单例里，关掉不影响命令执行，
- * 重新打开看到的是完整输出。
  */
 @Component
 export struct BrewCommandSheet {
@@ -35,80 +48,65 @@ export struct BrewCommandSheet {
   /** 是否已经排了一次跟随滚动，避免一批日志排出一堆定时器 */
   private scrollPending: boolean = false;
 
-  /** 状态标签文案。IDLE 不显示标签（还没执行过命令，不该显示任何状态） */
-  private statusText(): ResourceStr {
-    const state: BrewCommandState = this.state;
-    if (state.status === BrewCommandStatus.RUNNING) {
-      return state.interruptSentAt > 0 ?
-        $r('app.string.brew_cmd_status_interrupting') : $r('app.string.brew_cmd_status_running');
-    }
-    if (state.status === BrewCommandStatus.DONE) {
-      return $r('app.string.brew_cmd_status_done');
-    }
-    if (state.status === BrewCommandStatus.INTERRUPTED) {
-      return $r('app.string.brew_cmd_status_interrupted');
-    }
-    if (state.status === BrewCommandStatus.TIMEOUT) {
-      return $r('app.string.brew_cmd_status_timeout');
-    }
-    if (state.status === BrewCommandStatus.FAILED) {
-      return $r('app.string.brew_cmd_status_failed');
-    }
-    return '';
-  }
-
   private isRunning(): boolean {
     return this.state.status === BrewCommandStatus.RUNNING;
   }
 
-  /**
-   * 中断已发出但还没到宽限期：按钮禁用。
-   *
-   * 宽限期到点由 `forceKillReady` 承载（runner 在定时回调里置真），所以这里只判断
-   * 「发出过中断、且还没到点」：它只用于禁用「中断」按钮，命令静默时也不会停在旧状态。
-   */
+  /** 中断已发出但还没到宽限期：结束按钮禁用 */
   private inGracePeriod(): boolean {
     return this.isRunning() && this.state.interruptSentAt > 0 && !this.state.forceKillReady;
   }
 
-  /** 宽限期已过且仍在运行：底部按钮从「中断」切到「强制终止」 */
+  /** 宽限期已过且还没强杀：这一次点击发的是 SIGTERM / SIGKILL */
   private canForceKill(): boolean {
     return this.isRunning() && !this.state.killSent && this.state.forceKillReady;
   }
 
-  /**
-   * 判断用户是否停在底部。
-   *
-   * 用可见的末条行号而不是「滚动偏移 + 视口高度」比较：偏移是像素、内容高度与区域高度是 vp，
-   * 三者混算需要额外的换算，而行号比较没有单位问题。
-   */
-  private updateFollowTail(lastVisible: number): void {
-    const total: number = this.state.lines.length + (this.state.omittedLines > 0 ? 1 : 0);
-    this.followTail = total === 0 || lastVisible >= total - 1;
+  /** 结束按钮的无障碍文案与当前动作一致：宽限期之前是中断，之后是强制终止 */
+  private stopLabel(): ResourceStr {
+    return this.canForceKill() ?
+      $r('app.string.brew_action_force_kill') : $r('app.string.brew_action_interrupt');
   }
 
-  private scrollToTail(): void {
-    this.scroller.scrollEdge(Edge.Bottom);
+  /** 标题栏菜单：结束命令（trash）+ 关闭（xmark） */
+  private titleMenus(): NavigationMenuItem[] {
+    const stop: NavigationMenuItem = {
+      value: this.stopLabel(),
+      symbolIcon: new SymbolGlyphModifier($r('sys.symbol.trash'))
+        .fontColor([LOG_TEXT_COLOR])
+        .fontSize(MENU_ICON_SIZE),
+      isEnabled: this.isRunning() && !this.inGracePeriod(),
+      action: () => {
+        // 两次点击走同一条升级链：第一次发 SIGINT，宽限期之后再点才升级成 SIGTERM / SIGKILL
+        if (this.canForceKill()) {
+          this.onForceKill();
+        } else {
+          this.onInterrupt();
+        }
+      },
+    };
+    const close: NavigationMenuItem = {
+      value: $r('app.string.brew_action_close'),
+      symbolIcon: new SymbolGlyphModifier($r('sys.symbol.xmark'))
+        .fontColor([LOG_TEXT_COLOR])
+        .fontSize(MENU_ICON_SIZE),
+      action: () => {
+        this.onClose();
+      },
+    };
+    const menus: NavigationMenuItem[] = [stop, close];
+    return menus;
   }
 
-  @Builder
-  LogLineBuilder(line: BrewCommandLine) {
-    // stdout 用主色、stderr 用次色：两路在设备上都是 brew 的原始输出，
-    // 颜色是唯一能一眼分辨「这行是进度」与「这行是错误」的办法
-    Text(line.text)
-      .fontSize($r('sys.float.Body_S'))
-      .fontColor(line.stderr ? $r('sys.color.font_secondary') : $r('sys.color.font_primary'))
-      .width(CommonConstants.FULL_PERCENT)
-      // 日志行不限制行数：brew 的错误信息常带很长的路径与依赖列表，截断等于丢掉排错信息
+  /** 标题栏样式：与内容区同一块黑底，标题用等宽白字 */
+  private titleOptions(): NavigationTitleOptions {
+    const options: NavigationTitleOptions = {
+      backgroundColor: SHEET_BACKGROUND,
+      mainTitleModifier: new TextModifier().fontColor(LOG_TEXT_COLOR).fontFamily(LOG_FONT_FAMILY),
+    };
+    return options;
   }
 
-  /**
-   * 新一批行落地后的跟随滚动。
-   *
-   * 用 `@Watch` 而不是 `onDidScroll`：后者只在用户滚动时触发，内容变高而用户没动时它一次都不响，
-   * 跟随就断了。这里监听 `state` 的属性变化，并把滚动推到下一轮：
-   * 回调触发时布局还没做完，此刻读到的 `contentSize` 还是旧值。
-   */
   private onLogChanged(): void {
     if (!this.followTail || this.scrollPending) {
       return;
@@ -118,125 +116,71 @@ export struct BrewCommandSheet {
     setTimeout(() => {
       this.scrollPending = false;
       if (this.followTail) {
-        this.scrollToTail();
+        this.scroller.scrollEdge(Edge.Bottom);
       }
     }, 0);
   }
 
+  /**
+   * 日志文本。整块日志是一个 `Text`：第一行是真正跑的命令行，后面每行一个 `Span`，
+   * stderr 行单独给 warning 色，命令结束之后在末尾追加状态行（如 `[已完成 退出码 0]`、`[已中断]`）。
+   */
   @Builder
-  ActionBuilder() {
-    Row() {
-      if (this.isRunning()) {
-        if (this.canForceKill()) {
-          Button($r('app.string.brew_action_force_kill'))
-            .height(ACTION_BUTTON_HEIGHT)
-            .fontSize($r('sys.float.Body_M'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .backgroundColor($r('sys.color.comp_background_tertiary'))
-            .borderRadius($r('sys.float.corner_radius_level4'))
-            .padding({ left: $r('sys.float.padding_level6'), right: $r('sys.float.padding_level6') })
-            .onClick(() => {
-              this.onForceKill();
-            })
-        } else {
-          Button($r('app.string.brew_action_interrupt'))
-            .height(ACTION_BUTTON_HEIGHT)
-            .fontSize($r('sys.float.Body_M'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .backgroundColor($r('sys.color.comp_background_tertiary'))
-            .borderRadius($r('sys.float.corner_radius_level4'))
-            .padding({ left: $r('sys.float.padding_level6'), right: $r('sys.float.padding_level6') })
-            .enabled(!this.inGracePeriod())
-            .onClick(() => {
-              this.onInterrupt();
-            })
-        }
-      } else {
-        Button($r('app.string.brew_action_close'))
-          .height(ACTION_BUTTON_HEIGHT)
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
-          .borderRadius($r('sys.float.corner_radius_level4'))
-          .padding({ left: $r('sys.float.padding_level6'), right: $r('sys.float.padding_level6') })
-          .onClick(() => {
-            this.onClose();
-          })
+  LogText() {
+    Text() {
+      // 第一行是命令行，让用户确认真跑的是哪条命令；空一行与输出分开
+      Span(`$ ${this.state.command}\n\n`)
+        .fontColor(LOG_TEXT_COLOR)
+      if (this.state.omittedLines > 0) {
+        Span($r('app.string.brew_cmd_omitted_lines', this.state.omittedLines))
+          .fontColor($r('sys.color.font_tertiary'))
+        Span('\n')
+      }
+      // 键用「行在日志里的总序号」（当前下标 + 已省略行数）而不是当前下标。
+      // 超出上限裁剪时最早的行被丢弃，同样的下标会指向不同的内容，
+      // 用当前下标做键会让已渲染的行保留旧文本，看起来像日志不更新。
+      ForEach(this.state.lines, (line: BrewCommandLine, index: number) => {
+        Span(`${line.text}\n`)
+          .fontColor(line.stderr ? $r('sys.color.warning') : LOG_TEXT_COLOR)
+      }, (line: BrewCommandLine, index: number) => `${this.state.omittedLines + index}`)
+      if (this.state.status !== BrewCommandStatus.IDLE) {
+        Span('\n')
+        Span(brewCommandStatusText(this.state))
+          .fontColor(LOG_TEXT_COLOR)
       }
     }
+    .fontFamily(LOG_FONT_FAMILY)
+    .fontSize($r('sys.float.Body_S'))
+    .fontColor(LOG_TEXT_COLOR)
+    // .lineHeight(LOG_LINE_HEIGHT)
     .width(CommonConstants.FULL_PERCENT)
-    .justifyContent(FlexAlign.End)
+    .textAlign(TextAlign.Start)
+    .padding($r('sys.float.padding_level6'))
   }
 
   build() {
-    Column() {
-      // 头部：标题与状态标签
-      Row() {
-        Text(this.state.title)
-          .fontSize($r('sys.float.Title_S'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Blank()
-        if (this.state.status !== BrewCommandStatus.IDLE) {
-          Text(this.statusText())
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor($r('sys.color.font_secondary'))
-            .padding({ left: $r('sys.float.padding_level3'), right: $r('sys.float.padding_level3') })
-            .borderRadius($r('sys.float.corner_radius_level4'))
-            .backgroundColor($r('sys.color.comp_background_tertiary'))
-        }
+    Navigation() {
+      Scroll(this.scroller) {
+        this.LogText()
       }
       .width(CommonConstants.FULL_PERCENT)
-      .alignItems(VerticalAlign.Center)
-
-      // 命令行：让用户确认真跑的是哪条命令。长命令换行，不截断
-      Text(this.state.command)
-        .fontSize($r('sys.float.Body_S'))
-        .fontColor($r('sys.color.font_secondary'))
-        .width(CommonConstants.FULL_PERCENT)
-        .margin({ top: $r('sys.float.padding_level2') })
-
-      // 日志区
-      List({ scroller: this.scroller }) {
-        if (this.state.omittedLines > 0) {
-          ListItem() {
-            Text($r('app.string.brew_cmd_omitted_lines', this.state.omittedLines))
-              .fontSize($r('sys.float.Body_S'))
-              .fontColor($r('sys.color.font_tertiary'))
-              .width(CommonConstants.FULL_PERCENT)
-          }
-        }
-        // 键用「行在日志里的总序号」（当前下标 + 已省略行数）而不是当前下标。
-        // 超出上限裁剪时最早的行被丢弃，同样的下标会指向不同的内容，
-        // 用当前下标做键会让已渲染的行保留旧文本，看起来像日志不更新。
-        // 序号稳定之后，追加的行是新键、只增量渲染已有的行不必重建。
-        ForEach(this.state.lines, (line: BrewCommandLine, index: number) => {
-          ListItem() {
-            this.LogLineBuilder(line)
-          }
-        }, (line: BrewCommandLine, index: number) => `${this.state.omittedLines + index}`)
-      }
-      .layoutWeight(1)
-      .width(CommonConstants.FULL_PERCENT)
+      .height(CommonConstants.FULL_PERCENT)
+      .align(Alignment.TopStart)
       .scrollBar(BarState.Auto)
-      .onScrollIndex((start: number, end: number) => {
-        this.updateFollowTail(end);
+      .onDidScroll((xOffset: number, yOffset: number, scrollState: ScrollState) => {
+        // 只在用户自己滚动时改跟随状态：程序化滚到底之后 `isAtEnd()` 为真，跟随状态保持不变
+        if (scrollState === ScrollState.Scroll) {
+          this.followTail = this.scroller.isAtEnd();
+        }
       })
-
-      this.ActionBuilder()
     }
+    .title(this.state.title, this.titleOptions())
+    .menus(this.titleMenus())
+    .hideBackButton(true)
+    .titleMode(NavigationTitleMode.Mini)
+    .mode(NavigationMode.Stack)
+    .backgroundColor(SHEET_BACKGROUND)
     .width(CommonConstants.FULL_PERCENT)
     .height(CommonConstants.FULL_PERCENT)
-    .padding({
-      left: $r('sys.float.padding_level6'),
-      right: $r('sys.float.padding_level6'),
-      top: $r('sys.float.padding_level6'),
-      bottom: $r('sys.float.padding_level6'),
-    })
   }
 }
