@@ -6,6 +6,7 @@ BrewLibrary is a **HarmonyOS PC (2in1)** app for browsing Homebrew packages: it 
 
 - Device type: 2in1 (PC) only, minimum window 1080 × 608
 - Compile target: HarmonyOS 6.1.0 (API 23), hvigor model 5.0.0
+- Version: 1.1.0
 - Stack: ArkTS / ArkUI (Stage model), two entry modules: `products/pc_acl` (full build, requests `CUSTOM_SANDBOX` and `READ_WRITE_USER_FILE`) and `products/pc_normal` (no restricted permissions)
 
 > 中文说明见 [README.md](README.md)。
@@ -14,7 +15,7 @@ BrewLibrary is a **HarmonyOS PC (2in1)** app for browsing Homebrew packages: it 
 
 | Tab | Description |
 | --- | --- |
-| **Discover** | Six recommendation boards. Board members and figures are computed on device, with a built-in fallback snapshot so the page still renders offline |
+| **Discover** | Six recommendation boards. Board members and figures are computed on device; the page shows an empty state when the catalog is unavailable |
 | **Formulae** | Formulae catalog: category chips, list and detail page |
 | **Casks** | Casks catalog, sharing components and the detail page with formulae |
 | **Search** | On-device search engine (dependency-free pure functions + lexicon scoring), works offline |
@@ -51,7 +52,7 @@ products/pc_acl/          entry module (full build): PcAbility, splash, main pag
 products/pc_normal/       entry module (no restricted permissions): PcAbility, splash, main page
 docs/                     Design docs and handover notes
 hmosword-build/
-  brew-mockgen/           Mock data generator and offline checkers (Python)
+  brew-mockgen/           Curated-list and board-algorithm checks (Python)
   brew-search/            Executable check for the search engine (Node)
 keys/                     Local signing material (git-ignored, not in the repo)
 ```

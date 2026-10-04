@@ -6,13 +6,14 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 
 - 设备形态：仅 2in1（PC），最小窗口 1080 × 608
 - 编译目标：HarmonyOS 6.1.0（API 23），hvigor 模型 5.0.0
-- 技术栈：ArkTS / ArkUI（Stage 模型），两个 entry 模块：`products/pc_acl`（完整版，申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`）与 `products/pc_normal`（普通版，不申请受限权限）
+- 版本：1.1.0
+- 使用的技术：ArkTS / ArkUI（Stage 模型），两个 entry 模块：`products/pc_acl`（完整版，申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`）与 `products/pc_normal`（普通版，不申请受限权限）
 
 ## 功能
 
 | 页签 | 说明 |
 | --- | --- |
-| **Discover** | 六个榜单推荐。榜单成员与数字在设备端现算，并内置回落快照，断网也能出内容 |
+| **Discover** | 六个榜单推荐。榜单成员与数字在设备端现算，目录不可用时显示空态 |
 | **Formulae** | formulae 目录：分类 chips + 列表 + 详情页 |
 | **Casks** | casks 目录，与 formulae 共用同一套组件与详情页 |
 | **Search** | 本地搜索引擎（零依赖纯函数引擎 + 词表打分），离线可搜 |
@@ -49,7 +50,7 @@ products/pc_acl/          entry 模块（完整版）：PcAbility、启动页、
 products/pc_normal/       entry 模块（普通版）：PcAbility、启动页、主页面
 docs/                     设计文档与交接说明
 hmosword-build/
-  brew-mockgen/           mock 数据生成器与离线校验脚本（Python）
+  brew-mockgen/           策展清单校验与榜单算法校验脚本（Python）
   brew-search/            搜索引擎的可执行检查（Node）
 keys/                     本机签名材料（已 gitignore，不入库）
 ```
