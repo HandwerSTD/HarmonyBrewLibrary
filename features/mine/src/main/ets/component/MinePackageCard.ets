@@ -58,6 +58,11 @@ export struct MinePackageCard {
    */
   @Prop loading: boolean = false;
   handleViewAll?: () => void;
+  /**
+   * 点击某一行本机包。导航由「我的」页决定（本组件不持有路由逻辑，与 `BrewLocalPackageRow`
+   * 同一口径：点击用 `.onClick()` 挂在行组件调用上）。
+   */
+  handlePackageClick?: (pkg: BrewInstalledPackage) => void;
 
   @Builder
   HeaderBuilder() {
@@ -79,6 +84,9 @@ export struct MinePackageCard {
           installedPackage: pkg,
           itemHeight: $r('app.float.mine_preview_row_height'),
         })
+          .onClick(() => {
+            this.handlePackageClick?.(pkg);
+          })
       }, (pkg: BrewInstalledPackage) => pkg.fullName)
     }
     .width(CommonConstants.FULL_PERCENT)

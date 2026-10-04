@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-import { BrewKind } from '@ohos/brewcommon';
-import type { BrewInstalledPackage } from '@ohos/brewcommon';
+import { BrewFormat, BrewKind } from '@ohos/brewcommon';
+import type { BrewDetailParams, BrewInstalledPackage } from '@ohos/brewcommon';
 import { BrewInstalledLoader } from '@ohos/brewcommon';
 import type { BrewInstalledSets } from '@ohos/brewcommon';
 import { MinePackageSets, PackageListMode } from '../model/MinePackagesModels';
@@ -52,6 +52,23 @@ export class MinePackagesUtil {
       return sets.updated;
     }
     return sets.installed;
+  }
+
+  /**
+   * 本机包 -> 详情页路由参数。两个点击入口（「我的」页的卡片预览与「本机包」二级页）共用，
+   * 避免 token 的口径各写一遍。
+   *
+   * `id` 传 0：本机数据里没有目录 id，详情取数层会用 `tokenId(token)` 派生（与目录条目派生出的
+   * id 是同一个函数）。`categoryKey` 留空：由详情取数层按目录描述补算。
+   */
+  public static detailParamsOf(pkg: BrewInstalledPackage): BrewDetailParams {
+    return {
+      kind: BrewFormat.brewKindOf(pkg.kind),
+      title: pkg.name,
+      id: 0,
+      token: pkg.name,
+      categoryKey: '',
+    };
   }
 
   /**

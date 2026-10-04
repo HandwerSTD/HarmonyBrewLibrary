@@ -25,6 +25,7 @@ import {
   LoadingFailedView,
   LoadingStatus,
   NoNetworkView,
+  PageEnum,
   StatusBarColorType,
   StorageKey,
 } from '@ohos/common';
@@ -32,6 +33,7 @@ import { BREW_CHIP_BAR_HEIGHT, BrewChipBar, BrewLocalPackageRow, brewTitleBarSty
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { PackageListMode } from '../model/MinePackagesModels';
 import type { MinePackagesParams } from '../model/MinePackagesModels';
+import { MinePackagesUtil } from '../util/MinePackagesUtil';
 import { MinePackagesState } from '../viewmodel/MinePackagesState';
 import { MinePackagesVM } from '../viewmodel/MinePackagesVM';
 
@@ -67,6 +69,17 @@ export struct MinePackagesView {
     this.pathStack = ctx?.pathStack;
     const params: MinePackagesParams = ctx?.pathInfo?.param as MinePackagesParams;
     this.viewModel.load(params?.mode ?? PackageListMode.ALL);
+  }
+
+  /**
+   * 行点击 -> 详情页。本页已经在详情页同一条 `NavPathStack` 上（二级页由「我的」页 pushPath 进来），
+   * 继续压入详情页，返回时回到本页。路由参数与「我的」页的预览行同一个口径。
+   */
+  private openDetail(pkg: BrewInstalledPackage): void {
+    this.pathStack?.pushPath({
+      name: PageEnum.BREW_DETAIL_VIEW,
+      param: MinePackagesUtil.detailParamsOf(pkg),
+    }, true);
   }
 
   private titleOf(mode: PackageListMode): ResourceStr {
@@ -109,6 +122,9 @@ export struct MinePackagesView {
           Column() {
             ForEach(this.packagesState.filteredPackages, (pkg: BrewInstalledPackage) => {
               BrewLocalPackageRow({ installedPackage: pkg })
+                .onClick(() => {
+                  this.openDetail(pkg);
+                })
             }, (pkg: BrewInstalledPackage) => pkg.fullName)
           }
           .width(CommonConstants.FULL_PERCENT)

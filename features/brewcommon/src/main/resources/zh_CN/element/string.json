@@ -515,6 +515,10 @@
     {
       "name": "brew_fetching_data",
       "value": "正在获取 Homebrew 数据…"
+    },
+    {
+      "name": "brew_detail_absent",
+      "value": "当前数据源中没有「%s」这个包，它可能来自自定义 tap"
     }
   ]
 }

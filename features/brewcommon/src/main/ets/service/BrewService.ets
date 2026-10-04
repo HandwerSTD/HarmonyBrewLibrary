@@ -18,6 +18,26 @@ import { BREW_DETAIL_CACHE_KEY, BREW_DETAIL_VIEW_KEY, BREW_LIVE_FRESH_MS } from 
 const TAG: string = '[BrewService]';
 
 /**
+ * 数据源明确回答「没有这个包」（404 / 410）。
+ *
+ * 与取数失败分开：详情页据此显示「未找到」，不再回退到骨架或历史详情。
+ * 抛出点只有 `BrewService.fetchDoc`，消费点只有 `BrewRepository` 与详情页。
+ */
+export class BrewDocAbsentError extends Error {
+  public readonly kind: string;
+  public readonly token: string;
+  public readonly status: number;
+
+  public constructor(kind: string, token: string, status: number) {
+    super('doc absent: kind=' + kind + ' token=' + token + ' status=' + status);
+    this.name = 'BrewDocAbsentError';
+    this.kind = kind;
+    this.token = token;
+    this.status = status;
+  }
+}
+
+/**
  * 详情页的**原始文档**缓存条目（按 `kind_token` 索引）。
  *
  * 存原始文档而不是归一后的视图数据，是因为条件请求的基准（`lastModified`）必须跟着
@@ -152,10 +172,15 @@ export class BrewService {
             `kind=${kind} token=${token} 0B 续期，条目时间戳已推进`);
           return hit.data as T;
         }
-        if (res.code !== 200) {
-          // 404/410 = 上游确认没这个包（详情页可能被历史链接或旧的分类带进来）
+        if (res.code === 404 || res.code === 410) {
+          // 404/410 = 上游确认没这个包（详情页可能被历史链接、旧的分类或自定义 tap 的包带进来）。
+          // 抛专用类型，让详情页显示「未找到」而不是回退到骨架
           Logger.info(TAG, `doc absent upstream (${res.code}), key=${cacheKey}`);
           BrewLoadLog.warn('detail_doc', 'absent', 0, `kind=${kind} token=${token} 上游返回 ${res.code}`);
+          throw new BrewDocAbsentError(kind, token, res.code);
+        }
+        if (res.code !== 200) {
+          Logger.info(TAG, `doc unexpected status (${res.code}), key=${cacheKey}`);
           throw new Error(`unexpected status ${res.code}`);
         }
         const entry: DetailCacheEntry<Object> = {
@@ -178,6 +203,10 @@ export class BrewService {
         return doc;
       })
       .catch((error: Error) => {
+        // 「数据源里没有这个包」是确定结论，不算取数失败：不计数、不打 fetch-failed
+        if (error instanceof BrewDocAbsentError) {
+          throw error;
+        }
         BrewService.failures++;
         Logger.error(TAG, `fetch failed, key=${cacheKey}, ${error.message}`);
         BrewLoadLog.warn('detail_doc', 'fetch-failed', 0, `kind=${kind} token=${token} ${error.message}`);

@@ -5,7 +5,7 @@
 import { Logger } from '@ohos/common';
 import { BrewLoadLog } from '../util/BrewLoadLog';
 import { BrewNetNotice } from '../util/BrewNetNotice';
-import { BrewService } from '../service/BrewService';
+import { BrewService, BrewDocAbsentError } from '../service/BrewService';
 import { BrewTable, BrewKindText } from '../service/BrewTable';
 import type { CatalogEntry, CatalogKindMeta } from '../service/BrewTable';
 import { BrewBrowseBuilder } from '../service/BrewBrowseBuilder';
@@ -129,10 +129,11 @@ export class BrewFormulaModel {
    *   1. 现网单条 `/api/formula/<token>.json` —— 描述 / 版本 / 依赖 / bottle / 热度全在这里；
    *   2. 本地才有的两样由设备端算：`id`（token 的稳定哈希，只当路由参数与缓存键）与
    *      `categoryKey`（`BrewTaxonomy`：策展覆盖 → 关键词 → 兜底）；
-   *   3. 现网失败 → 上一次成功归一过的详情 → 只剩骨架的 base（降级但不报错）。
+   *   3. 数据源返回 404 / 410 → 抛 `BrewDocAbsentError`，详情页显示「未找到」，**不回退**；
+   *   4. 其余失败 → 上一次成功归一过的详情；没有历史详情时把异常交给详情页（失败态可重试）。
    *
-   * 降级也不报错：详情页的失败态应该只留给「这个 token 根本不存在」，
-   * 而不是「网不好的时候打不开已缓存内容」。
+   * 缓存键用派生后的 `id`，与传进来的 `componentId` 无关：本机包没有目录 id、传 0 进来，
+   * 多个本机包才不会共用一个缓存槽。
    */
   public getFormulaDetail(componentId: number, token: string): Promise<BrewFormulaDetail> {
     const id: number = componentId > 0 ? componentId : BrewBrowseBuilder.tokenId(token);
@@ -147,13 +148,21 @@ export class BrewFormulaModel {
         return BrewApiMapper.mergeFormula(base, doc);
       })
       .then((merged: BrewFormulaDetail) => {
-        BrewService.saveDetail(componentId, merged);
+        BrewService.saveDetail(id, merged);
         Logger.info(TAG, `getFormulaDetail live ok, token=${token}, v=${merged.stableVersion}`);
         return merged;
       })
       .catch((error: Error) => {
-        Logger.error(TAG, `getFormulaDetail live failed, fallback to cache/base. token=${token}, ${error.message}`);
-        return this.cachedFormulaDetail(componentId, this.degradedFormula(token, id));
+        if (error instanceof BrewDocAbsentError) {
+          Logger.info(TAG, `getFormulaDetail absent, token=${token}, status=${error.status}`);
+          throw error;
+        }
+        Logger.error(TAG, `getFormulaDetail live failed, fallback to cache. token=${token}, ${error.message}`);
+        const cached: BrewFormulaDetail | null = BrewService.cachedDetail<BrewFormulaDetail>(id);
+        if (cached !== null) {
+          return cached;
+        }
+        throw error;
       });
   }
 
@@ -164,9 +173,15 @@ export class BrewFormulaModel {
       BrewService.catalogInstallsOf(BrewKindText.FORMULA, token));
   }
 
-  /** 现网失败时的回落：优先用上一次成功合并的详情，没有就用骨架 */
-  private cachedFormulaDetail(componentId: number, base: BrewFormulaDetail): BrewFormulaDetail {
-    return BrewService.cachedDetail<BrewFormulaDetail>(componentId) ?? base;
+  /**
+   * 目录描述片里有这个 token 时按词表算出分类；没有描述就算不出分类，返回空串。
+   *
+   * 供详情页在路由参数没带分类时补算（本机包入口就是这种情况）。描述是词表的输入，
+   * 没有描述时词表会返回兜底分类，从兜底分类里取「同分类其他包」没有意义。
+   */
+  public categoryKeyOf(token: string): string {
+    const desc: string = BrewTable.descOf(BrewKindText.FORMULA, token);
+    return desc.length === 0 ? '' : BrewTaxonomy.categoryOf(BrewKindText.FORMULA, token, desc);
   }
 }
 
@@ -216,13 +231,21 @@ export class BrewCaskModel {
         return BrewApiMapper.mergeCask(base, doc);
       })
       .then((merged: BrewCaskDetail) => {
-        BrewService.saveDetail(componentId, merged);
+        BrewService.saveDetail(id, merged);
         Logger.info(TAG, `getCaskDetail live ok, token=${token}, v=${merged.version}`);
         return merged;
       })
       .catch((error: Error) => {
-        Logger.error(TAG, `getCaskDetail live failed, fallback to cache/base. token=${token}, ${error.message}`);
-        return this.cachedCaskDetail(componentId, this.degradedCask(token, id));
+        if (error instanceof BrewDocAbsentError) {
+          Logger.info(TAG, `getCaskDetail absent, token=${token}, status=${error.status}`);
+          throw error;
+        }
+        Logger.error(TAG, `getCaskDetail live failed, fallback to cache. token=${token}, ${error.message}`);
+        const cached: BrewCaskDetail | null = BrewService.cachedDetail<BrewCaskDetail>(id);
+        if (cached !== null) {
+          return cached;
+        }
+        throw error;
       });
   }
 
@@ -232,8 +255,10 @@ export class BrewCaskModel {
       BrewService.catalogInstallsOf(BrewKindText.CASK, token));
   }
 
-  private cachedCaskDetail(componentId: number, base: BrewCaskDetail): BrewCaskDetail {
-    return BrewService.cachedDetail<BrewCaskDetail>(componentId) ?? base;
+  /** 同 `BrewFormulaModel.categoryKeyOf`（cask 的分类取 `BrewKindText.CASK`） */
+  public categoryKeyOf(token: string): string {
+    const desc: string = BrewTable.descOf(BrewKindText.CASK, token);
+    return desc.length === 0 ? '' : BrewTaxonomy.categoryOf(BrewKindText.CASK, token, desc);
   }
 
   public getCaskCategories(): Promise<BrewCaskCategory[]> {

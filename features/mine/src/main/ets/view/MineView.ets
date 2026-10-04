@@ -36,6 +36,7 @@ import {
 } from '@ohos/common';
 import { BaseHomeEventType, HomeListParams } from '@ohos/commonbusiness';
 import { brewTitleBarStyle } from '@ohos/brewcommon';
+import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { MineEventType, MinePageVM, } from '../viewmodel/MinePageVM';
 import { BuilderEnum, ListGroup, MineItem, MinePageState, PackageCardType } from '../viewmodel/MinePageState';
 import { UserExperienceCardItem } from '../component/UserExperienceCardItem';
@@ -191,6 +192,9 @@ export struct MineView {
                     if (item.onclick) {
                       item.onclick();
                     }
+                  },
+                  handlePackageClick: (pkg: BrewInstalledPackage) => {
+                    this.viewModel.jumpToPackageDetail(pkg);
                   },
                 })
                   .width(CommonConstants.FULL_PERCENT)

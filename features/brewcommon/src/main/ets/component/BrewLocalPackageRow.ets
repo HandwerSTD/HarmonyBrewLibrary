@@ -27,8 +27,9 @@ import { BrewPackageIcon } from './BrewPackageIcon';
  *   尾部槽位（宽度最短）  来源：主动安装 / 作为依赖安装
  * 反过来的话 cask 的长版本号会被尾部槽位截掉，等于没显示。
  *
- * 没有箭头、不可点击：本机包数据里只有 token，没有商店目录里的包 id，
- * 无法据此打开详情页（见 docs §11 的遗留项）。
+ * 右侧箭头表示这一行可以点进详情页。导航不在这里做：点击由调用方 `.onClick()` 挂在组件调用上，
+ * 与 `BrewPackageRow` 各处调用点相同 —— 参数式的点击回调会被 `HdsListItemCard` 丢掉
+ * （无编译错误、无运行时报错，行就是点不动）。
  */
 @Component
 export struct BrewLocalPackageRow {
@@ -63,6 +64,11 @@ export struct BrewLocalPackageRow {
         .maxLines(1)
         .ellipsisMode(EllipsisMode.END)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+      // 可点击的提示，样式与 `BrewPackageRow.HeatBuilder` 的箭头相同
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontColor([$r('sys.color.icon_secondary')])
+        .fontSize($r('sys.float.Title_M'))
+        .margin({ left: $r('sys.float.padding_level4') })
     }
     .alignItems(VerticalAlign.Center)
     .padding({ right: $r('sys.float.padding_level4') })

@@ -14,6 +14,8 @@ import {
   LoadingStatus,
   NoNetworkView,
   PageEnum,
+  StatePlaceholderKind,
+  StatePlaceholderView,
   StorageKey,
   StatusBarColorType,
 } from '@ohos/common';
@@ -86,10 +88,12 @@ export struct BrewDetailView {
     this.detailState.pathStack?.pushPath({ name: PageEnum.BREW_DETAIL_VIEW, param: params }, true);
   }
 
-  /** 失败/无网时的重试。必须重新发请求 —— 只重置标志位的话按钮点了没反应。 */
+  /** 失败/无网/未找到时的重试。必须重新发请求 —— 只重置标志位的话按钮点了没反应。
+   * 条件是「有 token 或有 id」：本机包入口的 id 是 0，只判 id 会让重试按钮失效。 */
   private retry(): void {
-    if (this.detailState.params.id > 0) {
-      this.viewModel.load(this.detailState.params, this.detailState);
+    const params: BrewDetailParams = this.detailState.params;
+    if (params.id > 0 || params.token.length > 0) {
+      this.viewModel.load(params, this.detailState);
     }
   }
 
@@ -200,6 +204,17 @@ export struct BrewDetailView {
       } else if (this.detailState.loadingModel.loadingStatus === LoadingStatus.NO_NETWORK) {
         NoNetworkView(this.globalInfoModel.widthBreakpoint, () => {
           this.retry();
+        })
+      } else if (this.detailState.loadingModel.loadingStatus === LoadingStatus.NOT_FOUND) {
+        // 数据源确认没有这个包（自定义 tap 安装的本机包就是这种情况）。
+        // 重试只重新取单条：源的数据变了之后重试才会成功
+        StatePlaceholderView({
+          kind: StatePlaceholderKind.EMPTY,
+          message: $r('app.string.brew_detail_absent', this.detailState.params.token),
+          actionLabel: $r('app.string.state_retry'),
+          onAction: () => {
+            this.retry();
+          },
         })
       }
     }

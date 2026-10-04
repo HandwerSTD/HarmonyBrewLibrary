@@ -14,7 +14,7 @@
  */
 
 import type { BusinessError } from '@kit.BasicServicesKit';
-import { LoadingStatus, Logger } from '@ohos/common';
+import { LoadingModel, LoadingStatus, Logger } from '@ohos/common';
 import { BrewChipItem } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { PackageListMode } from '../model/MinePackagesModels';
@@ -67,23 +67,33 @@ export class MinePackagesVM {
     this.state.filterIndex = FILTER_ALL;
     this.state.packages = [];
     this.state.filteredPackages = [];
-    this.state.loadingModel.loadingStatus = LoadingStatus.LOADING;
+    this.setStatus(LoadingStatus.LOADING);
 
     MinePackagesUtil.loadSets()
       .then((sets) => {
         const list: BrewInstalledPackage[] = MinePackagesUtil.pick(sets, mode);
         this.state.packages = list;
         this.state.filteredPackages = list;
-        this.state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
+        this.setStatus(LoadingStatus.SUCCESS);
         Logger.info(TAG, `load success, mode=${mode} count=${list.length}`);
       })
       .catch((error: BusinessError) => {
         // 本机包读不到一律走失败态：`error.message` 里是 `BrewInstalledFailure` 的分类
         // （找不到 brew / 执行能力不可用 / 超时 / 非零退出 / 输出解析失败 / 形状不符）。
         // 分类只进日志 —— 用户看到「读不到本机包」就够，不需要知道是超时还是输出形状变了。
-        this.state.loadingModel.loadingStatus = LoadingStatus.FAILED;
+        this.setStatus(LoadingStatus.FAILED);
         Logger.error(TAG, `load failed. reason=${error.message} code=${error.code}`);
       });
+  }
+
+  /**
+   * 改加载状态。**整体替换 `loadingModel`**：页面用 `@State packagesState` 持有本状态类，
+   * 状态管理 V1 只能观察到第一层属性的变化（不递归观察嵌套属性）。
+   * 写 `state.loadingModel.loadingStatus` 时日志里有状态、页面不变 —— 失败态会一直停在转圈，
+   * 因为失败路径不再有一级属性赋值跟着它一起触发重渲染。
+   */
+  private setStatus(status: LoadingStatus): void {
+    this.state.loadingModel = new LoadingModel(status);
   }
 
   /** 切换筛选 chips */

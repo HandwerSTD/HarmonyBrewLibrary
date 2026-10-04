@@ -26,6 +26,7 @@ import {
   UserAccount,
 } from '@ohos/common';
 import { BaseHomeEventParam, BaseHomeEventType, BaseHomeViewModel } from '@ohos/commonbusiness';
+import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { MineSettingBuilder } from '../view/MineSettingView';
 import { MinePackagesUtil } from '../util/MinePackagesUtil';
 import type { MinePackageSets } from '../model/MinePackagesModels';
@@ -261,13 +262,28 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
   }
 
   private jumpToPackagesPage(mode: PackageListMode): void {
-    const pageContext: PageContext | undefined = AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT) ?
-      AppStorage.get<PageContext>(StorageKey.MINE_PAGE_CONTEXT) :
-      AppStorage.get<PageContext>(StorageKey.HOME_PAGE_CONTEXT);
-    pageContext?.openPage({
+    this.packagePageContext()?.openPage({
       routerName: PageEnum.MINE_PACKAGES_VIEW,
       param: { mode: mode } as MinePackagesParams,
     }, true);
+  }
+
+  /**
+   * 本机包行 -> 详情页。路由参数收在 `MinePackagesUtil.detailParamsOf`，与「本机包」二级页共用；
+   * 页面上下文与「查看全部」相同（两个入口都在「我的」页上）。
+   */
+  public jumpToPackageDetail(pkg: BrewInstalledPackage): void {
+    this.packagePageContext()?.openPage({
+      routerName: PageEnum.BREW_DETAIL_VIEW,
+      param: MinePackagesUtil.detailParamsOf(pkg),
+    }, true);
+  }
+
+  /** 「我的」相关二级页用哪条导航路径。侧边栏布局下「我的」有自己的一条，其余布局共用首页那条 */
+  private packagePageContext(): PageContext | undefined {
+    return AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT) ?
+      AppStorage.get<PageContext>(StorageKey.MINE_PAGE_CONTEXT) :
+      AppStorage.get<PageContext>(StorageKey.HOME_PAGE_CONTEXT);
   }
 
   private login(): void {

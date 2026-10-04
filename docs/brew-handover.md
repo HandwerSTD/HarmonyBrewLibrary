@@ -315,13 +315,13 @@ Harmonybrew 详情不请求网络。目录正文路径是
 统一的「行 + 分区」，UI 里只有一处 `kind` 分支。`BrewDetailViewModel` 是**无状态**的，
 `BrewDetailState` 由页面自己 `new`。
 
-**骨架来源（2026-09 变更）**：`BrewRepository.getFormulaDetail/getCaskDetail` 先按 `id`
-在**首页快照**（`brew-{formula,cask}-page.json`，已按 id 定位、不必整份解析成详情）里取条目，
-合成骨架（id/分类/名次/desc/license/homepage/版本/安装量/生命周期），再用现网单条
-`mergeFormula/mergeCask` 覆盖官方字段，最后 `alignCategoryRank` 校正名次。
-原 `brew-{formula,cask}-details.json`（443.6 KB）**已删除**。
-回落顺序：现网失败 → 上一次成功合并的整页 Preference 缓存 → 只剩骨架的 base（降级但不报错）。
-判据：`getCaskDetail live ok, token=cursor, v=3.21.9,...`；出现 `fallback to cache/base` 即降级。
+**取数与回退（2026-10 口径）**：`BrewRepository.getFormulaDetail/getCaskDetail` 按 token 取现网单条，
+合并到 `BrewApiMapper.formulaBase/caskBase` 给出的底座上；本地才有的 `id`
+（`BrewBrowseBuilder.tokenId(token)`）与 `categoryKey`（`BrewTaxonomy`，输入是目录描述）由设备端算。
+三条结局：单条 404 / 410 → `BrewDocAbsentError` → 详情页显示「未找到」（自定义 tap 的本机包就是这种）；
+其余失败 → 上一次成功归一过的详情；没有历史详情 → 失败态（可重试）。
+判据：`getCaskDetail live ok, token=cursor, v=3.21.9,...`；`fallback to cache` 表示用了历史详情；
+`load absent, kind=formula token=X status=404` 表示「未找到」。
 
 ### 6.3 Mine（`features/mine`，就地改造）
 
@@ -329,6 +329,8 @@ Harmonybrew 详情不请求网络。目录正文路径是
 三个包集合口径统一在 `MinePackagesUtil.loadSets()`：
 `installed`（60）/ `outdated`（8）/ `updated`（52 = installed − outdated，按 `installedAt` 倒序）。
 三个入口**共用二级页** `MinePackagesView`，靠路由参数 `mode` 区分。
+本机包行（两张卡片的预览行与二级页的行）都能点进包详情页，路由参数由
+`MinePackagesUtil.detailParamsOf(pkg)` 统一给出（`id` 传 0，取数层按 token 派生）。
 
 ### 6.4 Discover（`brewdiscover`）
 
@@ -394,6 +396,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 | 纯图标控件"没渲染" | §9.5.1 | simplified 模式不列无文字的 Button → 用 `--mode full` |
 | 行/卡片点不动 | §13.9 | 回调链路齐全但 `build()` 里根本没挂 `.onClick` —— 有回调 ≠ 接了线 |
 | 「点了没反应」（chips/按钮），但日志显示回调执行了 | §10.5.2 | 两种成因：① `ui click` 打在**非前台窗口**上（无报错，`ui layout` 会返回 `[0,0,0,0]`）；② 真的没重渲染（把选中态放在 state 对象上由 VM 赋值时踩过）。先分清是哪一种 |
+| 详情页失败态 / 「未找到」态内容区空白，日志里状态已经变了 | §10.4.2 | ArkUI V1 的 `@State` **只观察第一层属性**：写 `state.loadingModel.loadingStatus` 不触发重渲染。加载状态要整体替换 `loadingModel` |
 | 标题栏模糊「先空行程、后猛增」 | `hds-titlebar-blur.md` §5 坑1/坑2（速查 §9.12） | HDS 的偏移量取值 [0,+∞)、越界**静默**按默认值处理（负数 = 0）；而 `contentStartOffset` 会把滚动坐标系左移 C（静止时自报 −C）→ 起点永远够不到。让位要写进**内容**（占位块 / 内层 margin），区间恒为 `[0,104]` |
 | 标题栏不模糊（其它页面有） | `hds-titlebar-blur.md` §5 坑3/坑5 | 容器 `padding` 把内容裁剪了 → 让位改用**内容里的占位**；无 banner 的页套基类的 banner 公式还会算出反向区间 |
 | 标题栏「一滚就全糊」、没有渐变 | `hds-titlebar-blur.md` §5 坑4 | 只写了材质/类型、没写区间 → HDS 默认区间只有 8vp |
@@ -445,7 +448,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 | **浏览分页** | 现在是硬裁切前 100（`BREW_BROWSE_LIMIT`）。分页要做的是"每页条数 + 向下翻"，语义不变（分类与名次始终在**取到的这一批**内计算）。**已另立 spec：`brew-catalog-fullsync-spec.md`**（先把"分类依赖现拉 desc"这个根因去掉，cap 的技术限制随之消失） |
 | **无网时三个页签都是空态** | 内置快照已于 2026-10 全部删除（page / details / discover / local），所以无网时 Formulae、Casks、Discover 都走空态，Mine 恒显示 0 个包。这是**已知取舍**（用户已接受）：失去「断网评审演示」能力，换来「屏幕上每个数字都是真的」。要留离线演示得重新产一份很瘦的回落，并**连同 `MockRequest` / `TriggerEnums` 一起回来** |
 | **词表对"库/工具链"覆盖不足** | 实测顶部 100 个包里约一半落进兜底（`openssl@3` / `protobuf` / `neovim` / `poppler` / `pipx` … 关键词确实判不出来）。这些包在界面上会出现在 `系统与运维`/`系统工具`。要改善就补 `lexicon.json` 的关键词（改完要重新生成 `BrewTaxonomy.ets`） |
-| **本机包行不可点** | 本机数据只有 token，没有商店目录里的包 id，而详情页按 id 加载。要做需先加「按 token 查 id」。数据源已接上（`BrewInstalledLoader`），剩下的只是这个跳转 |
+| ~~本机包行不可点~~ | **已实现（2026-10）**：「我的」页两张卡片的预览行与「本机包」二级页的行都能点进详情页。路由参数 `id` 传 0，取数层用 `tokenId(token)` 派生；数据源目录里没有这个 token 时详情页显示「未找到」 |
 | **本机状态徽标** | `installed` / `outdated` / `pinned` 已建模但未使用（需接 `brew info --json`） |
 | ~~Mine 的 taps / services~~ | **已处理（2026-09 删除）**：`brew-local-taps.json` / `brew-local-services.json` 与 `overview` 一样从未被 UI 调用，三个文件 + `BrewLocalModel` 的三个方法 + `TriggerEnums` 成员已一并删除 |
 | **Cask 图标/截图** | **本轮暂不接入（2026-09-21 需求方决定）**，维持代码画的视觉。⚠️ "无可用来源（`appcasks` 实测 404）"**是错的**：候选源 `App-Fair/appcasks` 未归档、带 `cask-<token>/AppIcon.png`，只是**覆盖率没量化**。重启时第 1 步是全量 7,745 个 cask 对账（详见 `brew-discover-algo.md` §1.2/§8） |

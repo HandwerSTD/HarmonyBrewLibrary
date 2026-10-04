@@ -355,10 +355,10 @@ hydrate done, 119/119 (failed 0), 5ms | session hit=0 renewed=716 notModified=0 
 |---|---|---|---|
 | Formulae / Casks 首页 | 分类卡与成员 | 每个条目的版本/描述/安装量/生命周期 | 名次按现网安装量在**本分类内**重排，与卡片上的数字自洽 |
 | ~~本周热门 banner~~ | ~~Top4 的成员来自快照~~ | —— | **端点已删除**：从来没有 UI 调用点（两个首页 `bannerHeight` 固定为 0） |
-| 包详情页 | **首页条目的 14 个字段**（id / 分类 / 名次 / desc / 版本 / 安装量 / 生命周期…） | 除上述外还有依赖、bottle 标签、artifacts、caveats、安装命令 | 分类名次用同分类的现网值校正，避免“安装量是新的、名次是旧的”。骨架不再是 243 KB 的 details 文件（已删）：**现网那步失败时会降级成骨架字段**（其余段落不渲染，不是错误页） |
+| 包详情页 | **设备端算出的 id 与分类**（`BrewBrowseBuilder.tokenId(token)` / `BrewTaxonomy`，输入是目录描述） | 描述 / 版本 / 依赖 / bottle 标签 / artifacts / caveats / 生命周期 / 热度，全部来自现网单条 | 单条 404 / 410 → 显示「未找到」（自定义 tap 的本机包就是这种）；其余失败 → 上一次成功归一过的详情；没有历史详情 → 失败态（可重试）。见 §10.4 |
 | 榜单二级页 | 整个榜单（成员与顺序） | 同首页 | 复用同一次 hydrate |
 | **Discover 三榜** | id / 分类（join 用） | **成员与数字全部现网**：聚合端点 → 设备端现算（见 §7.4.1） | 之前是“成员快照、数字现网”，现已统一 |
-| **我的（本机包）** | 纯 Mock | —— | HarmonyOS 上没有 `brew` 可执行，**没有真源**；将来要么接服务端上报，要么保持演示数据 |
+| **我的（本机包）** | 设备上的 brew 安装记录 | —— | 来自 `<brew> info --json=v2 --installed`（`BrewInstalledLoader`）。本机包行可点进详情页；详情页按 token 取单条，数据源里没有这个包时显示「未找到」（见 §12.1） |
 
 #### 7.4.1 设备端目录：聚合端点 + 现算三榜 + 设备端浏览页
 
@@ -1302,6 +1302,11 @@ macosRequirement / autoUpdates），而 ArkTS 没有可收窄的判别联合 —
 所以 `BrewDetailNormalizer` 把两种包各自转成统一的「行 + 分区」结构，页面只认这一套，
 全部渲染代码里只有一处 `kind` 分支（决定点击同类包时回传的 kind）。
 
+**终局分流（`BrewDetailViewModel.load`）**：单条取数 404 / 410 → `LoadingStatus.NOT_FOUND`
+（「未找到」整页占位，自定义 tap 安装的本机包就是这种）；网络不通 → `NO_NETWORK`；
+其余失败 → `FAILED`。取数层在抛出前会先回退到上一次成功归一过的详情，所以后两者只在
+本地没有该包的历史详情时出现。
+
 #### 10.4.1 「每页实例」的状态不能放在共享对象上（返回键失效的成因）
 
 详情页可以**叠在详情页上** —— 点「同分类其他包」会 `pushPath` 出一个新的详情页。
@@ -1344,6 +1349,27 @@ macosRequirement / autoUpdates），而 ArkTS 没有可收窄的判别联合 —
 |---|---|
 | ArkUI 的 `if` 分支**不给属性表达式做联合类型收窄** | `lifecycle` 不用 `BrewLifecycleNotice \| null`，而是恒非 null + 一个 `hasLifecycle` 布尔量 |
 | `@State` 只观察所持对象的**一级属性** | `siblings`（同类包）不嵌在 `data` 里，而是与 `data` 平级 —— 它是单独一个请求，晚于详情返回，嵌在里面赋值不会触发刷新 |
+
+#### 10.4.2 加载状态必须整体替换 `loadingModel`（`@State` 只观察第一层属性）
+
+页面用 `@State detailState` 持有 `BrewDetailState`，而状态管理 V1 对 `@State` 对象的观察
+**只有第一层属性**，不递归观察嵌套属性（官方文档 `arkts-state-management-glossary.md`：
+「状态管理V1的观察能力，仅能观察到 `@State`、`@Prop` 等 V1 装饰器装饰的状态变量第一层属性的变化，
+无法递归观察深层嵌套属性」）。
+
+`BrewDetailViewModel` 原先写 `state.loadingModel.loadingStatus = …`（第二层），结果是：
+日志里状态确实变了（`load absent, kind=…`），页面一帧不变 —— 内容区永远空白，
+连失败态与「未找到」占位里的重试按钮都出不来。**成功路径一直是好的**：`state.data = data`
+是第一层赋值，它触发的重渲染顺带把状态读了出来，掩盖了这个问题。
+
+改法：状态变化统一走 `BrewDetailViewModel.setStatus(state, status)`，内部用
+`state.loadingModel = new LoadingModel(status)` 整体替换这个第一层字段。
+`MinePackagesVM` 的失败态有同样的问题（失败路径不再有一级属性赋值跟着触发重渲染，
+表现为转圈不停），同样改为整体替换。
+
+真机判据：点一个数据源里不存在的包（如 `ohos-sdk`）后，`ui layout` 里应出现
+「当前数据源中没有「ohos-sdk」这个包，它可能来自自定义 tap」与「重试」按钮；
+修复前只有标题，内容区一个节点都没有。
 
 ### 10.5 两个页签同形态（分类卡 + 「查看全部」二级页），差异只在数据形状
 
@@ -1526,7 +1552,7 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 | 安装选项面板 | 已按决策移除（`options` 恒为空），不再列入待办 |
 | 本机状态徽标 | 详情页与列表页都还没用 `installed` / `outdated` / `pinned`（mock 里为空，需接 `brew info --json` 才有值） |
 | 搜索 | 本轮仅规划：入口 UI + `BrewSearchService` 空实现，不新增路由 |
-| 本机包行不可点击 | 「我的 - 本机包」列表的行只展示、不可点进详情页。本机数据里只有 token，没有商店目录里的包 id，而详情页按 id 加载。要做需要先加「按 token 查 id」的仓库方法（`brew info --json` 里有 `homepage`，但目录侧没有 token 索引） |
+| ~~本机包行不可点击~~ | **已实现（2026-10）**：「我的」页两张卡片的预览行与「本机包」二级页的行都能点进 `BrewDetailView`。本机包没有目录 id，路由参数里 `id` 传 0，取数层用 `tokenId(token)` 派生；数据源目录里没有这个 token 时详情页显示「未找到」（见 §10.4） |
 | ~~「我的」页的 taps / services 数据~~ | **已删除（2026-09）**：`brew-local-taps.json`（5 条）与 `brew-local-services.json`（4 条）始终无 UI 调用点，已连同 `overview` 一起删除（见 `brew-handover.md` §4.1） |
 | 分类二级页 chip 选中态的写法 | 选中态放组件 `@State`（不是 state 对象）—— 放在 state 对象上时出现「回调执行了但一帧不变」，**原因未定位**；同样写法在 Casks 首页、「我的-本机包」真机验证是好的（见 §10.5.2）。属于“现象已解决、机理未明”的一类，后续若再遇同类症状优先查这一条 |
 | 分类卡只预览 5 条 | `BREW_CATEGORY_PREVIEW_COUNT` 同时是数据层 `hasMore` 与 UI 截断的口径（两处同源）。两个页签都是「卡内 5 条 + 查看全部」，成员 ≤ 5 的分类不显示该行 |
@@ -1569,6 +1595,12 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 `pick` / `filter` / `byName` 与全部 UI 结构未变。
 `BrewInstalledPackage` 模型的每个字段到命令输出的映射见
 `docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md` §6。
+
+本机包行（「待更新」「已更新」两张卡片的预览行与「本机包」二级页的行）都可以点进包详情页。
+路由参数由 `MinePackagesUtil.detailParamsOf(pkg)` 统一给出：`token` 取 `name`，`id` 传 0
+（详情取数层用 `tokenId(token)` 派生，与目录条目派生出的 id 相同），`categoryKey` 留空
+（详情取数层按目录描述补算，「同分类其他包」因此同样可用）。数据源目录里没有这个 token 时
+（自定义 tap 安装的包），详情页显示「未找到」，判定与文案见 §10.4。
 
 ### 12.2 三个集合的口径定义在一处
 

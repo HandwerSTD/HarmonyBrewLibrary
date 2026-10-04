@@ -31,6 +31,13 @@ export enum LoadingStatus {
   FAILED = 'failed',
   NO_NETWORK = 'no_network',
   EMPTY_DATA = 'empty_data',
+  /**
+   * 数据源确认没有这个包（详情页单条取数 404 / 410）。
+   *
+   * 与 `FAILED` 分开：`FAILED` 是取数失败，重试有意义；`NOT_FOUND` 是数据源给出的确定结论，
+   * 重试只有在数据源自身的数据变了之后才有意义。两者的文案与日志也不同。
+   */
+  NOT_FOUND = 'not_found',
 }
 
 /**

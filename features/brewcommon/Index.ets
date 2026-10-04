@@ -98,7 +98,7 @@ export {
 
 // ---------------------------------------------------------------- 服务 / 工具
 
-export { BrewService } from './src/main/ets/service/BrewService';
+export { BrewDocAbsentError, BrewService } from './src/main/ets/service/BrewService';
 
 // 设备端包表：安装量片（4 个聚合端点）+ 描述片（两个全量包），两片独立。
 // 浏览页、榜单、搜索全部读它（稳态零请求）；详情页的现网单条是唯一的另一个消费者。

@@ -3,8 +3,8 @@
  */
 
 import type { BusinessError } from '@kit.BasicServicesKit';
-import { LoadingStatus, Logger, RequestErrorCode } from '@ohos/common';
-import { BrewCaskModel, BrewDetailNormalizer, BrewFormulaModel, BrewKind } from '@ohos/brewcommon';
+import { LoadingModel, LoadingStatus, Logger, RequestErrorCode } from '@ohos/common';
+import { BrewCaskModel, BrewDetailNormalizer, BrewDocAbsentError, BrewFormulaModel, BrewKind } from '@ohos/brewcommon';
 import type {
   BrewCaskDetail,
   BrewDetailParams,
@@ -54,29 +54,47 @@ export class BrewDetailViewModel {
   /**
    * 进入详情页时调用。两个请求相互独立：
    * 详情失败 -> 整页失败态；同类包失败 -> 只是不显示推荐位（见 loadSiblings）。
+   *
+   * 失败分三种：数据源确认没这个包 -> `NOT_FOUND`（重试只在数据源自身变化后有救）；
+   * 网络不通 -> `NO_NETWORK`；其余 -> `FAILED`。取数层在抛出前已经试过回退到历史详情。
    */
   public load(param: BrewDetailParams, state: BrewDetailState): void {
-    state.loadingModel.loadingStatus = LoadingStatus.LOADING;
+    this.setStatus(state, LoadingStatus.LOADING);
     this.loadSiblings(param, state);
     const task: Promise<BrewInfoPageData> = param.kind === BrewKind.CASK ?
       this.loadCask(param.id, param.token) : this.loadFormula(param.id, param.token);
     task.then((data: BrewInfoPageData) => {
       state.data = data;
-      state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
+      this.setStatus(state, LoadingStatus.SUCCESS);
       Logger.info(TAG, `load success, kind=${param.kind} token=${param.token}`);
-    }).catch((error: BusinessError) => {
-      if (error.code === RequestErrorCode.NETWORK_CONNECT_FAILED) {
-        state.loadingModel.loadingStatus = LoadingStatus.NO_NETWORK;
-      } else {
-        state.loadingModel.loadingStatus = LoadingStatus.FAILED;
+    }).catch((error: Error) => {
+      if (error instanceof BrewDocAbsentError) {
+        // 数据源给出的确定结论，用 info 级别（不计入异常）
+        this.setStatus(state, LoadingStatus.NOT_FOUND);
+        Logger.info(TAG, `load absent, kind=${param.kind} token=${param.token} status=${error.status}`);
+        return;
       }
-      Logger.error(TAG, `load failed. ${error.code} ${error.message}`);
+      const err: BusinessError = error as BusinessError;
+      this.setStatus(state, err.code === RequestErrorCode.NETWORK_CONNECT_FAILED ?
+        LoadingStatus.NO_NETWORK : LoadingStatus.FAILED);
+      Logger.error(TAG, `load failed. ${err.code} ${err.message}`);
     });
   }
 
   /**
-   * `token` 必须一并传下去：内置快照能按 id 找到骨架，但**现网单条请求只能按 token 发**
-   * （`/api/formula/<token>.json`），官方 API 里没有我们本地的 id。
+   * 改加载状态。**整体替换 `loadingModel`，不写 `loadingModel.loadingStatus`** ——
+   * 页面用 `@State detailState` 持有本状态类，状态管理 V1 只能观察到**第一层属性**的变化
+   * （官方文档：`@State` 仅观察状态变量第一层属性的变化，不递归观察嵌套属性）。
+   * 写二级属性时日志里有状态、页面一帧不变：真机实测「未找到」与失败态内容区永远空白、
+   * 连重试按钮都出不来（`state.data = data` 是一级赋值，所以成功路径一直是好的，掩盖了它）。
+   */
+  private setStatus(state: BrewDetailState, status: LoadingStatus): void {
+    state.loadingModel = new LoadingModel(status);
+  }
+
+  /**
+   * `token` 必须一并传下去：现网单条请求只能按 token 发（`/api/formula/<token>.json`），
+   * 官方 API 里没有我们本地的 id；id 只当路由参数与缓存键。
    */
   private loadFormula(id: number, token: string): Promise<BrewInfoPageData> {
     return this.formulaModel.getFormulaDetail(id, token)
@@ -93,9 +111,14 @@ export class BrewDetailViewModel {
    * 不应该因为它失败把详情页变成错误态（repository 侧已经把错误吞成空数组）。
    */
   private loadSiblings(param: BrewDetailParams, state: BrewDetailState): void {
+    // 路由参数没带分类时按目录描述补算（本机包入口就是这种情况）：没有描述返回空串，
+    // 「同分类其他包」保持为空。见 BrewRepository.categoryKeyOf。
+    const categoryKey: string = param.categoryKey.length > 0 ? param.categoryKey :
+      (param.kind === BrewKind.CASK ? this.caskModel.categoryKeyOf(param.token) :
+        this.formulaModel.categoryKeyOf(param.token));
     const task: Promise<BrewPackageItem[]> = param.kind === BrewKind.CASK ?
-      this.caskModel.getSameCategoryPackages(param.categoryKey, param.token, SIBLING_LIMIT) :
-      this.formulaModel.getSameCategoryPackages(param.categoryKey, param.token, SIBLING_LIMIT);
+      this.caskModel.getSameCategoryPackages(categoryKey, param.token, SIBLING_LIMIT) :
+      this.formulaModel.getSameCategoryPackages(categoryKey, param.token, SIBLING_LIMIT);
     task.then((items: BrewPackageItem[]) => {
       state.siblings = items;
     }).catch(() => {

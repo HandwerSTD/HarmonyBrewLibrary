@@ -304,7 +304,17 @@ export interface BrewDetailParams {
   kind: BrewKind;
   /** 标题栏标题（先展示列表里已有的信息，详情回来后再覆写） */
   title: string;
+  /**
+   * 目录里的稳定 id（`BrewBrowseBuilder.tokenId(token)`）。
+   *
+   * **可以是 0**：本机包没有目录 id，取数层用 `tokenId(token)` 派生（与目录条目派生出的 id
+   * 是同一个函数，同一份详情在两条入口上共用缓存键）。
+   */
   id: number;
+  /**
+   * API 路径里的 token。目录条目的 `BrewPackageItem.token` 与本机包的 `BrewInstalledPackage.name`
+   * 都是它；带 tap 前缀的包名（`fullName`）不参与导航。
+   */
   token: string;
   categoryKey: string;
 }

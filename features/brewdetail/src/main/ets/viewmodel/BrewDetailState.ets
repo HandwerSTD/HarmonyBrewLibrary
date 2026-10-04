@@ -13,6 +13,9 @@ import type { BrewDetailParams } from '@ohos/brewcommon';
  * `siblings` 特意**不放在** `BrewInfoPageData` 里：它与主详情是两个独立请求
  * （详情接口不返回同类包，需要另外读首页数据），如果嵌在 `data` 内部，
  * 后续单独赋值不会触发刷新（@State 只观察一级属性）。
+ *
+ * `loadingModel` 同样受这个约束：VM 不写 `loadingModel.loadingStatus`，
+ * 而是用 `new LoadingModel(status)` 整体替换这个一级字段（见 `BrewDetailViewModel.setStatus`）。
  */
 export class BrewDetailState {
   public loadingModel: LoadingModel = new LoadingModel();
