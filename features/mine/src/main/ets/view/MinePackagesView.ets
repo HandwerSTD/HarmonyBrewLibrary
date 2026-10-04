@@ -20,22 +20,43 @@ import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
   CommonConstants,
+  CustomImmersiveStyle,
   DelayedLoadingView,
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
+  MaterialUtil,
   NoNetworkView,
   PageEnum,
   StatusBarColorType,
   StorageKey,
+  Toast,
 } from '@ohos/common';
-import { BREW_CHIP_BAR_HEIGHT, BrewChipBar, BrewLocalPackageRow, brewTitleBarStyle, brewTitleBarTotalHeight } from '@ohos/brewcommon';
+import {
+  BREW_CHIP_BAR_HEIGHT,
+  BrewChipBar,
+  BrewCli,
+  BrewCommandRunner,
+  BrewCommandSheet,
+  BrewCommandStartResult,
+  BrewCommandState,
+  BrewCommandStatus,
+  BrewLocalPackageRow,
+  brewTitleBarStyle,
+  brewTitleBarTotalHeight,
+} from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { PackageListMode } from '../model/MinePackagesModels';
 import type { MinePackagesParams } from '../model/MinePackagesModels';
 import { MinePackagesUtil } from '../util/MinePackagesUtil';
 import { MinePackagesState } from '../viewmodel/MinePackagesState';
 import { MinePackagesVM } from '../viewmodel/MinePackagesVM';
+
+/**
+ * 「更新全部」按钮高度。与「我的」页及其它二级页的操作按钮同高
+ * （与 `BrewSourceSettingView.CapsuleButton` 取同一值）。
+ */
+const ACTION_BUTTON_HEIGHT: number = 32;
 
 /**
  * 「我的 - 本机包」列表页。
@@ -62,8 +83,36 @@ export struct MinePackagesView {
   @State backPressed: boolean = false;
   viewModel: MinePackagesVM = MinePackagesVM.getInstance();
   @State packagesState: MinePackagesState = this.viewModel.getState();
+  /** 执行 Sheet 是否展示。命令状态在 `BrewCommandRunner` 单例里，关掉 Sheet 不影响命令执行 */
+  @State commandSheetShown: boolean = false;
+  /**
+   * 与 `BrewCommandRunner` 单例里**同一个**命令状态实例（`BrewCommandState` 是 `@Observed`）。
+   * 按钮文案靠它的一级属性变化重渲染；Sheet 用 `@ObjectLink` 接它，输出逐行追加时只更新受影响的行。
+   */
+  @State commandState: BrewCommandState = this.viewModel.getCommandState();
   /** 页面栈。不是 @State —— 只用于出栈，不参与渲染。来源与详情页相同。 */
   private pathStack?: NavPathStack;
+  /** 命令状态回调。存成字段，保证 `subscribe` / `unsubscribe` 拿到的是同一个函数对象 */
+  private commandListener: () => void = () => {
+    this.onCommandStateChanged();
+  };
+  /**
+   * 上一次看到的命令状态。用来分辨「刚刚结束」与「进页面时看到的是上次那条命令的结局」，
+   * 后者不该再弹一次结束提示。
+   */
+  private lastCommandStatus: BrewCommandStatus = BrewCommandStatus.IDLE;
+
+  aboutToAppear(): void {
+    // 快照更新 -> 重取列表；命令状态变化 -> 结束时弹提示。两个订阅都在页面显示期间有效，
+    // 否则堆在其它页面下面也会响应（两个入口页面各绑一份 Sheet，只该有一个在报）。
+    this.viewModel.subscribeSnapshot();
+    BrewCommandRunner.getInstance().subscribe(this.commandListener);
+  }
+
+  aboutToDisappear(): void {
+    this.viewModel.unsubscribeSnapshot();
+    BrewCommandRunner.getInstance().unsubscribe(this.commandListener);
+  }
 
   private handleOnReady(ctx: NavDestinationContext): void {
     this.pathStack = ctx?.pathStack;
@@ -101,6 +150,71 @@ export struct MinePackagesView {
     }).getValue(this.globalInfoModel.widthBreakpoint);
   }
 
+  /** 胶囊圆角：侧边栏（2in1）用固定圆角，其余用胶囊 —— 与数据源设置页的胶囊按钮同一规则 */
+  private capsuleRadius(): Length {
+    return AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT) ?
+      $r('sys.float.corner_radius_level4') : '50%';
+  }
+
+  /** 「更新全部」是否渲染。待更新页 + 当前筛选下确实有包 + 设备上 brew 可用 */
+  private showUpgradeAll(): boolean {
+    return this.packagesState.mode === PackageListMode.OUTDATED &&
+      this.packagesState.filteredPackages.length > 0 && BrewCli.isEnabled();
+  }
+
+  /**
+   * 本页的「更新全部」是不是正在执行。
+   *
+   * 判据是 `BrewCommandRunner.isRunningArgs()`：参数相同才算本页这条命令在跑，
+   * 别的命令（例如详情页的安装）在跑时按钮仍显示「更新全部」，点下去弹「已有命令在执行」。
+   * 先读一次 `status` 是为了让本方法在 build 里建立对 `commandState` 的观察 ——
+   * 忙闲切换时 runner 只改自己的字段，不改被观察属性，按钮不会跟着重渲染。
+   */
+  private upgradeAllRunning(): boolean {
+    const status: BrewCommandStatus = this.commandState.status;
+    if (status !== BrewCommandStatus.RUNNING) {
+      return false;
+    }
+    return BrewCommandRunner.getInstance().isRunningArgs(this.viewModel.upgradeAllArgs());
+  }
+
+  private onUpgradeAllClick(): void {
+    // 「执行中…」时点击只重新打开 Sheet：命令状态在单例里，重新打开能看到完整输出，
+    // 也不能因为重复点而把同一条命令再发一次。
+    if (this.upgradeAllRunning()) {
+      this.commandSheetShown = true;
+      return;
+    }
+    if (this.viewModel.startUpgradeAll() === BrewCommandStartResult.STARTED) {
+      this.commandSheetShown = true;
+    }
+  }
+
+  /** 命令结束时补一条提示。Sheet 关着才弹 —— Sheet 里已经有状态标签了 */
+  private onCommandStateChanged(): void {
+    const status: BrewCommandStatus = this.commandState.status;
+    if (status === this.lastCommandStatus) {
+      return;
+    }
+    this.lastCommandStatus = status;
+    if (this.commandSheetShown) {
+      return;
+    }
+    // 详情页压在「我的」页上时两页同时存活，结束提示只让先调用的那一页弹（避免弹两次）
+    if (!BrewCommandRunner.getInstance().claimEndNotice()) {
+      return;
+    }
+    if (status === BrewCommandStatus.DONE) {
+      Toast.showToast($r('app.string.brew_cmd_status_done'));
+    } else if (status === BrewCommandStatus.INTERRUPTED) {
+      Toast.showToast($r('app.string.brew_cmd_status_interrupted'));
+    } else if (status === BrewCommandStatus.TIMEOUT) {
+      Toast.showToast($r('app.string.brew_cmd_status_timeout'));
+    } else if (status === BrewCommandStatus.FAILED) {
+      Toast.showToast($r('app.string.brew_cmd_status_failed'));
+    }
+  }
+
   @Builder
   ChipBarBuilder() {
     BrewChipBar({
@@ -112,61 +226,118 @@ export struct MinePackagesView {
     })
   }
 
+  /**
+   * 列表底部的让位高度。
+   *
+   * 有底部操作行时由操作行承担底部内边距（导航条 + SPACE_12），列表只留一段呼吸；
+   * 没有操作行（已安装 / 已更新两个模式）时保持现状的 `naviIndicatorHeight + SPACE_24`
+   * —— 与「榜单查看全部」二级页、包详情页同一个口径，2in1 上导航条高度为 0，不预留就贴到窗口下沿。
+   */
+  private listBottomInset(): Length {
+    if (this.showUpgradeAll()) {
+      return CommonConstants.SPACE_16;
+    }
+    return this.globalInfoModel.naviIndicatorHeight + CommonConstants.SPACE_24;
+  }
+
   @Builder
   ContentBuilder() {
-    Scroll() {
-      // 外层这层 Column 只负责**让位与内缩**（写成内容上的 margin / padding），
-      // 里面的卡片保留自己的宽度、圆角与底色。与「我的」页 MineView 完全同款。
-      Column() {
-        if (this.packagesState.filteredPackages.length > 0) {
-          Column() {
-            ForEach(this.packagesState.filteredPackages, (pkg: BrewInstalledPackage) => {
-              BrewLocalPackageRow({ installedPackage: pkg })
-                .onClick(() => {
-                  this.openDetail(pkg);
-                })
-            }, (pkg: BrewInstalledPackage) => pkg.fullName)
-          }
-          .width(CommonConstants.FULL_PERCENT)
-          .backgroundColor($r('sys.color.comp_background_primary'))
-          .borderRadius($r('sys.float.corner_radius_level8'))
-          .clip(true)
-        } else {
-          Text($r('app.string.mine_packages_empty'))
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_tertiary'))
+    Column() {
+      Scroll() {
+        // 外层这层 Column 只负责**让位与内缩**（写成内容上的 margin / padding），
+        // 里面的卡片保留自己的宽度、圆角与底色。与「我的」页 MineView 完全同款。
+        Column() {
+          if (this.packagesState.filteredPackages.length > 0) {
+            Column() {
+              ForEach(this.packagesState.filteredPackages, (pkg: BrewInstalledPackage) => {
+                BrewLocalPackageRow({ installedPackage: pkg })
+                  .onClick(() => {
+                    this.openDetail(pkg);
+                  })
+              }, (pkg: BrewInstalledPackage) => pkg.fullName)
+            }
             .width(CommonConstants.FULL_PERCENT)
-            .textAlign(TextAlign.Center)
-            .padding({ top: $r('sys.float.padding_level16') })
+            .backgroundColor($r('sys.color.comp_background_primary'))
+            .borderRadius($r('sys.float.corner_radius_level8'))
+            .clip(true)
+          } else {
+            Text($r('app.string.mine_packages_empty'))
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_tertiary'))
+              .width(CommonConstants.FULL_PERCENT)
+              .textAlign(TextAlign.Center)
+              .padding({ top: $r('sys.float.padding_level16') })
+          }
         }
+        .width(CommonConstants.FULL_PERCENT)
+        // 顶部让位：状态栏 + 标题行 + chips 行。**写成内层内容的 margin**（原因与包详情页一致）：
+        //   - 容器 `padding` 会把内容**裁剪**在 padding 区域之外 —— 内容永远滚不到标题栏下面，
+        //     而标题栏模糊正是靠「内容透上来」才有效果，结果就是模糊“形同虚设”（实测确认）；
+        //   - `contentStartOffset` 会把滚动坐标系整体左移 C（静止时自报偏移量 −C，本页是 −112），
+        //     而 HDS 的 blurEffectiveStartOffset 只接受 [0, +∞)（负数按 0 处理），永远够不到原点
+        //     → 内容已在标题栏下钻了 C 还没开始模糊 = 空行程；
+        //   - `margin` 写在**内层内容**上是安全的（占位跟着内容一起滚走）。
+        //     （之前“margin 必然底部溢出”的结论是把它写在 Scroll **容器**上得出的，两者不同。）
+        .margin({
+          top: brewTitleBarTotalHeight(this.globalInfoModel.statusBarHeight),
+          bottom: this.listBottomInset(),
+        })
+        .padding({
+          left: this.contentInset(),
+          right: this.contentInset(),
+        })
       }
+      .layoutWeight(1)
       .width(CommonConstants.FULL_PERCENT)
-      // 顶部让位：状态栏 + 标题行 + chips 行。**写成内层内容的 margin**（原因与包详情页一致）：
-      //   - 容器 `padding` 会把内容**裁剪**在 padding 区域之外 —— 内容永远滚不到标题栏下面，
-      //     而标题栏模糊正是靠「内容透上来」才有效果，结果就是模糊“形同虚设”（实测确认）；
-      //   - `contentStartOffset` 会把滚动坐标系整体左移 C（静止时自报偏移量 −C，本页是 −112），
-      //     而 HDS 的 blurEffectiveStartOffset 只接受 [0, +∞)（负数按 0 处理），永远够不到原点
-      //     → 内容已在标题栏下钻了 C 还没开始模糊 = 空行程；
-      //   - `margin` 写在**内层内容**上是安全的（占位跟着内容一起滚走）。
-      //     （之前“margin 必然底部溢出”的结论是把它写在 Scroll **容器**上得出的，两者不同。）
-      //
-      // 底部与「榜单查看全部」二级页、包详情页同一个口径：`naviIndicatorHeight + SPACE_24`。
-      // 本页内容是一整张卡片（没有 WaterFlow 的 section margin 兜底），
-      // 只写 `naviIndicatorHeight` 的话在 2in1 上就是 0 —— 最后一行直接贴到窗口下沿。
-      .margin({
-        top: brewTitleBarTotalHeight(this.globalInfoModel.statusBarHeight),
-        bottom: this.globalInfoModel.naviIndicatorHeight + CommonConstants.SPACE_24,
-      })
-      .padding({
-        left: this.contentInset(),
-        right: this.contentInset(),
-      })
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+
+      // 底部操作行。固定在页面底部而不是放在内容顶部：它的操作对象是整张列表，
+      // 列表可能很长，放在顶部会随列表滚走。
+      if (this.showUpgradeAll()) {
+        Row() {
+          Blank()
+          Button(this.upgradeAllRunning() ? $r('app.string.brew_action_running') :
+            $r('app.string.brew_action_upgrade_all'))
+            .height(ACTION_BUTTON_HEIGHT)
+            .fontSize($r('sys.float.Body_M'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+            .backgroundColor($r('sys.color.comp_background_tertiary'))
+            .borderRadius(this.capsuleRadius())
+            .padding({ left: $r('sys.float.padding_level6'), right: $r('sys.float.padding_level6') })
+            .onClick(() => {
+              this.onUpgradeAllClick();
+            })
+        }
+        .width(CommonConstants.FULL_PERCENT)
+        .alignItems(VerticalAlign.Center)
+        .padding({
+          left: this.contentInset(),
+          right: this.contentInset(),
+          bottom: this.globalInfoModel.naviIndicatorHeight + CommonConstants.SPACE_12,
+        })
+      }
     }
     .width(CommonConstants.FULL_PERCENT)
     .height(CommonConstants.FULL_PERCENT)
-    .align(Alignment.Top)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+  }
+
+  @Builder
+  CommandSheetBuilder() {
+    BrewCommandSheet({
+      state: this.commandState,
+      onInterrupt: () => {
+        this.viewModel.interruptCommand();
+      },
+      onForceKill: () => {
+        this.viewModel.forceKillCommand();
+      },
+      onClose: () => {
+        this.commandSheetShown = false;
+      },
+    })
   }
 
   build() {
@@ -214,6 +385,29 @@ export struct MinePackagesView {
         StatusBarColorType.WHITE : StatusBarColorType.BLACK
     })
     .onReady((ctx: NavDestinationContext) => this.handleOnReady(ctx))
+    // 执行 Sheet。选项写法与 MineView 的登录 Sheet 一致（材质 + 宽窄屏的尺寸口径）。
+    // Sheet 可随时关闭：命令状态在 `BrewCommandRunner` 单例里，关掉不影响命令执行。
+    .bindSheet(this.commandSheetShown, this.CommandSheetBuilder(),
+      MaterialUtil.getMaterialOptions<SheetOptions>({
+        originOption: {
+          showClose: true,
+          preferType: (this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
+            !AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT)) ? SheetType.BOTTOM : SheetType.CENTER,
+          height: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ?
+            ((this.globalInfoModel.deviceHeight - this.globalInfoModel.decorHeight) *
+              CommonConstants.SHEET_HEIGHT_RATIO_XL) : SheetSize.LARGE,
+          width: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? CommonConstants.SHEET_WIDTH_XL :
+            undefined,
+          onWillDisappear: () => {
+            this.commandSheetShown = false;
+          },
+        },
+        param: {
+          style: CustomImmersiveStyle.ULTRA_THICK,
+          backgroundColor: Color.Transparent,
+        },
+      }) as SheetOptions
+    )
     .onBackPressed(() => {
       // 已在处理中就吞掉重复按下，否则连点会把上一页（「我的」页）也一起弹掉。
       if (this.backPressed) {

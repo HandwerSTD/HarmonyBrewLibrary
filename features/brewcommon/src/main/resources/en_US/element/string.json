@@ -515,6 +515,74 @@
     {
       "name": "brew_detail_absent",
       "value": "%s is not in the current data source. It may come from a custom tap."
+    },
+    {
+      "name": "brew_action_upgrade_all",
+      "value": "Upgrade all"
+    },
+    {
+      "name": "brew_action_running",
+      "value": "Running…"
+    },
+    {
+      "name": "brew_action_interrupt",
+      "value": "Interrupt"
+    },
+    {
+      "name": "brew_action_force_kill",
+      "value": "Force stop"
+    },
+    {
+      "name": "brew_action_close",
+      "value": "Close"
+    },
+    {
+      "name": "brew_cmd_status_running",
+      "value": "Running"
+    },
+    {
+      "name": "brew_cmd_status_interrupting",
+      "value": "Interrupting…"
+    },
+    {
+      "name": "brew_cmd_status_done",
+      "value": "Finished"
+    },
+    {
+      "name": "brew_cmd_status_interrupted",
+      "value": "Interrupted"
+    },
+    {
+      "name": "brew_cmd_status_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "brew_cmd_status_timeout",
+      "value": "Timed out"
+    },
+    {
+      "name": "brew_cmd_omitted_lines",
+      "value": "%d earlier lines omitted"
+    },
+    {
+      "name": "brew_cmd_busy",
+      "value": "Another command is running"
+    },
+    {
+      "name": "brew_cmd_title_install",
+      "value": "Install %s"
+    },
+    {
+      "name": "brew_cmd_title_upgrade",
+      "value": "Upgrade %s"
+    },
+    {
+      "name": "brew_cmd_unavailable",
+      "value": "brew is not available on this device"
+    },
+    {
+      "name": "brew_cmd_bad_name",
+      "value": "Package name is not valid"
     }
   ]
 }

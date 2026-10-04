@@ -40,6 +40,7 @@ export class BrewDetailNormalizer {
     data.name = detail.name || detail.token;
     data.desc = detail.desc;
     data.shortName = detail.token;
+    data.tap = detail.tap;
     data.installCommand = BrewCommandGenerator.installCommandOf(detail, BrewKind.FORMULA);
     data.meta = BrewDetailNormalizer.metaRows(
       detail.stableVersion, detail.license, detail.installs30d,
@@ -108,6 +109,7 @@ export class BrewDetailNormalizer {
     data.name = detail.name || detail.token;
     data.desc = detail.desc;
     data.shortName = detail.token;
+    data.tap = detail.tap;
     data.installCommand = BrewCommandGenerator.installCommandOf(detail, BrewKind.CASK);
     // cask 没有 license 字段（实测 Homebrew cask API 不提供），传空串让 metaRows 跳过
     data.meta = BrewDetailNormalizer.metaRows(

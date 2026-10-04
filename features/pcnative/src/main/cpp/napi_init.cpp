@@ -3,13 +3,14 @@
  */
 
 /*
- * NAPI 层：把 `ShellHookRun` 暴露给 ArkTS。
+ * NAPI 层：把执行通道暴露给 ArkTS。
  *
  * 只做三件事：参数校验、线程调度、结果转换。执行语义全在 shell_hook.cpp，
  * 这里的代码不关心命令是怎么跑起来的。
  *
  * 线程：异步接口用 libuv 的线程池，绝不在主线程上跑命令；同步接口留给确定是毫秒级的探测。
- * 两个接口都只读共享的 `ShellHookRun`，自身不持有可变状态。
+ * 一次性执行走 libuv 线程池（`runCommand`）或 JS 线程（`runCommandSync`），
+ * 流式接口只在 JS 线程上跑：轮询本身不等待，单次调用的工作量有上限。
  */
 
 #include "napi/native_api.h"
@@ -21,7 +22,13 @@
 namespace {
 
 const int TIMEOUT_DEFAULT_MS = 10000;
-const int TIMEOUT_MAX_MS = 600000;
+const int TIMEOUT_MAX_MS = 1800000;
+
+/** 流式轮询单次取走的上限。与 ArkTS 侧 `SHELL_STREAM_POLL_MAX_BYTES` 同值 */
+const size_t POLL_MAX_BYTES = 256 * 1024;
+
+/** 流式轮询单次最多等多久。0 = 不等，纯非阻塞读，可以在 JS 线程上直接调 */
+const int POLL_SLICE_MS = 0;
 
 /** 异步执行的上下文。结果写回 ArkTS 对象在 Complete 回调里做 */
 struct RunContext {
@@ -191,11 +198,167 @@ napi_value RunCommandSync(napi_env env, napi_callback_info info) {
     return ToJsResult(env, result);
 }
 
+/**
+ * 把一次流式轮询转成 ArkTS 对象。
+ *
+ * `events` 是数组而不是 stdout / stderr 两个字符串：界面要按到达顺序呈现两路输出，
+ * 分成两个字段就丢掉了「哪一行先到」这个信息。
+ */
+napi_value ToJsPoll(napi_env env, const pcnative::ShellHookPoll &poll) {
+    napi_value events = nullptr;
+    napi_create_array_with_length(env, poll.events.size(), &events);
+    for (size_t i = 0; i < poll.events.size(); ++i) {
+        const pcnative::ShellHookEvent &source = poll.events[i];
+        napi_value item = nullptr;
+        napi_create_object(env, &item);
+
+        napi_value kind = nullptr;
+        const char *kindText = source.stream == pcnative::SHELL_STREAM_STDOUT ? "stdout" : "stderr";
+        napi_create_string_utf8(env, kindText, NAPI_AUTO_LENGTH, &kind);
+        napi_set_named_property(env, item, "kind", kind);
+
+        // 显式给字节长度：命令输出里可能有 NUL 字节，按 AUTO_LENGTH 会被截断
+        napi_value data = nullptr;
+        napi_create_string_utf8(env, source.data.c_str(), source.data.size(), &data);
+        napi_set_named_property(env, item, "data", data);
+
+        napi_set_element(env, events, static_cast<uint32_t>(i), item);
+    }
+
+    napi_value result = nullptr;
+    napi_create_object(env, &result);
+
+    napi_set_named_property(env, result, "events", events);
+
+    napi_value ended = nullptr;
+    napi_get_boolean(env, poll.ended, &ended);
+    napi_set_named_property(env, result, "ended", ended);
+
+    napi_value exitCode = nullptr;
+    napi_create_int32(env, poll.exitCode, &exitCode);
+    napi_set_named_property(env, result, "exitCode", exitCode);
+
+    napi_value errorCode = nullptr;
+    napi_create_int32(env, poll.errorCode, &errorCode);
+    napi_set_named_property(env, result, "errorCode", errorCode);
+
+    return result;
+}
+
+/** `startCommand(command: string, timeoutMs?: number, cwd?: string): number` */
+napi_value StartCommand(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3] = {nullptr, nullptr, nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    const std::string command = GetStringArg(env, args[0]);
+    if (command.empty()) {
+        napi_throw_type_error(env, nullptr, "command must be a non-empty string");
+        return nullptr;
+    }
+    const int timeoutMs = GetIntArg(env, args[1], TIMEOUT_DEFAULT_MS);
+    const std::string cwd = GetStringArg(env, args[2]);
+
+    const int taskId = pcnative::ShellHookNextTaskId();
+    std::string startError;
+    if (!pcnative::ShellHookStart(command, timeoutMs, cwd, taskId, &startError)) {
+        // 返回 0 表示没起来（例如 fork 失败），不抛异常：调用方把它当「通道不可用」处理
+        napi_value zero = nullptr;
+        napi_create_int32(env, 0, &zero);
+        return zero;
+    }
+    napi_value result = nullptr;
+    napi_create_int32(env, taskId, &result);
+    return result;
+}
+
+/** `pollCommand(taskId: number, maxBytes?: number): ShellNativeStreamPoll | null` */
+napi_value PollCommand(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr, nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t taskId = 0;
+    if (napi_get_value_int32(env, args[0], &taskId) != napi_ok) {
+        napi_value result = nullptr;
+        napi_get_null(env, &result);
+        return result;
+    }
+    size_t maxBytes = POLL_MAX_BYTES;
+    if (argc > 1) {
+        napi_valuetype type = napi_undefined;
+        if (napi_typeof(env, args[1], &type) == napi_ok && type == napi_number) {
+            int32_t requested = 0;
+            if (napi_get_value_int32(env, args[1], &requested) == napi_ok && requested > 0) {
+                maxBytes = static_cast<size_t>(requested);
+            }
+        }
+    }
+
+    pcnative::ShellHookPoll poll;
+    if (!pcnative::ShellHookPump(taskId, maxBytes, POLL_SLICE_MS, &poll, nullptr, nullptr)) {
+        napi_value result = nullptr;
+        napi_get_null(env, &result);
+        return result;
+    }
+    return ToJsPoll(env, poll);
+}
+
+/** `interruptCommand(taskId: number): boolean` */
+napi_value InterruptCommand(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t taskId = 0;
+    napi_value result = nullptr;
+    if (napi_get_value_int32(env, args[0], &taskId) != napi_ok) {
+        napi_get_boolean(env, false, &result);
+        return result;
+    }
+    napi_get_boolean(env, pcnative::ShellHookInterrupt(taskId), &result);
+    return result;
+}
+
+/** `killCommand(taskId: number): boolean` */
+napi_value KillCommand(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t taskId = 0;
+    napi_value result = nullptr;
+    if (napi_get_value_int32(env, args[0], &taskId) != napi_ok) {
+        napi_get_boolean(env, false, &result);
+        return result;
+    }
+    napi_get_boolean(env, pcnative::ShellHookKill(taskId), &result);
+    return result;
+}
+
+/** `releaseCommand(taskId: number): void` */
+napi_value ReleaseCommand(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t taskId = 0;
+    if (napi_get_value_int32(env, args[0], &taskId) == napi_ok) {
+        pcnative::ShellHookRelease(taskId);
+    }
+    return nullptr;
+}
+
 napi_value Init(napi_env env, napi_value exports) {
     napi_property_descriptor descriptors[] = {
         {"isAvailable", nullptr, IsAvailable, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runCommand", nullptr, RunCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runCommandSync", nullptr, RunCommandSync, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"startCommand", nullptr, StartCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"pollCommand", nullptr, PollCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"interruptCommand", nullptr, InterruptCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"killCommand", nullptr, KillCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"releaseCommand", nullptr, ReleaseCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(descriptors) / sizeof(descriptors[0]), descriptors);
     return exports;

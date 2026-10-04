@@ -70,6 +70,12 @@ export class BrewInfoPageData {
   public desc: string = '';
   /** 标题栏短名（token），避免 cask 全称过长把标题栏撑开 */
   public shortName: string = '';
+  /**
+   * 包所在的 tap（如 `homebrew/core`）。执行安装 / 升级命令时用它拼 qualified name
+   * （第三方 tap 需要 `tap/token` 前缀，见 BrewCommandGenerator.qualifiedName）。
+   * 详情接口没给时为空串。
+   */
+  public tap: string = '';
   /** 安装命令，如 brew install zsh */
   public installCommand: string = '';
   /** 顶部元信息：版本 / 许可 / 安装量 / 分类排名 —— 渲染成一行小块 */

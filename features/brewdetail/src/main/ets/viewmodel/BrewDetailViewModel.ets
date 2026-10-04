@@ -3,16 +3,30 @@
  */
 
 import type { BusinessError } from '@kit.BasicServicesKit';
-import { LoadingModel, LoadingStatus, Logger, RequestErrorCode } from '@ohos/common';
-import { BrewCaskModel, BrewDetailNormalizer, BrewDocAbsentError, BrewFormulaModel, BrewKind } from '@ohos/brewcommon';
+import { LoadingModel, LoadingStatus, Logger, RequestErrorCode, Toast } from '@ohos/common';
+import {
+  BrewCaskModel,
+  BrewCli,
+  BrewCommandGenerator,
+  BrewCommandRequest,
+  BrewCommandRunner,
+  BrewCommandStartResult,
+  BrewCommandState,
+  BrewDetailNormalizer,
+  BrewDocAbsentError,
+  BrewFormulaModel,
+  BrewInstalledLoader,
+  BrewKind,
+} from '@ohos/brewcommon';
 import type {
   BrewCaskDetail,
   BrewDetailParams,
   BrewFormulaDetail,
   BrewInfoPageData,
+  BrewInstalledPackage,
   BrewPackageItem,
 } from '@ohos/brewcommon';
-import { BrewDetailState } from './BrewDetailState';
+import { BrewDetailState, BrewInstallState } from './BrewDetailState';
 
 const TAG: string = '[BrewDetailVM]';
 
@@ -61,11 +75,17 @@ export class BrewDetailViewModel {
   public load(param: BrewDetailParams, state: BrewDetailState): void {
     this.setStatus(state, LoadingStatus.LOADING);
     this.loadSiblings(param, state);
+    // 先用已有快照（内存优先、其次盘上）同步算一次安装状态：快照命中时按钮首帧就是对的，
+    // 不等详情请求，也不等 brew 命令。详情页自己的网络取数不受这条路径影响。
+    this.refreshInstallState(state);
+    this.loadInstallState(state);
     const task: Promise<BrewInfoPageData> = param.kind === BrewKind.CASK ?
       this.loadCask(param.id, param.token) : this.loadFormula(param.id, param.token);
     task.then((data: BrewInfoPageData) => {
       state.data = data;
       this.setStatus(state, LoadingStatus.SUCCESS);
+      // tap 只在详情数据里有，所以安装状态与按钮可执行性要等数据落地后再算一次
+      this.refreshInstallState(state);
       Logger.info(TAG, `load success, kind=${param.kind} token=${param.token}`);
     }).catch((error: Error) => {
       if (error instanceof BrewDocAbsentError) {
@@ -90,6 +110,114 @@ export class BrewDetailViewModel {
    */
   private setStatus(state: BrewDetailState, status: LoadingStatus): void {
     state.loadingModel = new LoadingModel(status);
+  }
+
+  /**
+   * 把本机安装状态与按钮可执行性按当前快照重算一遍。
+   *
+   * 三个时机都走这里：进页面（快照命中时首帧就对）、详情数据落地（`tap` 只在详情里有）、
+   * 快照更新（后台刷新成功、写命令结束后的刷新，页面订阅后调用）。
+   *
+   * 匹配口径是 `BrewInstalledPackage.name === params.token`（本机包的 `name` 是不带 tap 前缀的包名，
+   * 与路由参数里的 token 同一口径；`fullName` 带 tap 前缀，不参与匹配）。
+   * `OUTDATED` 直接取快照里的 `outdated` 字段，不在这里做版本比较。
+   */
+  public refreshInstallState(state: BrewDetailState): void {
+    state.installState = BrewDetailViewModel.installStateOf(state.params.token);
+    const token: string = state.params.token;
+    const tap: string = state.data.tap;
+    // 包名与 tap 都要能进命令行才渲染按钮。tap 为空串时通不过校验，按钮不出现。
+    const safe: boolean = BrewCommandGenerator.isSafeName(token) && BrewCommandGenerator.isSafeName(tap);
+    if (safe) {
+      state.unsafeNameWarned = false;
+    } else if (!state.unsafeNameWarned) {
+      state.unsafeNameWarned = true;
+      Logger.warn(TAG, `action button hidden, unsafe package name. token=${token} tap=${tap}`);
+    }
+    // 能力开关关（pc_normal）时整块按钮不渲染
+    state.commandReady = safe && BrewCli.isEnabled();
+  }
+
+  /** 读一次本机包快照让安装状态落到最新。新鲜窗口内立刻返回、不执行命令 */
+  private loadInstallState(state: BrewDetailState): void {
+    BrewInstalledLoader.loadSets()
+      .then(() => {
+        this.refreshInstallState(state);
+      })
+      .catch((error: Error) => {
+        // 只在「本进程一次都没读到过」时才会失败。此时保留 UNKNOWN（按钮仍显示「安装」），
+        // 页面本身的内容与加载态由详情请求决定，不跟着本机包的失败变。
+        Logger.warn(TAG, `load install state failed. reason=${error.message}`);
+      });
+  }
+
+  /** 本次点击要发出的参数：已安装且有新版本走 `upgrade`，其余走 `install` */
+  public actionArgs(state: BrewDetailState): string {
+    const token: string = state.params.token;
+    const tap: string = state.data.tap;
+    const kind: string = state.params.kind;
+    return state.installState === BrewInstallState.OUTDATED ?
+      BrewCommandGenerator.upgradeArgs(kind, token, tap) : BrewCommandGenerator.installArgs(kind, token, tap);
+  }
+
+  /**
+   * 启动本包的安装 / 升级命令。返回 `STARTED` 时页面打开 Sheet；
+   * 其余三类按 spec §5.4 弹对应提示。
+   */
+  public startInstallOrUpgrade(state: BrewDetailState): BrewCommandStartResult {
+    const args: string = this.actionArgs(state);
+    const isUpgrade: boolean = state.installState === BrewInstallState.OUTDATED;
+    const token: string = state.params.token;
+    const title: ResourceStr = isUpgrade ?
+      $r('app.string.brew_cmd_title_upgrade', token) : $r('app.string.brew_cmd_title_install', token);
+    const result: BrewCommandStartResult = BrewCommandRunner.getInstance().start(
+      new BrewCommandRequest(title, `brew ${args}`, args));
+    if (result === BrewCommandStartResult.BUSY) {
+      Logger.info(TAG, `start rejected, another command is running, args=${args}`);
+      Toast.showToast($r('app.string.brew_cmd_busy'));
+    } else if (result === BrewCommandStartResult.UNAVAILABLE) {
+      Logger.warn(TAG, `start rejected, brew is unavailable, args=${args}`);
+      Toast.showToast($r('app.string.brew_cmd_unavailable'));
+    } else if (result === BrewCommandStartResult.BAD_ARGS) {
+      Logger.warn(TAG, `start rejected, args is not valid, args=${args}`);
+      Toast.showToast($r('app.string.brew_cmd_bad_name'));
+    }
+    return result;
+  }
+
+  /**
+   * 命令状态实例。`BrewCommandRunner` 单例持有的那一个，页面用它渲染 Sheet，
+   * 并靠它的一级属性变化触发按钮文案重渲染。
+   */
+  public getCommandState(): BrewCommandState {
+    return BrewCommandRunner.getInstance().getState();
+  }
+
+  /** Sheet 的「中断」：向当前命令的进程组发 SIGINT */
+  public interruptCommand(): void {
+    BrewCommandRunner.getInstance().interrupt();
+  }
+
+  /**
+   * Sheet 的「强制终止」。
+   *
+   * 与「中断」同一个入口：`BrewCommandRunner.interrupt()` 在已经发过一次中断之后会自动升级成
+   * SIGTERM + SIGKILL，而「强制终止」按钮只在宽限期过后才出现，两条路径的时机是同一套。
+   */
+  public forceKillCommand(): void {
+    BrewCommandRunner.getInstance().interrupt();
+  }
+
+  /** 快照里查不到这个包 / 快照本身还没有时分开两种状态 */
+  private static installStateOf(token: string): BrewInstallState {
+    if (BrewInstalledLoader.snapshot() === null) {
+      return BrewInstallState.UNKNOWN;
+    }
+    const installed: BrewInstalledPackage | null = BrewInstalledLoader.installedOf(token);
+    if (installed === null) {
+      return BrewInstallState.NOT_INSTALLED;
+    }
+    return installed.outdated ? BrewInstallState.OUTDATED : BrewInstallState.INSTALLED;
   }
 
   /**

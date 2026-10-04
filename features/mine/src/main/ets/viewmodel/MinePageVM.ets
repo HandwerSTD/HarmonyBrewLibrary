@@ -26,6 +26,7 @@ import {
   UserAccount,
 } from '@ohos/common';
 import { BaseHomeEventParam, BaseHomeEventType, BaseHomeViewModel } from '@ohos/commonbusiness';
+import { BrewInstalledLoader } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { MineSettingBuilder } from '../view/MineSettingView';
 import { MinePackagesUtil } from '../util/MinePackagesUtil';
@@ -164,6 +165,17 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     }
   ]
   private accountServiceIns: AccountService = AccountService.getInstance();
+  /**
+   * 快照更新回调。存成字段而不是在 `subscribe` 里现造一个箭头函数：
+   * `BrewInstalledLoader` 按函数对象去重，两处传的不是同一个对象时会退订不掉、回调叠加。
+   */
+  private snapshotListener: () => void = () => {
+    const snapshot = BrewInstalledLoader.snapshot();
+    if (snapshot === null) {
+      return;
+    }
+    this.applyLocalSets(snapshot.sets.installed, snapshot.sets.outdated, snapshot.sets.updated);
+  };
 
   private constructor() {
     super(new MinePageState());
@@ -246,17 +258,26 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
    * 加载本机包。「我的」页只用到总数与两份预览，完整列表由子页面自己再取一次 ——
    * 取数口径两处共用 MinePackagesUtil，不会出现「预览的首项与查看全部的首项不一致」。
    *
+   * 快照优先（spec §6.4）：有快照时先用它赋值、收起加载态，页面不空着等命令；
+   * 随后仍然走一次 `loadSets()` —— 新鲜窗口内它立刻返回快照不执行命令，超窗时它在后台刷新。
+   * 订阅快照更新是为了后台刷新成功（或写命令结束后的刷新）时三块内容跟着变，
+   * 本 VM 是进程内单例、回调只做一次取值与赋值，不退订也不会累积。
+   *
    * 失败只记日志、不改成错误态：整页是账号/调研/公告/设置等混合内容，
    * 本机包只是其中三块，不该因为它们读不到就让整个「我的」页变成错误页。
    */
   private loadLocalPackages(): void {
-    this.state.packagesLoading = true;
+    BrewInstalledLoader.subscribe(this.snapshotListener);
+    const snapshot = BrewInstalledLoader.snapshot();
+    if (snapshot !== null) {
+      this.applyLocalSets(snapshot.sets.installed, snapshot.sets.outdated, snapshot.sets.updated);
+    } else {
+      this.state.packagesLoading = true;
+    }
+
     MinePackagesUtil.loadSets()
       .then((sets: MinePackageSets) => {
-        this.state.installedCount = sets.installed.length;
-        this.state.outdatedPackages = sets.outdated;
-        this.state.updatedPackages = sets.updated;
-        this.state.packagesLoading = false;
+        this.applyLocalSets(sets.installed, sets.outdated, sets.updated);
       })
       .catch((error: BusinessError) => {
         this.state.installedCount = 0;
@@ -265,6 +286,18 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
         this.state.packagesLoading = false;
         Logger.error(TAG, `loadLocalPackages failed. ${error.code} ${error.message}`);
       });
+  }
+
+  /**
+   * 三个集合落到状态上。只写一级属性 —— 状态管理 V1 只观察第一层，
+   * 与子页面 `MinePackagesVM.applySets` 同一个写法。
+   */
+  private applyLocalSets(installed: BrewInstalledPackage[], outdated: BrewInstalledPackage[],
+    updated: BrewInstalledPackage[]): void {
+    this.state.installedCount = installed.length;
+    this.state.outdatedPackages = outdated;
+    this.state.updatedPackages = updated;
+    this.state.packagesLoading = false;
   }
 
   private jumpToPackagesPage(mode: PackageListMode): void {

@@ -112,6 +112,24 @@ export type { DescShardOutcome } from './src/main/ets/service/BrewMetaSync';
 
 export { BrewCommandGenerator } from './src/main/ets/util/BrewCommandGenerator';
 
+// 设备上的 brew 调用口径：路径发现、环境前缀、命令行拼装。读取与执行共用同一份。
+export { BrewCli } from './src/main/ets/service/BrewCli';
+
+// 写命令的执行层：单飞、200ms 轮询、行缓冲、中断与终止。命令状态在单例里，Sheet 可随时关开。
+export { BrewCommandRunner } from './src/main/ets/service/BrewCommandRunner';
+
+// 命令状态类型。UI 层要用它们实例化（BrewCommandRequest 由页面 new 出来），所以是值导出。
+export {
+  BrewCommandLine,
+  BrewCommandRequest,
+  BrewCommandStartResult,
+  BrewCommandState,
+  BrewCommandStatus,
+} from './src/main/ets/model/BrewCommandModels';
+
+// 执行 Sheet 的内容组件，两个页面共用一份。
+export { BrewCommandSheet } from './src/main/ets/component/BrewCommandSheet';
+
 // 标题栏模糊：brew 所有页共用一份实现（区间位置/长度只在 BrewTitleBar.ets 里定义）。
 // 改模糊表现只改这里 —— 各页原先各写一份，结果出现「有的页没有渐变、有的页先空行程再猛增」。
 export {

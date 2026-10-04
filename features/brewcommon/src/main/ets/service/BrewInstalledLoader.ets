@@ -2,13 +2,21 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
-import { JSON } from '@kit.ArkTS';
-import { Logger, StorageKey } from '@ohos/common';
-import { SHELL_BREW_PATH_CANDIDATES, SHELL_ERR_TIMEOUT, ShellUtils } from '@ohos/pcnative';
+import { Logger, PreferenceManager } from '@ohos/common';
+import { SHELL_ERR_TIMEOUT, ShellUtils } from '@ohos/pcnative';
 import type { ShellResult } from '@ohos/pcnative';
 import type { BrewInstalledPackage } from '../model/BrewModels';
-import { BREW_INSTALLED_TTL_MS, BREW_INSTALLED_TIMEOUT_MS } from '../constant/BrewConstants';
+import {
+  BREW_INSTALLED_FRESH_MS,
+  BREW_INSTALLED_SNAPSHOT_KEY,
+  BREW_INSTALLED_SNAPSHOT_VERSION,
+  BREW_INSTALLED_TIMEOUT_MS,
+} from '../constant/BrewConstants';
 import { BrewInstalledParser } from '../util/BrewInstalledParser';
+import { BrewCli } from './BrewCli';
+// 与 BrewCommandRunner 互相 import 是有意的：读取要看「现在有没有写命令在执行」（spec §6.2 规则 5），
+// 写命令结束要回调本类的 invalidate()（spec §5.3 第 5 点）。两侧都只在方法体内引用对方，不在顶层求值。
+import { BrewCommandRunner } from './BrewCommandRunner';
 
 const TAG: string = '[BrewInstalled]';
 
@@ -28,7 +36,7 @@ export enum BrewInstalledFailure {
   BAD_SHAPE = 'bad-shape',
 }
 
-/** 三个集合。口径与 `MinePackageSets` 一致，构造在 `loadSets()` 里一次做完 */
+/** 三个集合。口径与 `MinePackageSets` 一致，构造在 `buildSets()` 里一次做完 */
 export class BrewInstalledSets {
   /** 全部已安装，按名称排序 */
   public installed: BrewInstalledPackage[] = [];
@@ -54,69 +62,155 @@ export class BrewInstalledOutcome {
 }
 
 /**
+ * 一份可用快照：三个集合加上读取时刻。
+ *
+ * `sets` 由 `installed` 派生（`buildSets()`），所以内存与磁盘存的是同一份事实，
+ * 不存在「盘上的 outdated 是旧的、内存里是新的」这种不一致。
+ */
+export class BrewInstalledSnapshot {
+  public sets: BrewInstalledSets;
+  /** 这次成功读取的时刻（epoch ms），新鲜窗口与日志里的 `age` 都用它 */
+  public readAt: number;
+
+  constructor(sets: BrewInstalledSets, readAt: number) {
+    this.sets = sets;
+    this.readAt = readAt;
+  }
+}
+
+/**
+ * 盘上快照的形状。字段一律按可能缺失处理：盘上数据是被本应用之外的因素改过的。
+ *
+ * 只存 `installed` 一个集合：`outdated` 与 `updated` 读时用 `buildSets()` 派生，
+ * 两个派生集合各有自己的排序口径，多存一份迟早会漂。
+ */
+interface BrewInstalledSnapshotDoc {
+  version?: number;
+  readAt?: number;
+  packages?: BrewInstalledPackage[];
+}
+
+/**
  * 本机包读取层。
  *
- * 取数方式是一条命令：`<brew> info --json=v2 --installed`。
+ * 取数方式是一条命令：`<brew> info --json=v2 --installed`，命令行的拼装在 `BrewCli`。
  * 命令与输出形状的依据见 `docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md` §2。
  *
- * 缓存：进程内一份，TTL 60 秒。「我的」页与「本机包」二级页在一次操作里会各取一次，
- * 两次之间数据不可能变，而每次 brew 调用都要付 Ruby 启动成本。不落盘 —— 本机包是
- * 设备上随时可读的现状数据，落盘只会引入失效判定。
+ * 快照：内存一份 + 盘上一份（`brew_installed_snapshot` 键），新鲜窗口 10 分钟。
+ * 冷启动先用盘上快照立刻显示，再按窗口决定要不要执行命令 —— 每次 brew 调用都要付
+ * Ruby 启动成本（首跑 2–3 秒），而「我的」页、包详情页、子页面会各取一次。
+ *
+ * 两条硬规则：
+ *   - **只保存成功的读取**。失败既不写内存也不写磁盘、不推进新鲜窗口，
+ *     快照恒等于「最近一次成功读取」；有旧快照时页面继续用旧数据。
+ *   - **写命令执行期间的读取不写快照**（见 `read()`），因为那时的 Cellar 处于中间状态。
  */
 export class BrewInstalledLoader {
-  /** 进程内缓存的结果；`at` 是写入时刻 */
-  private static cache: BrewInstalledOutcome | null = null;
-  private static cacheAt: number = 0;
-
-  /** 在途请求。两次并发调用共用同一次执行 */
+  /** 内存快照。null 表示本进程还没有成功的读取结果 */
+  private static memory: BrewInstalledSnapshot | null = null;
+  /** 盘上快照是否已经懒加载过。避免每次访问都去读一次存储 */
+  private static prefLoaded: boolean = false;
+  /** 快照是否已被 `invalidate()` 标记过期。数据保留，只是不再算新鲜 */
+  private static expired: boolean = false;
+  /** 在途请求。等待路径与后台刷新共用同一次执行 */
   private static inFlight: Promise<BrewInstalledSets> | null = null;
+  private static listeners: (() => void)[] = [];
 
   /**
-   * 读三个集合。失败抛 `BusinessError`，`message` 是失败分类。
+   * 读三个集合。失败抛 `Error`，`message` 是失败分类。
+   *
+   * 三种结局（有快照且新鲜 / 有快照但超窗 / 没有快照）见 spec §6.2 的表格：
+   * 前两种都不等待命令，第三种执行一次命令并等待。
    *
    * 调用方（`MinePackagesUtil`）把异常转成页面的失败态；分类名会进日志，
    * 页面文案保持通用 —— 用户看到「读不到本机包」就够了，不需要知道是超时还是输出形状变了。
    */
   public static async loadSets(force: boolean = false): Promise<BrewInstalledSets> {
-    if (!BrewInstalledLoader.isBrewCliEnabled()) {
+    if (!BrewCli.isEnabled()) {
       // 能力关闭：静默返回空集合。不执行命令、不写日志、不抛异常，调用方按「没有本机包」处理
       return new BrewInstalledSets();
     }
-    if (!force && BrewInstalledLoader.cache !== null &&
-      Date.now() - BrewInstalledLoader.cacheAt < BREW_INSTALLED_TTL_MS) {
-      const cached: BrewInstalledOutcome = BrewInstalledLoader.cache;
-      if (cached.ok()) {
-        return cached.sets;
+    const snap: BrewInstalledSnapshot | null = BrewInstalledLoader.currentSnapshot();
+    if (!force && snap !== null) {
+      const age: number = Date.now() - snap.readAt;
+      if (!BrewInstalledLoader.expired && age < BREW_INSTALLED_FRESH_MS) {
+        Logger.info(TAG, `skip fresh age=${age}`);
+        return snap.sets;
+      }
+      // 有快照但超出新鲜窗口：先把旧数据给页面，同时在后台刷新一次
+      Logger.info(TAG, `stale age=${age}, refresh in background`);
+      BrewInstalledLoader.startBackgroundRefresh();
+      return snap.sets;
+    }
+    // 没有任何快照（或调用方显式强制刷新）：执行一次命令并等待结果
+    return await BrewInstalledLoader.waitForRead();
+  }
+
+  /** 同步取当前可用的快照（内存优先，其次盘上懒加载）。不执行命令 */
+  public static snapshot(): BrewInstalledSnapshot | null {
+    if (!BrewCli.isEnabled()) {
+      return null;
+    }
+    return BrewInstalledLoader.currentSnapshot();
+  }
+
+  /** 快照里按包名找一条。token 是不带 tap 前缀的包名（与本机包的 `name` 同一口径） */
+  public static installedOf(token: string): BrewInstalledPackage | null {
+    if (token.length === 0) {
+      return null;
+    }
+    const snap: BrewInstalledSnapshot | null = BrewInstalledLoader.snapshot();
+    if (snap === null) {
+      return null;
+    }
+    for (const one of snap.sets.installed) {
+      if (one.name === token) {
+        return one;
       }
     }
-    if (BrewInstalledLoader.inFlight !== null) {
-      return BrewInstalledLoader.inFlight;
-    }
-    const task: Promise<BrewInstalledSets> = BrewInstalledLoader.loadOnce();
-    BrewInstalledLoader.inFlight = task;
-    try {
-      return await task;
-    } finally {
-      BrewInstalledLoader.inFlight = null;
-    }
+    return null;
   }
 
   /**
-   * 设备执行通道（brew cli）是否可用。
+   * 把快照标记为过期（数据保留）并触发一次后台刷新（在途请求合并）。
    *
-   * 由 entry 的 UIAbility 在 `onCreate` 写入 `StorageKey.BREW_CLI_ENABLED`：pc_acl 注入 true、
-   * pc_normal 注入 false；未注入时按 false 处理。
+   * 写命令结束时由 `BrewCommandRunner` 调用：那一刻命令已经结束，
+   * 这一次读取得到的是稳定状态，会写进快照并通知订阅者。
    */
-  private static isBrewCliEnabled(): boolean {
-    return AppStorage.get<boolean>(StorageKey.BREW_CLI_ENABLED) ?? false;
+  public static invalidate(): void {
+    if (!BrewCli.isEnabled()) {
+      return;
+    }
+    BrewInstalledLoader.expired = true;
+    BrewInstalledLoader.startBackgroundRefresh();
   }
 
-  /** 读一次，不碰缓存。给自检与「强制刷新」用 */
+  /** 快照更新通知（后台刷新成功、写命令结束后的刷新） */
+  public static subscribe(listener: () => void): void {
+    if (BrewInstalledLoader.listeners.indexOf(listener) < 0) {
+      BrewInstalledLoader.listeners.push(listener);
+    }
+  }
+
+  public static unsubscribe(listener: () => void): void {
+    const index: number = BrewInstalledLoader.listeners.indexOf(listener);
+    if (index >= 0) {
+      BrewInstalledLoader.listeners.splice(index, 1);
+    }
+  }
+
+  /** 清掉进程内快照（数据源切换、清空缓存之后调用）。盘上快照不动 */
+  public static resetMemory(): void {
+    BrewInstalledLoader.memory = null;
+    BrewInstalledLoader.expired = false;
+  }
+
+  /** 读一次命令。给自检与「强制刷新」用。失败走 `BrewInstalledOutcome.reason`，不自己抛 */
   public static async loadOutcome(): Promise<BrewInstalledOutcome> {
     const startedAt: number = Date.now();
     const outcome: BrewInstalledOutcome = new BrewInstalledOutcome();
 
-    const brewPath: string = BrewInstalledLoader.discoverBrewPath();
+    const brewPath: string = BrewCli.brewPath();
     if (brewPath.length === 0) {
       outcome.reason = BrewInstalledFailure.NOT_FOUND;
       outcome.detail = 'no candidate path is executable';
@@ -132,11 +226,18 @@ export class BrewInstalledLoader {
       return outcome;
     }
 
-    // 工作目录给 brew 的 prefix：应用进程的当前目录是 `/`，应用用户对 `/` 没有读权限，
-    // 而 brew 启动时会检查当前目录可读性
-    const prefix: string = BrewInstalledLoader.prefixOf(brewPath);
+    const commandLine: string = BrewCli.commandLine('info --json=v2 --installed');
+    if (commandLine.length === 0) {
+      outcome.reason = BrewInstalledFailure.NOT_FOUND;
+      outcome.detail = 'command line is empty';
+      outcome.tookMs = Date.now() - startedAt;
+      Logger.warn(TAG, `load failed reason=${outcome.reason} detail=${outcome.detail}`);
+      return outcome;
+    }
+
+    // 工作目录由 `BrewCli` 给：brew 的 prefix，取不到时用通道的默认目录
     const result: ShellResult = await ShellUtils.run(
-      BrewInstalledLoader.commandOf(brewPath), BREW_INSTALLED_TIMEOUT_MS, prefix);
+      commandLine, BREW_INSTALLED_TIMEOUT_MS, BrewCli.workingDirectory());
     outcome.tookMs = Date.now() - startedAt;
     outcome.stdoutBytes = result.stdout.length;
 
@@ -176,80 +277,127 @@ export class BrewInstalledLoader {
     return outcome;
   }
 
+  /** 内存优先；没有内存快照时把盘上快照懒加载进内存 */
+  private static currentSnapshot(): BrewInstalledSnapshot | null {
+    if (BrewInstalledLoader.memory !== null) {
+      return BrewInstalledLoader.memory;
+    }
+    const loaded: BrewInstalledSnapshot | null = BrewInstalledLoader.readSnapshot();
+    BrewInstalledLoader.memory = loaded;
+    return loaded;
+  }
+
+  /** 读盘上快照。进程内只读一次，形状不对或读失败都按「没有快照」处理 */
+  private static readSnapshot(): BrewInstalledSnapshot | null {
+    if (BrewInstalledLoader.prefLoaded) {
+      return null;
+    }
+    BrewInstalledLoader.prefLoaded = true;
+    const doc: BrewInstalledSnapshotDoc | null =
+      PreferenceManager.getInstance().getValue<BrewInstalledSnapshotDoc>(BREW_INSTALLED_SNAPSHOT_KEY);
+    if (doc === null) {
+      Logger.info(TAG, 'snapshot pref absent');
+      return null;
+    }
+    const packages: BrewInstalledPackage[] | undefined = doc.packages;
+    if (doc.version !== BREW_INSTALLED_SNAPSHOT_VERSION || !Array.isArray(packages)) {
+      Logger.warn(TAG, `snapshot pref invalid version=${doc.version}`);
+      return null;
+    }
+    const list: BrewInstalledPackage[] = packages as BrewInstalledPackage[];
+    const snap: BrewInstalledSnapshot = new BrewInstalledSnapshot(
+      BrewInstalledLoader.buildSets(list), doc.readAt ?? 0);
+    Logger.info(TAG, `snapshot pref age=${Date.now() - snap.readAt} installed=${snap.sets.installed.length}`);
+    return snap;
+  }
+
+  /** 成功读取之后写内存与磁盘，再通知订阅者。顺序固定：订阅者读到的一定是新数据 */
+  private static saveSnapshot(sets: BrewInstalledSets): void {
+    const snap: BrewInstalledSnapshot = new BrewInstalledSnapshot(sets, Date.now());
+    BrewInstalledLoader.memory = snap;
+    BrewInstalledLoader.expired = false;
+    const doc: BrewInstalledSnapshotDoc = {
+      version: BREW_INSTALLED_SNAPSHOT_VERSION,
+      readAt: snap.readAt,
+      packages: sets.installed,
+    };
+    PreferenceManager.getInstance().setValue<BrewInstalledSnapshotDoc>(BREW_INSTALLED_SNAPSHOT_KEY, doc);
+    Logger.info(TAG, `snapshot saved installed=${sets.installed.length}`);
+    BrewInstalledLoader.notifyListeners();
+  }
+
   /**
-   * 发现 brew 可执行文件。
+   * 执行一次读取，按结果决定写不写快照。
    *
-   * 顺序：`HOMEBREW_BREW_FILE` -> 固定候选路径。
-   * 候选表在 `@ohos/pcnative` 的 `SHELL_BREW_PATH_CANDIDATES`，与执行通道同层，避免两处各写一份漂移。
-   *
-   * 结果在进程内缓存：这是一次 `test -x` 的探测，但页面上每次进「我的」都会走到这里。
-   *
-   * 同步调用的代价只发生在本进程第一次取数时，所以把它量出来写进日志：
-   * 主线程上跑命令是通道里唯一会阻塞界面的地方，其余都走线程池。
+   * 「写命令执行期间的读取不写快照」在这里落地：`concurrent` 在**开始时**取 ——
+   * 一次读取横跨几秒，期间命令状态可能已经变了，只有开始时的那一刻能代表这次读取的性质。
    */
-  public static discoverBrewPath(): string {
-    if (BrewInstalledLoader.brewPathCache !== null) {
-      return BrewInstalledLoader.brewPathCache;
-    }
-    const startedAt: number = Date.now();
-    const fromEnv: string = BrewInstalledLoader.envBrewPath();
-    if (fromEnv.length > 0) {
-      BrewInstalledLoader.brewPathCache = fromEnv;
-      Logger.info(TAG, `discover brew from env, sync=${Date.now() - startedAt}ms brew=${fromEnv}`);
-      return fromEnv;
-    }
-    for (const candidate of SHELL_BREW_PATH_CANDIDATES) {
-      const check: ShellResult = ShellUtils.runSync(`test -x "${candidate}" && echo yes`, 5000);
-      if (check.ok && check.stdout.trim() === 'yes') {
-        BrewInstalledLoader.brewPathCache = candidate;
-        Logger.info(TAG, `discover brew from candidates, sync=${Date.now() - startedAt}ms brew=${candidate}`);
-        return candidate;
-      }
-    }
-    Logger.warn(TAG, `discover brew failed, sync=${Date.now() - startedAt}ms`);
-    return '';
-  }
-
-  /** `bin/brew` 的上一级目录。找不到时返回空串 */
-  public static prefixOf(brewPath: string): string {
-    const suffix: string = '/bin/brew';
-    if (brewPath.length <= suffix.length || !brewPath.endsWith(suffix)) {
-      return '';
-    }
-    return brewPath.substring(0, brewPath.length - suffix.length);
-  }
-
-  /**
-   * 实际执行的命令行。
-   *
-   * 变量内联进命令行而不是靠子进程继承环境：执行通道是否继承环境变量是探针的 C4 用例，
-   * 内联之后这一条不成立也不影响本命令 —— `HOMEBREW_PREFIX` 由 brew 脚本自己按
-   * `bin/brew` 的位置推导，其余几个只是「不要做额外的事」的开关。
-   */
-  public static commandOf(brewPath: string): string {
-    const prefix: string = BrewInstalledLoader.prefixOf(brewPath);
-    const env: string = 'HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 ' +
-      'HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1';
-    const prefixEnv: string = prefix.length > 0 ? ` HOMEBREW_PREFIX="${prefix}"` : '';
-    return `${env}${prefixEnv} "${brewPath}" info --json=v2 --installed`;
-  }
-
-  /** 清掉进程内缓存。数据源切换、清空缓存之后调用 */
-  public static resetMemory(): void {
-    BrewInstalledLoader.cache = null;
-    BrewInstalledLoader.cacheAt = 0;
-    BrewInstalledLoader.brewPathCache = null;
-  }
-
-  private static async loadOnce(): Promise<BrewInstalledSets> {
+  private static async read(): Promise<BrewInstalledSets> {
+    const concurrent: boolean = BrewCommandRunner.getInstance().isRunning();
     const outcome: BrewInstalledOutcome = await BrewInstalledLoader.loadOutcome();
-    BrewInstalledLoader.cache = outcome;
-    BrewInstalledLoader.cacheAt = Date.now();
     if (!outcome.ok()) {
-      // 失败分类放在 message 里：调用方按它打日志，页面文案保持通用
+      // 失败不碰快照：失败分类放在 message 里，调用方按它打日志，页面文案保持通用
       throw new Error(outcome.reason);
     }
+    if (concurrent) {
+      Logger.warn(TAG, 'concurrent read skip-save');
+    } else {
+      BrewInstalledLoader.saveSnapshot(outcome.sets);
+    }
     return outcome.sets;
+  }
+
+  /** 等待一次读取结果。已有在途请求时直接复用，不重复执行命令 */
+  private static async waitForRead(): Promise<BrewInstalledSets> {
+    const existing: Promise<BrewInstalledSets> | null = BrewInstalledLoader.inFlight;
+    if (existing !== null) {
+      return await existing;
+    }
+    const task: Promise<BrewInstalledSets> = BrewInstalledLoader.read();
+    BrewInstalledLoader.inFlight = task;
+    try {
+      return await task;
+    } finally {
+      BrewInstalledLoader.releaseInFlight(task);
+    }
+  }
+
+  /**
+   * 后台刷新：结果照常写快照，失败只记日志（旧快照保留，页面继续用旧数据）。
+   *
+   * 没有在途请求时才发起：多次进入页面会合并成同一次执行。
+   */
+  private static startBackgroundRefresh(): void {
+    if (BrewInstalledLoader.inFlight !== null) {
+      return;
+    }
+    const task: Promise<BrewInstalledSets> = BrewInstalledLoader.read();
+    BrewInstalledLoader.inFlight = task;
+    BrewInstalledLoader.settleInFlight(task);
+  }
+
+  /** 后台路径必须吞掉异常，否则它会变成一次没人接的拒绝；调用方不受影响 */
+  private static async settleInFlight(task: Promise<BrewInstalledSets>): Promise<void> {
+    try {
+      await task;
+    } catch (error) {
+      Logger.warn(TAG, 'background refresh failed, keep current snapshot');
+    }
+    BrewInstalledLoader.releaseInFlight(task);
+  }
+
+  /** 只释放「还是自己在途」的那一个，避免把后起的请求标记提前摘掉 */
+  private static releaseInFlight(task: Promise<BrewInstalledSets>): void {
+    if (BrewInstalledLoader.inFlight === task) {
+      BrewInstalledLoader.inFlight = null;
+    }
+  }
+
+  private static notifyListeners(): void {
+    const current: (() => void)[] = BrewInstalledLoader.listeners.slice();
+    for (const listener of current) {
+      listener();
+    }
   }
 
   /** 三个集合。`updated` 取补集，避免两张卡片列同一批包（与 `MinePackageSets` 的口径一致） */
@@ -273,21 +421,6 @@ export class BrewInstalledLoader {
     sets.updated = updated;
     return sets;
   }
-
-  private static envBrewPath(): string {
-    // 只有存在 shell 通道时才问环境变量；通道不可用时连 `printenv` 都跑不了
-    if (!ShellUtils.available()) {
-      return '';
-    }
-    const result: ShellResult = ShellUtils.runSync('printenv HOMEBREW_BREW_FILE', 5000);
-    if (!result.ok) {
-      return '';
-    }
-    const value: string = result.stdout.trim();
-    return value.length > 0 ? value : '';
-  }
-
-  private static brewPathCache: string | null = null;
 }
 
 /** 名称排序。不用 localeCompare：ArkTS 对它的支持没有保证，普通比较足够且结果稳定 */

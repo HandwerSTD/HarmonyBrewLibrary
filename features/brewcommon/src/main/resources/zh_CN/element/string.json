@@ -519,6 +519,74 @@
     {
       "name": "brew_detail_absent",
       "value": "当前数据源中没有「%s」这个包，它可能来自自定义 tap"
+    },
+    {
+      "name": "brew_action_upgrade_all",
+      "value": "更新全部"
+    },
+    {
+      "name": "brew_action_running",
+      "value": "执行中…"
+    },
+    {
+      "name": "brew_action_interrupt",
+      "value": "中断"
+    },
+    {
+      "name": "brew_action_force_kill",
+      "value": "强制终止"
+    },
+    {
+      "name": "brew_action_close",
+      "value": "关闭"
+    },
+    {
+      "name": "brew_cmd_status_running",
+      "value": "运行中"
+    },
+    {
+      "name": "brew_cmd_status_interrupting",
+      "value": "正在中断…"
+    },
+    {
+      "name": "brew_cmd_status_done",
+      "value": "已完成"
+    },
+    {
+      "name": "brew_cmd_status_interrupted",
+      "value": "已中断"
+    },
+    {
+      "name": "brew_cmd_status_failed",
+      "value": "执行失败"
+    },
+    {
+      "name": "brew_cmd_status_timeout",
+      "value": "执行超时"
+    },
+    {
+      "name": "brew_cmd_omitted_lines",
+      "value": "已省略前 %d 行"
+    },
+    {
+      "name": "brew_cmd_busy",
+      "value": "已有命令在执行"
+    },
+    {
+      "name": "brew_cmd_title_install",
+      "value": "安装 %s"
+    },
+    {
+      "name": "brew_cmd_title_upgrade",
+      "value": "升级 %s"
+    },
+    {
+      "name": "brew_cmd_unavailable",
+      "value": "设备上找不到可用的 brew"
+    },
+    {
+      "name": "brew_cmd_bad_name",
+      "value": "包名不合法"
     }
   ]
 }

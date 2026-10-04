@@ -99,22 +99,51 @@ export struct BrewInfoSectionView {
 }
 
 /**
- * 安装命令 + 复制按钮（§5.3 分区 2）。
+ * 安装命令 + 执行按钮 + 复制按钮（§5.3 分区 2）。
  *
  * 决策：只展示基础命令 `brew install <token>`，不做交互式安装选项面板 ——
  * 官方 API 的 `options` 字段实测恒为空，没有数据支撑选项面板（§5.1）。
+ *
+ * 执行按钮在标题行的右侧（spec §3.2）：它的文案与可点性由本页的安装状态决定，
+ * 命令文本与「复制」按钮保持原样、互不挤占。
  */
 @Component
 export struct BrewInstallCommandCard {
   @Prop @Require command: string;
+  /**
+   * 是否渲染「安装 / 升级 / 已安装」按钮。
+   * 为假有两种情况：设备上的 brew 能力关闭（pc_normal），以及包名 / tap 通不过命令行校验。
+   */
+  @Prop showAction: boolean = false;
+  /** 按钮文案：安装 / 升级 / 已安装 / 执行中… */
+  @Prop actionLabel: ResourceStr = '';
+  /** 「已安装且版本已是最新」时为 false，按钮不可点 */
+  @Prop actionEnabled: boolean = true;
+  onAction: () => void = () => {};
 
   build() {
     Column() {
-      Text($r('app.string.brew_label_install_command'))
-        .fontSize($r('sys.float.Title_S'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_primary'))
-        .margin({ bottom: $r('sys.float.padding_level6') })
+      Row() {
+        Text($r('app.string.brew_label_install_command'))
+          .fontSize($r('sys.float.Title_S'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Blank()
+        if (this.showAction) {
+          Button(this.actionLabel)
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_primary'))
+            .backgroundColor($r('sys.color.comp_background_tertiary'))
+            .height($r('app.float.brew_detail_copy_button_height'))
+            .enabled(this.actionEnabled)
+            .onClick(() => {
+              this.onAction();
+            })
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .margin({ bottom: $r('sys.float.padding_level6') })
 
       Row() {
         Text(this.command)

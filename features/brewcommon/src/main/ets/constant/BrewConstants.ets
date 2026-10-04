@@ -10,6 +10,7 @@ import {
   StorageKey,
 } from '@ohos/common';
 import { BrewKind } from '../model/BrewModels';
+import { SHELL_TIMEOUT_MAX_MS } from '@ohos/pcnative';
 
 export { BrewKind };
 
@@ -175,15 +176,29 @@ export const BREW_DESC_FRESH_MS: number = 12 * 60 * 60 * 1000;
 // ——— 本机包（`BrewInstalledLoader`）：执行设备上的 brew 命令，读已安装列表。
 
 /**
- * 本机包结果的**进程内**缓存时长。
+ * 本机包快照的新鲜窗口（不是「过期就重读」的 TTL，窗口内根本不执行命令）。
  *
- * 「我的」页与「本机包」二级页在一次操作里会各取一次，两次之间数据不可能变，
- * 而每次调用都要付一次 Ruby 启动成本。取 60 秒：足够覆盖「页面上下来回切」，
- * 又不会让刚装完包的用户看到过期列表。
+ * 取 10 分钟的依据是「读取一次的代价」与「数据变化的来源」：读取要拉起 vendored Ruby
+ * （首跑 2–3 秒），而本机包只在有人装 / 升 / 卸时变化，其中由本应用发起的变化在命令结束后
+ * 会主动让快照失效，剩下的只有用户在终端里直接操作 brew 这一种 —— 10 分钟的陈旧窗口对它可接受。
  *
- * 不落盘 —— 本机包是设备上随时可读的现状数据，落盘只会引入失效判定。
+ * 超出窗口时不阻塞页面：`loadSets()` 先返回旧快照，再在后台刷新一次。
  */
-export const BREW_INSTALLED_TTL_MS: number = 60 * 1000;
+export const BREW_INSTALLED_FRESH_MS: number = 10 * 60 * 1000;
+
+/**
+ * 本机包快照的存储键。
+ *
+ * 放在全局 store（`PreferenceManager`）而不是某个 brew 缓存键旁边：本机包是**设备状态**，
+ * 不属于任何数据源，清空某个源的缓存不应该把它一起删掉。冷启动先用它立刻显示数量。
+ */
+export const BREW_INSTALLED_SNAPSHOT_KEY: string = 'brew_installed_snapshot';
+
+/**
+ * 快照的形状版本。**结构一变就 +1**，读盘时版本对不上整份按「没有快照」处理。
+ * 盘上只存 `installed` 一个集合，`outdated` 与 `updated` 读时派生。
+ */
+export const BREW_INSTALLED_SNAPSHOT_VERSION: number = 1;
 
 /**
  * 本机包命令的超时。
@@ -192,6 +207,41 @@ export const BREW_INSTALLED_TTL_MS: number = 60 * 1000;
  * 实测值在设备上量过之后按需调整（见 spec §9）。
  */
 export const BREW_INSTALLED_TIMEOUT_MS: number = 30000;
+
+// ——— 写命令（`BrewCommandRunner`）：单飞执行一条 brew 写命令，流式显示输出，可中断。
+
+/**
+ * 流式输出的轮询周期。
+ *
+ * 取 200ms 是为了与界面刷新节奏一致：一次轮询把到的新输出合成一批行再渲染，
+ * 既避免每一小段输出都触发一次渲染，也让用户看到的是连续成行的日志而不是逐字跳动。
+ */
+export const BREW_COMMAND_POLL_MS: number = 200;
+
+/**
+ * 日志区保留的行数上限。
+ *
+ * 超出时丢弃最旧的行并在日志区顶部累计「已省略前 N 行」。升级一次的真实输出量远低于这个上限，
+ * 它只是防止一条刷屏的命令把内存与渲染拖垮。
+ */
+export const BREW_COMMAND_LOG_MAX_LINES: number = 1000;
+
+/**
+ * 中断的宽限期。
+ *
+ * 中断发出后这段时间内「中断」按钮禁用、状态显示「正在中断…」；到点仍在运行就允许强制终止。
+ * 留这段时间是因为 brew 的 Ruby 层收到 SIGINT 后可能先删半成品再退出，
+ * 立刻强杀会把它的清理动作打断。
+ */
+export const BREW_COMMAND_INTERRUPT_GRACE_MS: number = 5000;
+
+/**
+ * 写命令的超时。与执行通道的上限同值。
+ *
+ * 这里它是「进程完全没有进展」的兜底，不是执行时长限制：命令有可见输出与「中断」入口，
+ * 用户随时能结束它；一次升级要下载并装上多个包，设备上还可能从源码构建，不能按分钟算。
+ */
+export const BREW_COMMAND_TIMEOUT_MS: number = SHELL_TIMEOUT_MAX_MS;
 
 /** 每张榜展示的条数（与 `check_algo.py` 的榜口径、`brew-discover-algo.md` 一致） */
 export const BREW_CATALOG_TOP_N: number = 10;

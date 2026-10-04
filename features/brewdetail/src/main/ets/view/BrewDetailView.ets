@@ -9,22 +9,36 @@ import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
   CommonConstants,
+  CustomImmersiveStyle,
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
+  MaterialUtil,
   NoNetworkView,
   PageEnum,
   StatePlaceholderKind,
   StatePlaceholderView,
-  StorageKey,
   StatusBarColorType,
+  StorageKey,
+  Toast,
 } from '@ohos/common';
-import { BrewKind, BrewPackageRow, brewContentTopInset, brewTitleBarStyle } from '@ohos/brewcommon';
+import {
+  BrewCommandRunner,
+  BrewCommandSheet,
+  BrewCommandStartResult,
+  BrewCommandState,
+  BrewCommandStatus,
+  BrewInstalledLoader,
+  BrewKind,
+  BrewPackageRow,
+  brewContentTopInset,
+  brewTitleBarStyle,
+} from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } from '@ohos/brewcommon';
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
 import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
-import { BrewDetailState } from '../viewmodel/BrewDetailState';
+import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
 
 /**
@@ -62,6 +76,40 @@ export struct BrewDetailView {
   @State backPressed: boolean = false;
 
   private viewModel: BrewDetailViewModel = BrewDetailViewModel.getInstance();
+  /** 执行 Sheet 是否展示。命令状态在 `BrewCommandRunner` 单例里，关掉 Sheet 不影响命令执行 */
+  @State commandSheetShown: boolean = false;
+  /**
+   * 与 `BrewCommandRunner` 单例里**同一个**命令状态实例（`BrewCommandState` 是 `@Observed`）。
+   * 按钮文案靠它的一级属性变化重渲染；Sheet 用 `@ObjectLink` 接它，输出逐行追加时只更新受影响的行。
+   */
+  @State commandState: BrewCommandState = this.viewModel.getCommandState();
+  /** 命令状态回调。存成字段，保证 `subscribe` / `unsubscribe` 拿到的是同一个函数对象 */
+  private commandListener: () => void = () => {
+    this.onCommandStateChanged();
+  };
+  /** 快照更新回调。详情页的 state 是页面实例自己的，所以回调也存在这里而不是 VM 里 */
+  private snapshotListener: () => void = () => {
+    this.viewModel.refreshInstallState(this.detailState);
+  };
+  /**
+   * 上一次看到的命令状态。用来分辨「刚刚结束」与「进页面时看到的是上次那条命令的结局」，
+   * 后者不该再弹一次结束提示。
+   */
+  private lastCommandStatus: BrewCommandStatus = BrewCommandStatus.IDLE;
+
+  /**
+   * 快照订阅放在页面里而不是 VM 里：`BrewDetailState` 是每个页面实例自己的
+   * （详情页可以叠在详情页上），VM 是单例，订阅回调必须知道是哪一页的 state。
+   */
+  aboutToAppear(): void {
+    BrewInstalledLoader.subscribe(this.snapshotListener);
+    BrewCommandRunner.getInstance().subscribe(this.commandListener);
+  }
+
+  aboutToDisappear(): void {
+    BrewInstalledLoader.unsubscribe(this.snapshotListener);
+    BrewCommandRunner.getInstance().unsubscribe(this.commandListener);
+  }
 
   handleOnReady(ctx: NavDestinationContext): void {
     const params: BrewDetailParams = ctx?.pathInfo?.param as BrewDetailParams;
@@ -105,6 +153,97 @@ export struct BrewDetailView {
     }).getValue(this.globalInfoModel.widthBreakpoint);
   }
 
+  /**
+   * 本包的安装 / 升级命令是不是正在执行。
+   *
+   * 判据是 `BrewCommandRunner.isRunningArgs()`：参数相同才算本页这条命令在跑，
+   * 别的命令（例如「更新全部」）在跑时按钮仍显示「安装」/「升级」，点下去弹「已有命令在执行」。
+   * 先读一次 `status` 是为了让本方法在 build 里建立对 `commandState` 的观察 ——
+   * 忙闲切换时 runner 只改自己的字段，不改被观察属性，按钮不会跟着重渲染。
+   */
+  private installRunning(): boolean {
+    const status: BrewCommandStatus = this.commandState.status;
+    if (status !== BrewCommandStatus.RUNNING) {
+      return false;
+    }
+    return BrewCommandRunner.getInstance().isRunningArgs(this.viewModel.actionArgs(this.detailState));
+  }
+
+  /**
+   * 按钮文案（spec §3.2）：未安装或快照未知 -> 安装；已安装且有新版本 -> 升级；
+   * 已安装且最新 -> 已安装（不可点）。本命令在跑时统一显示「执行中…」。
+   */
+  private installActionLabel(): ResourceStr {
+    if (this.installRunning()) {
+      return $r('app.string.brew_action_running');
+    }
+    if (this.detailState.installState === BrewInstallState.OUTDATED) {
+      return $r('app.string.brew_action_upgrade');
+    }
+    if (this.detailState.installState === BrewInstallState.INSTALLED) {
+      return $r('app.string.brew_state_installed');
+    }
+    return $r('app.string.brew_action_install');
+  }
+
+  /** 「已安装且版本已是最新」时按钮不可点 */
+  private installActionEnabled(): boolean {
+    return this.detailState.installState !== BrewInstallState.INSTALLED;
+  }
+
+  private onInstallActionClick(): void {
+    // 「执行中…」时点击只重新打开 Sheet：命令状态在单例里，重新打开能看到完整输出，
+    // 也不能因为重复点而把同一条命令再发一次。
+    if (this.installRunning()) {
+      this.commandSheetShown = true;
+      return;
+    }
+    if (this.viewModel.startInstallOrUpgrade(this.detailState) === BrewCommandStartResult.STARTED) {
+      this.commandSheetShown = true;
+    }
+  }
+
+  /** 命令结束时补一条提示。Sheet 关着才弹 —— Sheet 里已经有状态标签了 */
+  private onCommandStateChanged(): void {
+    const status: BrewCommandStatus = this.commandState.status;
+    if (status === this.lastCommandStatus) {
+      return;
+    }
+    this.lastCommandStatus = status;
+    if (this.commandSheetShown) {
+      return;
+    }
+    // 本页压在「我的」页上时两页同时存活，结束提示只让先调用的那一页弹（避免弹两次）
+    if (!BrewCommandRunner.getInstance().claimEndNotice()) {
+      return;
+    }
+    if (status === BrewCommandStatus.DONE) {
+      Toast.showToast($r('app.string.brew_cmd_status_done'));
+    } else if (status === BrewCommandStatus.INTERRUPTED) {
+      Toast.showToast($r('app.string.brew_cmd_status_interrupted'));
+    } else if (status === BrewCommandStatus.TIMEOUT) {
+      Toast.showToast($r('app.string.brew_cmd_status_timeout'));
+    } else if (status === BrewCommandStatus.FAILED) {
+      Toast.showToast($r('app.string.brew_cmd_status_failed'));
+    }
+  }
+
+  @Builder
+  CommandSheetBuilder() {
+    BrewCommandSheet({
+      state: this.commandState,
+      onInterrupt: () => {
+        this.viewModel.interruptCommand();
+      },
+      onForceKill: () => {
+        this.viewModel.forceKillCommand();
+      },
+      onClose: () => {
+        this.commandSheetShown = false;
+      },
+    })
+  }
+
   @Builder
   ContentBuilder() {
     Scroll() {
@@ -117,8 +256,16 @@ export struct BrewDetailView {
           BrewLifecycleBanner({ notice: this.detailState.data.lifecycle })
         }
 
-        // 2 安装命令 + 复制
-        BrewInstallCommandCard({ command: this.detailState.data.installCommand })
+        // 2 安装命令 + 执行按钮 + 复制
+        BrewInstallCommandCard({
+          command: this.detailState.data.installCommand,
+          showAction: this.detailState.commandReady,
+          actionLabel: this.installActionLabel(),
+          actionEnabled: this.installActionEnabled(),
+          onAction: () => {
+            this.onInstallActionClick();
+          },
+        })
 
         // 3 元信息
         BrewDetailMetaBar({ rows: this.detailState.data.meta })
@@ -240,6 +387,29 @@ export struct BrewDetailView {
         StatusBarColorType.WHITE : StatusBarColorType.BLACK
     })
     .onReady((ctx: NavDestinationContext) => this.handleOnReady(ctx))
+    // 执行 Sheet。选项写法与 MineView 的登录 Sheet 一致（材质 + 宽窄屏的尺寸口径）。
+    // Sheet 可随时关闭：命令状态在 `BrewCommandRunner` 单例里，关掉不影响命令执行。
+    .bindSheet(this.commandSheetShown, this.CommandSheetBuilder(),
+      MaterialUtil.getMaterialOptions<SheetOptions>({
+        originOption: {
+          showClose: true,
+          preferType: (this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
+            !AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT)) ? SheetType.BOTTOM : SheetType.CENTER,
+          height: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ?
+            ((this.globalInfoModel.deviceHeight - this.globalInfoModel.decorHeight) *
+              CommonConstants.SHEET_HEIGHT_RATIO_XL) : SheetSize.LARGE,
+          width: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? CommonConstants.SHEET_WIDTH_XL :
+            undefined,
+          onWillDisappear: () => {
+            this.commandSheetShown = false;
+          },
+        },
+        param: {
+          style: CustomImmersiveStyle.ULTRA_THICK,
+          backgroundColor: Color.Transparent,
+        },
+      }) as SheetOptions
+    )
     .onBackPressed(() => {
       // 已在处理中就吞掉重复按下 —— 否则连点会把上一页（列表页）也一起弹掉。
       if (this.backPressed) {
