@@ -41,12 +41,18 @@ const TAG: string = '[MinePageVM]';
 /**
  * 「我的」页可选区块开关。
  *
- * 关掉只影响「是否出现在页面上」，条目定义、取数、子页面路由全部原样保留：
- * 把对应常量改回 true 就能整块恢复，不需要回滚代码。
- * 之所以不做成删代码/注释，是因为这三块都是**阶段性下线**，后面还要按用户体验结论重新设计再上。
+ * 关掉只影响「是否出现在页面上」，条目定义、取数、子页面路由全部原样保留，
+ * 需要展示时把对应开关置为 true 就能整块恢复。
+ * 之所以不做成删代码/注释，是因为这几块都是**阶段性下线**，后面还要按用户体验结论重新设计再上。
  */
-/** 本机包：已安装入口（含数量）+ 待更新 / 已更新预览卡片 */
-export const MINE_SHOW_LOCAL_PACKAGES: boolean = true;
+/**
+ * 本机包：已安装入口（含数量）+ 待更新 / 已更新预览卡片。
+ * 显隐由 entry 在 `PcAbility.onCreate` 注入的 `StorageKey.BREW_CLI_ENABLED` 决定：
+ * pc_acl 注入 true、pc_normal 注入 false；未注入时按 false 处理，此时入口不展示、也不发起取数。
+ */
+export function isLocalPackagesEnabled(): boolean {
+  return AppStorage.get<boolean>(StorageKey.BREW_CLI_ENABLED) ?? false;
+}
 /** 用户体验调研卡片 */
 export const MINE_SHOW_USER_EXPERIENCE: boolean = false;
 /** 问题与建议入口 */
@@ -55,7 +61,7 @@ export const MINE_SHOW_FEEDBACK: boolean = false;
 /** 某个可选区块当前是否展示。未登记的 feature 一律当常显。 */
 export function isMineFeatureVisible(feature: MineFeature): boolean {
   if (feature === MineFeature.LOCAL_PACKAGE) {
-    return MINE_SHOW_LOCAL_PACKAGES;
+    return isLocalPackagesEnabled();
   }
   if (feature === MineFeature.USER_EXPERIENCE) {
     return MINE_SHOW_USER_EXPERIENCE;
@@ -173,8 +179,8 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
   public sendEvent<T>(event: MineEventParam<T>): void | boolean {
     const eventType: MineEventType | BaseHomeEventType = event.type;
     if (eventType === MineEventType.LOAD_LOCAL_PACKAGES) {
-      // 本机包三块关掉时不取数：loadSets() 会把全量本机包读一遍再排序，白跑一趟
-      if (MINE_SHOW_LOCAL_PACKAGES) {
+      // 能力开关关闭时不取数：loadSets() 会把全量本机包读一遍再排序，白跑一趟
+      if (isLocalPackagesEnabled()) {
         this.loadLocalPackages();
       }
     } else if (eventType === MineEventType.INIT_DATA) {

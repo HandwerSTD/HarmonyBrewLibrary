@@ -1,0 +1,19 @@
+{
+  "name": "@ohos/pcui",
+  "version": "1.0.0",
+  "description": "PC 端业务 UI：页签容器、启动页容器与 ability 生命周期辅助。",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/common": "file:../../common",
+    "@ohos/commonbusiness": "file:../commonbusiness",
+    "@ohos/mine": "file:../mine",
+    "@ohos/brewcommon": "file:../brewcommon",
+    "@ohos/brewformulae": "file:../brewformulae",
+    "@ohos/brewcasks": "file:../brewcasks",
+    "@ohos/brewdiscover": "file:../brewdiscover",
+    "@ohos/brewsearch": "file:../brewsearch",
+    "@ohos/brewdetail": "file:../brewdetail"
+  }
+}

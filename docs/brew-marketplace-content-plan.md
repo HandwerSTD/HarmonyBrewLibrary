@@ -88,7 +88,7 @@ MediaTypeEnum:     IMAGE / VIDEO / SYMBOL
 开发期侧边栏为 **8 项**（4 新 + 4 旧）。用开关控制，收尾改一行即可隐藏旧入口：
 
 ```typescript
-// features/abilitycommon/src/main/ets/model/TabBarModel.ets
+// features/pcui/src/main/ets/model/TabBarModel.ets
 export const LEGACY_TABS_ENABLED: boolean = true;   // 开发结束改 false → 再删模块
 
 export const TABS_LIST: TabBarData[] = [
@@ -113,7 +113,7 @@ export const TABS_LIST: TabBarData[] = [
 
 ```
 features/
-├── abilitycommon      ← 改：TABS_LIST + HomeView 增加新 TabContent + 临时开关
+├── pcui               ← 改：TABS_LIST + HomeView 增加新 TabContent + 临时开关
 ├── commonbusiness     ← 不动（新模块直接复用 BaseHomeView/BaseHomeViewModel）
 ├── common             ← 扩展：TriggerEnums 新增 trigger；mockdata 新增 brew/*
 ├── componentlibrary   ┐
@@ -132,7 +132,7 @@ features/
 ```
 brewdiscover / brewformulae / brewcasks
     → brewcommon + commonbusiness + common
-abilitycommon
+pcui
     → brewdiscover + brewformulae + brewcasks + (legacy 四模块)
 ```
 
@@ -460,8 +460,8 @@ export class FormulaContent extends BaseData {
 5. 删除对应 `router_map.json` 条目（16 条中删 13 条）
 6. `PageEnum.ets` 清理相关常量（含已失效的 `TV_*` / `WEARABLE_*`）
 7. 删除 `common/src/main/resources/rawfile/mockdata/` 中 component-* / sample-* / discovery-* 等
-8. `features/abilitycommon/Index.ets` 删除对应导出
-9. 扫描并清理仅被 legacy 使用的组件：`common/src/main/ets/component/`、`commonbusiness`、`widgetcommon`
+8. `features/pcui/Index.ets` 删除对应导出
+9. 扫描并清理仅被 legacy 使用的组件：`common/src/main/ets/component/`、`commonbusiness`（桌面卡片链路已从工程移除，工程内没有 `widgetcommon` 模块与 `form_config.json`）
 
 ---
 

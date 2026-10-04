@@ -96,4 +96,6 @@ export enum StorageKey {
   // IntentFramework:
   CONTEXT_ENTRY = 'hmos_world_Context_EntryAbility',
   IS_SIDEBAR_LAYOUT = 'hmos_world_isSideBarLayout',
+  /** 设备执行通道（brew cli）是否可用。由 entry 的 UIAbility 注入，未注入时为 false */
+  BREW_CLI_ENABLED = 'hmos_world_brewCliEnabled',
 }

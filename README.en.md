@@ -6,7 +6,7 @@ BrewLibrary is a **HarmonyOS PC (2in1)** app for browsing Homebrew packages: it 
 
 - Device type: 2in1 (PC) only, minimum window 1080 × 608
 - Compile target: HarmonyOS 6.1.0 (API 23), hvigor model 5.0.0
-- Stack: ArkTS / ArkUI (Stage model), single entry module `products/pc`
+- Stack: ArkTS / ArkUI (Stage model), two entry modules: `products/pc_acl` (full build, requests `CUSTOM_SANDBOX` and `READ_WRITE_USER_FILE`) and `products/pc_normal` (no restricted permissions)
 
 > 中文说明见 [README.md](README.md)。
 
@@ -20,7 +20,7 @@ BrewLibrary is a **HarmonyOS PC (2in1)** app for browsing Homebrew packages: it 
 | **Search** | On-device search engine (dependency-free pure functions + lexicon scoring), works offline |
 | **Me** | Locally installed / outdated packages, data-source switching with connectivity status, optional section toggles |
 
-Desktop card code (`features/widgetcommon`, `products/pc/src/main/ets/widget/pages/`, `PcFormAbility.ets`, `resources/base/profile/form_config.json`) is still in the repository, but the form extension entry (`extensionAbilities` in `products/pc/src/main/module.json5`) has been removed in the current version, so the app no longer appears in the system add-card list. Add that declaration back to `module.json5` to restore it.
+> The two entry builds differ only in the local-package section: `pc_acl` shows the three local-package blocks on the **Me** page and reads the Homebrew install records on the device; `pc_normal` requests neither `CUSTOM_SANDBOX` nor `READ_WRITE_USER_FILE`, its `PcAbility` injects `StorageKey.BREW_CLI_ENABLED = false` into `AppStorage`, so the **Me** page hides the local-package entry and local-package queries return an empty set silently. Every other tab behaves the same in both builds.
 
 ## Data sources
 
@@ -28,7 +28,7 @@ Desktop card code (`features/widgetcommon`, `products/pc/src/main/ets/widget/pag
 | --- | --- |
 | `formulae.brew.sh/api` (upstream) | Live package details, per-token index |
 | `harmonybrew.atomgit.com` (Harmonybrew mirror) | Normalized full catalog + stats snapshot |
-| The on-device `brew` command (`features/pcnative` + `BrewInstalledLoader`) | Installed / outdated packages on the **Me** page |
+| The on-device `brew` command (`features/pcnative` + `BrewInstalledLoader`) | Installed / outdated packages on the **Me** page (available in `pc_acl` only) |
 
 The two dialects are abstracted by `features/brewcommon/src/main/ets/service/source/BrewSourceAdapter.ets` (`UpstreamAdapter` / `HarmonybrewAdapter`); the source URL and probe result can be inspected and switched on the **Me** page. The taxonomy and board algorithms are project-specific, not official API fields — see `docs/brew-marketplace-content-plan.md` and `docs/brew-discover-algo.md`.
 
@@ -38,9 +38,8 @@ The two dialects are abstracted by `features/brewcommon/src/main/ets/service/sou
 AppScope/                 App-level resources (layered icon, app name, permission strings)
 common/                   Shared UI primitives and utils (@ohos/common)
 features/
-  abilitycommon/          Home shell: side bar + HdsTabs + page containers
+  pcui/                   Home shell: side bar + HdsTabs + page containers
   commonbusiness/         Shared business capabilities (enums, state, components)
-  widgetcommon/           Desktop card components (2×2 / 2×4 / lock screen)
   brewcommon/             Data layer: HTTP, source adapters, catalog sync, search engine, models
   brewdiscover/           Discover page
   brewformulae/           Formulae page
@@ -48,7 +47,8 @@ features/
   brewdetail/             Package detail page (shared by formula / cask)
   brewsearch/             Search page
   mine/                   Me page
-products/pc/              entry module: PcAbility, splash, side bar, forms
+products/pc_acl/          entry module (full build): PcAbility, splash, main page
+products/pc_normal/       entry module (no restricted permissions): PcAbility, splash, main page
 docs/                     Design docs and handover notes
 hmosword-build/
   brew-mockgen/           Mock data generator and offline checkers (Python)
@@ -66,14 +66,17 @@ keys/                     Local signing material (git-ignored, not in the repo)
 ## Build and run
 
 ```bash
-devecocli build --product default   # whole product
-devecocli build --modules pc        # entry module only
-devecocli run                       # build + install + launch (device required)
+devecocli build --product default    # produces pc_acl (full build HAP)
+devecocli build --product pc_normal  # produces pc_normal (no restricted permissions HAP)
+devecocli build --modules pc_acl     # entry module pc_acl only
+devecocli run                        # build + install + launch (device required)
 ```
+
+The root `build-profile.json5` defines two products: `default` maps to module `pc_acl`, `pc_normal` maps to module `pc_normal`.
 
 `devecocli` is the DevEco CLI (it wraps hvigor / ohpm / hdc). Opening the project in DevEco Studio and pressing Run works as well; the repo does not ship an `hvigorw` wrapper script.
 
-> **Signing**: the `default` and `release` signing configs in `build-profile.json5` point to `.cer` / `.p7b` / `.p12` files under `./keys/`. `keys/` holds local signing material and is **not** committed (it is git-ignored), so after cloning you must either use DevEco Studio's automatic signing or supply your own certificates and update those two configs — otherwise no signed HAP can be produced.
+> **Signing**: product `default` uses the `default` and `release` signing configs; product `pc_normal` uses the `normal_debug` and `normal_release` signing configs, where `normal_debug` points to profile `keys/brewdebugDebug.p7b` and `normal_release` to profile `keys/brewreleaseRelease.p7b`. The certificate and keystore of all four configs live under `./keys/` as `.cer` / `.p12` files. `keys/` holds local signing material and is **not** committed (it is git-ignored), so after cloning you must either use DevEco Studio's automatic signing or supply your own certificates and update those configs — otherwise no signed HAP can be produced.
 
 ## Development checks
 

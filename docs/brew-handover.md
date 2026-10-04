@@ -50,7 +50,7 @@
 | 项 | 值 |
 |---|---|
 | 真机 | `HUAWEI MateBook Pro` / `127.0.0.1:42021` / 2in1 |
-| 构建 | `devecocli build`（产物日志习惯放 `.brewgen/build*.log`） |
+| 构建 | `devecocli build --product default`（出 `pc_acl`）/ `devecocli build --product pc_normal`（出 `pc_normal`）；产物日志习惯放 `.brewgen/build*.log` |
 | 装机+启动 | `devecocli run --device 127.0.0.1:42021` |
 | 崩溃日志 | `devecocli log --device 127.0.0.1:42021 --crash --from 5m --tail 30` |
 | 看版面 | `devecocli ui layout --device <id> --window <windowId>` |
@@ -83,12 +83,12 @@ python3 hmosword-build/brew-mockgen/check_algo.py --fetch --data .brewgen/analyt
 
 ```bash
 # ① 符号是否真进了字节码
-ABC=products/pc/build/default/intermediates/loader_out/default/ets/modules.abc
+ABC=products/pc_acl/build/default/intermediates/loader_out/default/ets/modules.abc
 strings "$ABC" | grep -c BrewDiscoverHomeView      # 应为正数
 # 注意：**不要加 ^...$ 锚点** —— 加了连早就跑通的符号也会是 0（踩过，见 §9.5.1）
 
 # ② HAR 的 routerMap 是否合并进了 HAP
-python3 -c "import json;print(len(json.load(open('products/pc/build/default/intermediates/router_map/default/router_map.json'))['routerMap']))"
+python3 -c "import json;print(len(json.load(open('products/pc_acl/build/default/intermediates/router_map/default/router_map.json'))['routerMap']))"
 # 当前 24 条；不能用"各模块 router_map 条数相加"替代
 ```
 
@@ -99,20 +99,22 @@ python3 -c "import json;print(len(json.load(open('products/pc/build/default/inte
 
 ## 3. 代码地图
 
-### 3.1 模块（`build-profile.json5` 的 `modules[]`，共 13 个 + 1 个 product）
+### 3.1 模块（`build-profile.json5` 的 `modules[]`，共 13 个 + 2 个 product）
 
 | 模块 | 性质 | 职责 |
 |---|---|---|
-| `products/pc` | 唯一 product | 入口 Ability / MainPage。**products 已从 7 个收敛为 1 个** |
-| `abilitycommon` | 原有 | 侧边栏与页签容器（`HomeView` / `TabBarModel`）、资源 |
+| `products/pc_acl` `products/pc_normal` | 两个 entry 模块 | 各只保留四个文件：`pcability/PcAbility.ets`、`page/SplashPage.ets`、`page/PcMainPage.ets`、`pcbackupability/PcBackupAbility.ets`。**2026-10 起 entry 一分为二**：product `default` 出 `pc_acl`（申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`，`PcAbility` 注入 `BREW_CLI_ENABLED = true`，「我的」页展示本机包三块）；product `pc_normal` 出 `pc_normal`（不申请这两个权限，注入 `BREW_CLI_ENABLED = false`，「我的」页不展示本机包入口，取数静默返回空集合） |
+| `pcui` | **新增** | PC 业务 UI：`HomeView` / `PcMainPage` / `PcSplashPage` / `CustomSideBar`、`TabBarModel` / `SplashModel` / `SplashView` / `SplashViewModel`、`BaseAbilityHelper`、`InitCenter` / `ContextConfig` 与 PC 相关资源 |
 | `common` | 原有 | Preference / 路由 / 账号 / 事件。**2026-10 起不再有请求层**（`MockRequest` / `TriggerEnums` 已删） |
 | `commonbusiness` | 原有 | `BaseHomeView` / `BaseHomeViewModel`（模糊标题栏、section、返回键都在这里） |
-| `componentlibrary` `devpractices` `exploration` `mine` `widgetcommon` | 原有 | 【组件/样例/实践/我的】对照入口；**`mine` 是就地改造**，其余未动 |
+| `mine` | 原有 | 「我的」页。**就地改造** |
 | `brewcommon` | **新增** | Homebrew 共享层：模型 / 常量 / 服务 / 仓库 / **共享 UI 原子**。多源与按源缓存按其职责拆成：`constant/BrewSourceConstants.ets`、`model/BrewSourceModels.ets`、`service/BrewSourceUrl|Store|Prefs|Probe|Restart|CacheEpoch|CacheAdmin|Diagnostics.ets`、`util/objkeys.ts`（见 `brew-api-design.md` §7.5.1） |
 | `brewformulae` | **新增** | Formulae 页签 |
 | `brewcasks` | **新增** | Casks 页签 |
 | `brewdetail` | **新增** | 包详情页（formula / cask 共用路由） |
 | `brewdiscover` | **新增** | Discover 页签 + 榜单二级页 |
+
+卡片链路已从工程移除：两个 entry 的 `module.json5` 都没有 `extensionAbilities`，工程内没有 `form_config.json`、`pcformability` 与 `widget/pages` 目录。
 
 新增模块的规模（`src/main/ets` 下的 `.ets`）：
 
@@ -162,8 +164,8 @@ python3 -c "import json;print(len(json.load(open('products/pc/build/default/inte
 | ~~`brew-discover-page.json`~~ | **已删除（2026-10）**。它是 Discover 的**回落快照**：目录拿不到时当成员用，目录可用时被目录成员覆盖。回落一并删掉后，六张榜的**骨架改为代码构造**（`BrewRepository.emptyDiscoverPage`，`id = sequence = 1..6` 与旧快照逐字一致，二级页路由不受影响），成员唯一来源 = 设备端目录；目录拿不到 → **空榜**（`loadDiscover` 过滤空榜后页面走空态）。榜算法口径的权威实现在 `check_algo.py` + `brew-discover-algo.md` |
 | ~~`brew-local-formulae.json` / `brew-local-casks.json` / `brew-local-outdated.json`~~ | **已删除（2026-10）**。这三份内置 mock 随快照链路一并删除。本机包现在的数据源是设备上的 brew 命令（`BrewInstalledLoader`：`brew info --json=v2 --installed`），`MinePackagesUtil.loadSets()` 从「返回空集」改为转调它；签名与全部 UI 结构未变 |
 | ~~`brew-local-overview.json` / `brew-local-taps.json` / `brew-local-services.json`~~ | **已删除（2026-09）**。`BrewLocalModel.getOverview/getTaps/getServices` 在 UI 侧**没有任何调用点**，整条链路（Repository → Service → rawfile）一并删除，`TriggerEnums.BREW_LOCAL_OVERVIEW/_TAPS/_SERVICES` 同时移除；`generate.py` 也已停止产出 |
-| ~~`intent-framework-pages-list.json`（含 2in1/phone/tablet 三份）~~、~~`vision-sample-list.json`~~、~~`wearable-sample-list.json`~~ | **已删除（2026-09）**。`TriggerEnums.INTENT_FRAMEWORK_PAGE_LIST` / `VERSION_SAMPLE_TRIGGER` / `WEARABLE_SAMPLE_TRIGGER` 从未被任何代码引用（也无 insightIntent 声明），`rawfile/{main_pages_list,router_config,insight_intent_page_type}.json` 与 `abilitycommon/rawfile/InsightIntentDecoratorJSON.json` 同批删除 |
-| ~~`phone/**`、`tablet/**`~~ | **已删除（2026-09）**。唯一 entry 模块 `products/pc` 的 `deviceTypes` 只有 `2in1`，而 `MockRequest` 只拼 `mockdata/<deviceType>/<trigger>.json`（无回落）—— 这两个目录永远不会被解析。仅保留 `2in1/sample-*.json` 与 `2in1/new-contents.json` |
+| ~~`intent-framework-pages-list.json`（含 2in1/phone/tablet 三份）~~、~~`vision-sample-list.json`~~、~~`wearable-sample-list.json`~~ | **已删除（2026-09）**。`TriggerEnums.INTENT_FRAMEWORK_PAGE_LIST` / `VERSION_SAMPLE_TRIGGER` / `WEARABLE_SAMPLE_TRIGGER` 从未被任何代码引用（也无 insightIntent 声明），`rawfile/{main_pages_list,router_config,insight_intent_page_type}.json` 与 `pcui/rawfile/InsightIntentDecoratorJSON.json` 同批删除 |
+| ~~`phone/**`、`tablet/**`~~ | **已删除（2026-09）**。两个 entry 模块（`products/pc_acl` / `products/pc_normal`）的 `deviceTypes` 只有 `2in1`，而 `MockRequest` 只拼 `mockdata/<deviceType>/<trigger>.json`（无回落）—— 这两个目录永远不会被解析。仅保留 `2in1/sample-*.json` 与 `2in1/new-contents.json` |
 
 规模：brew mock **已于 2026-10 归零**（最后 4 个文件、约 44 KB 同批删除，整个 `rawfile/` 目录已不存在）。
 前一轮（2026-09）先删除 **21 个 mock 文件、约 786 KB**（intent / 设备目录 / 本地状态三类），
@@ -421,7 +423,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 
 ### 8.1 收尾时要做的事
 
-1. **下线对照入口**：`features/abilitycommon/src/main/ets/model/TabBarModel.ets` 里
+1. **下线对照入口**：`features/pcui/src/main/ets/model/TabBarModel.ets` 里
    `LEGACY_TABS_ENABLED` 置 `false`（当前 `true`）。之后 `TABS_LIST` 只剩四个市场页签。
 2. **清理死代码**：`features/brewformulae/.../BrewMarketPlaceholderView.ets` 与
    `brew_placeholder_*` 文案已无引用（两个占位页都被真实页面替换了）。
@@ -485,7 +487,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 
 | 类别 | 条数 | 例子 | 建议 |
 |---|---|---|---|
-| **确认死掉**（功能被取代或从未接线） | 37 | `brew_tab_mine` + `brew_tab_legacy_*`（5，侧边栏实际用 `abilitycommon` 自己的 `tab_*`）；`brew_artifact_app/binary/pkg/font/other`（5，详情页展示的是原始 `artifactType`）；`brew_mine_*`（13，原 Mine 规划被需求方的新布局取代）；`brew_label_required_by/install_options/caveats/deprecated/disabled/replacement/deprecation_reason`（7）；`brew_state_installed/not_installed/upgradable/bottle/source`（5）；`brew_section_hot/new/top10/related`（4）；`brew_action_install/uninstall/upgrade`（3） | 可删（git 里有）。**但 `brew_mine_*` 与 `content-plan §8` 描述的那套 Mine 布局是配套的**，删文案前先把 §8 一并更新，否则文档会指向不存在的键 |
+| **确认死掉**（功能被取代或从未接线） | 37 | `brew_tab_mine` + `brew_tab_legacy_*`（5，侧边栏实际用 `pcui` 自己的 `tab_*`）；`brew_artifact_app/binary/pkg/font/other`（5，详情页展示的是原始 `artifactType`）；`brew_mine_*`（13，原 Mine 规划被需求方的新布局取代）；`brew_label_required_by/install_options/caveats/deprecated/disabled/replacement/deprecation_reason`（7）；`brew_state_installed/not_installed/upgradable/bottle/source`（5）；`brew_section_hot/new/top10/related`（4）；`brew_action_install/uninstall/upgrade`（3） | 可删（git 里有）。**但 `brew_mine_*` 与 `content-plan §8` 描述的那套 Mine 布局是配套的**，删文案前先把 §8 一并更新，否则文档会指向不存在的键 |
 | **预备未用**（有对应待办，故意留着） | 11 | `brew_search_placeholder` / `brew_search_coming_soon`（搜索待办）；`brew_discover_metric_trending/_alltime/_fresh/_no_history`（Discover 度量待办）；`brew_state_*` 部分 | 留着，待办落地时直接用 |
 
 > 这类"预备但未用"的文案很容易被误当成死代码删掉。判断依据不是"有没有被引用"，

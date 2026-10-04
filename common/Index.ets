@@ -35,10 +35,6 @@ export { LoginSheetViewBuilder } from './src/main/ets/accountservice/component/A
 
 export { ImageKnifeComponent, ImageKnifeOption } from '@ohos/imageknife';
 
-export { FormInfo } from './src/main/ets/viewmodel/FormInfo';
-
-export { FormRdbHelper } from './src/main/ets/database/FormRdbHelper';
-
 export * from './src/main/ets/util';
 
 export * from './src/main/ets/component';

@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "模块描述"
+    },
+    {
+      "name": "read_write_user_file_reason",
+      "value": "读取本机 Homebrew 安装记录"
+    },
+    {
+      "name": "custom_sandbox_reason",
+      "value": "访问应用沙箱之外的 Homebrew 目录"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "read_write_user_file_reason",
+      "value": "Read local Homebrew installation records"
+    },
+    {
+      "name": "custom_sandbox_reason",
+      "value": "Access the Homebrew prefix outside the app sandbox"
+    }
+  ]
+}

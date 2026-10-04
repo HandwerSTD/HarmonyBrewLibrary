@@ -3,7 +3,7 @@
  */
 
 import { JSON } from '@kit.ArkTS';
-import { Logger } from '@ohos/common';
+import { Logger, StorageKey } from '@ohos/common';
 import { SHELL_BREW_PATH_CANDIDATES, SHELL_ERR_TIMEOUT, ShellUtils } from '@ohos/pcnative';
 import type { ShellResult } from '@ohos/pcnative';
 import type { BrewInstalledPackage } from '../model/BrewModels';
@@ -78,6 +78,10 @@ export class BrewInstalledLoader {
    * 页面文案保持通用 —— 用户看到「读不到本机包」就够了，不需要知道是超时还是输出形状变了。
    */
   public static async loadSets(force: boolean = false): Promise<BrewInstalledSets> {
+    if (!BrewInstalledLoader.isBrewCliEnabled()) {
+      // 能力关闭：静默返回空集合。不执行命令、不写日志、不抛异常，调用方按「没有本机包」处理
+      return new BrewInstalledSets();
+    }
     if (!force && BrewInstalledLoader.cache !== null &&
       Date.now() - BrewInstalledLoader.cacheAt < BREW_INSTALLED_TTL_MS) {
       const cached: BrewInstalledOutcome = BrewInstalledLoader.cache;
@@ -95,6 +99,16 @@ export class BrewInstalledLoader {
     } finally {
       BrewInstalledLoader.inFlight = null;
     }
+  }
+
+  /**
+   * 设备执行通道（brew cli）是否可用。
+   *
+   * 由 entry 的 UIAbility 在 `onCreate` 写入 `StorageKey.BREW_CLI_ENABLED`：pc_acl 注入 true、
+   * pc_normal 注入 false；未注入时按 false 处理。
+   */
+  private static isBrewCliEnabled(): boolean {
+    return AppStorage.get<boolean>(StorageKey.BREW_CLI_ENABLED) ?? false;
   }
 
   /** 读一次，不碰缓存。给自检与「强制刷新」用 */

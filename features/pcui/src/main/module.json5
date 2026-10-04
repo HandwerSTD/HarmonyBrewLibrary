@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "pcui",
+    "type": "har",
+    "routerMap": "$profile:router_map",
+    "deviceTypes": [
+      "2in1"
+    ]
+  }
+}

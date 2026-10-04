@@ -6,7 +6,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 
 - 设备形态：仅 2in1（PC），最小窗口 1080 × 608
 - 编译目标：HarmonyOS 6.1.0（API 23），hvigor 模型 5.0.0
-- 技术栈：ArkTS / ArkUI（Stage 模型），单 entry 模块 `products/pc`
+- 技术栈：ArkTS / ArkUI（Stage 模型），两个 entry 模块：`products/pc_acl`（完整版，申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`）与 `products/pc_normal`（普通版，不申请受限权限）
 
 ## 功能
 
@@ -18,7 +18,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 | **Search** | 本地搜索引擎（零依赖纯函数引擎 + 词表打分），离线可搜 |
 | **Me** | 本机已安装 / 可升级包、数据源切换与连通性状态、页面可选区块开关 |
 
-桌面卡片相关代码（`features/widgetcommon`、`products/pc/src/main/ets/widget/pages/`、`PcFormAbility.ets`、`resources/base/profile/form_config.json`）仍在仓库中，但 form 扩展入口（`products/pc/src/main/module.json5` 的 `extensionAbilities`）已在当前版本移除，因此系统「添加卡片」列表里不会再出现本应用；需要恢复时把那段声明加回 `module.json5` 即可。
+> 两个 entry 版本的功能差别只有「本机包」这一块：`pc_acl` 在「我的」页展示本机包三块，并读取设备上的 Homebrew 安装记录；`pc_normal` 不申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`，`PcAbility` 向 `AppStorage` 注入 `StorageKey.BREW_CLI_ENABLED = false`，「我的」页不展示本机包入口，本机包取数静默返回空集合。其余页签与页面在两个版本上表现一致。
 
 ## 数据来源
 
@@ -26,7 +26,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 | --- | --- |
 | `formulae.brew.sh/api`（官方上游） | 包详情现网数据、per-token 索引 |
 | `harmonybrew.atomgit.com`（Harmonybrew 镜像） | 归一化全量目录 + 统计快照 |
-| 设备上的 `brew` 命令（`features/pcnative` + `BrewInstalledLoader`） | 「我的」页的本机已安装 / 可升级包 |
+| 设备上的 `brew` 命令（`features/pcnative` + `BrewInstalledLoader`） | 「我的」页的本机已安装 / 可升级包（仅 `pc_acl` 版本提供） |
 
 两条方言由 `features/brewcommon/src/main/ets/service/source/BrewSourceAdapter.ets` 抽象（`UpstreamAdapter` / `HarmonybrewAdapter`），数据源地址与探活结果可在「我的」页切换查看。分类体系与榜单算法是本项目自建的，不是官方 API 字段——见 `docs/brew-marketplace-content-plan.md`、`docs/brew-discover-algo.md`。
 
@@ -36,9 +36,8 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 AppScope/                 应用级资源（分层图标、应用名、权限文案）
 common/                   通用 UI 原子与工具（@ohos/common）
 features/
-  abilitycommon/          首页框架：侧边栏 + HdsTabs + 各页容器
+  pcui/                   首页框架：侧边栏 + HdsTabs + 各页容器
   commonbusiness/         业务通用能力（枚举、状态、通用组件）
-  widgetcommon/           桌面卡片组件（2×2 / 2×4 / 锁屏卡）
   brewcommon/             数据层：HTTP、数据源适配、目录同步、搜索引擎、模型
   brewdiscover/           发现页
   brewformulae/           formulae 页
@@ -46,7 +45,8 @@ features/
   brewdetail/             包详情页（formula / cask 共用）
   brewsearch/             搜索页
   mine/                   我的页
-products/pc/              entry 模块：PcAbility、启动页、侧边栏、表单
+products/pc_acl/          entry 模块（完整版）：PcAbility、启动页、主页面
+products/pc_normal/       entry 模块（普通版）：PcAbility、启动页、主页面
 docs/                     设计文档与交接说明
 hmosword-build/
   brew-mockgen/           mock 数据生成器与离线校验脚本（Python）
@@ -64,14 +64,17 @@ keys/                     本机签名材料（已 gitignore，不入库）
 ## 构建与运行
 
 ```bash
-devecocli build --product default   # 整个 product
-devecocli build --modules pc        # 只编 entry 模块
-devecocli run                       # 编译 + 安装 + 启动（需已连接设备）
+devecocli build --product default    # 产出 pc_acl（完整版 HAP）
+devecocli build --product pc_normal  # 产出 pc_normal（普通版 HAP）
+devecocli build --modules pc_acl     # 只编 pc_acl entry 模块
+devecocli run                        # 编译 + 安装 + 启动（需已连接设备）
 ```
+
+工程级 `build-profile.json5` 里有两个 product：`default` 对应模块 `pc_acl`，`pc_normal` 对应模块 `pc_normal`。
 
 `devecocli` 是 DevEco CLI（内部调用 hvigor / ohpm / hdc）；在 DevEco Studio 里直接打开工程 → Sync → Run 也可以。工程未内置 `hvigorw` 包装脚本。
 
-> **签名**：`build-profile.json5` 的 `default` / `release` 两套配置指向 `./keys/` 下的 `.cer` / `.p7b` / `.p12`。`keys/` 是本机签名材料、**不入库**（已加入 `.gitignore`），因此 clone 后需要用 DevEco Studio 的自动签名，或自备证书后改这两套配置，否则无法产出签名 HAP。
+> **签名**：product `default` 使用 `default` / `release` 两套签名配置；product `pc_normal` 使用 `normal_debug` / `normal_release` 两套签名配置，其中 `normal_debug` 的 profile 是 `keys/brewdebugDebug.p7b`，`normal_release` 的 profile 是 `keys/brewreleaseRelease.p7b`。四套配置的证书与私库都指向 `./keys/` 下的 `.cer` / `.p12`。`keys/` 是本机签名材料、**不入库**（已加入 `.gitignore`），因此 clone 后需要用 DevEco Studio 的自动签名，或自备证书后改这两套配置，否则无法产出签名 HAP。
 
 ## 开发自检
 

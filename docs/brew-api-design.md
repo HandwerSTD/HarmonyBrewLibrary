@@ -711,7 +711,7 @@ cd hmosword-build/brew-mockgen && python3 check_types.py
 :brewcommon:default@ProcessLibs / @DoNativeStrip
 ```
 
-真正的 ArkTS 编译发生在 `:pc:default@CompileArkTS` —— 即消费方 HAP 的编译阶段。而 ArkTS 编译是**按可达性**做的：只编译从入口出发 import 得到的模块。
+真正的 ArkTS 编译发生在 `:pc_acl:default@CompileArkTS` —— 即消费方 HAP 的编译阶段。而 ArkTS 编译是**按可达性**做的：只编译从入口出发 import 得到的模块。
 
 ### 9.2 两个由此推出的结论
 
@@ -735,7 +735,7 @@ cd hmosword-build/brew-mockgen && python3 check_types.py
 **结论：`module.json5` 里的 `"routerMap": "$profile:router_map"` 本身给这个 HAR 提供了编译入口** ——
 routerMap 里列出的页面会被当作入口编译，因此"只通过路由名被引用"的页面模块不需要伪造 import。
 
-（严格说，本次同时也在 `abilitycommon/oh-package.json5` 里声明了 `@ohos/brewdetail` 依赖，
+（严格说，本次同时也在 `pcui/oh-package.json5` 里声明了 `@ohos/brewdetail` 依赖，
 两者哪个是必要条件没有单独验证。但可以确定的是：**没有任何代码 import 它，它也照样被编译了**。）
 
 这条对后续加页面模块有意义：新增一个只做路由落点的 HAR，不需要为了"骗过可达性分析"而写假 import。
@@ -752,7 +752,7 @@ Hvigor task 'assembleHar' is not supported for building an 'ohosTest' target 'HA
 
 ### 9.4 本次验证结果
 
-验证方式：在 `features/abilitycommon/src/main/ets/util/InitCenter.ets` 临时 import `@ohos/brewcommon`，构建后删除临时引用。
+验证方式：在 `features/pcui/src/main/ets/util/InitCenter.ets` 临时 import `@ohos/brewcommon`，构建后删除临时引用。
 
 | 检查 | 结果 |
 |---|---|
@@ -760,13 +760,13 @@ Hvigor task 'assembleHar' is not supported for building an 'ohosTest' target 'HA
 | 修掉的错误 | 1 个：`Index.ets` 导出了不存在的 `BrewKinds`（`BrewConstants` 里只有 `BrewKind`） |
 | 代码进入字节码 | `modules.abc` 中确认存在 `BrewCommandGenerator` / `BrewModels` / `BrewConstants` / `BrewService` / `BrewRepository` / `Index` |
 | 资源无冲突 | `brew_tab_formulae` 等键合入 HAP `ResourceTable.txt` 与 `resources.index`，未与现有模块同名资源冲突（`brew_` 前缀生效） |
-| 产物 | `pc-default-signed.hap`（含 `ets/modules.abc` 3,673,972 B + `resources.index` 56,576 B） |
+| 产物 | `pc_acl-default-signed.hap`（含 `ets/modules.abc` 3,673,972 B + `resources.index` 56,576 B） |
 
 ### 9.5 已解决：brewcommon 现在进入了构建图
 
 上面 9.1~9.2 描述的"临时引用才能验证"状态已经结束。
-新建的 `features/brewformulae` 被 `abilitycommon/view/HomeView.ets` 静态 import，
-形成**永久**的 import 点，`brewcommon` 随之进入 `:pc:default@CompileArkTS` 的编译范围：
+新建的 `features/brewformulae` 被 `pcui/view/HomeView.ets` 静态 import，
+形成**永久**的 import 点，`brewcommon` 随之进入 `:pc_acl:default@CompileArkTS` 的编译范围：
 
 ```
 HomeView.ets
@@ -785,16 +785,16 @@ HomeView.ets
 
 ```bash
 # 1. 符号是否真的进了字节码（可达性编译成立）
-ABC=products/pc/build/default/intermediates/loader_out/default/ets/modules.abc
+ABC=products/pc_acl/build/default/intermediates/loader_out/default/ets/modules.abc
 grep -c BrewCaskHomeView "$ABC"        # 应为正数
 
 # 2. HAR 的 routerMap 是否真的合并进了 HAP
 python3 -c "import json;print([r['name'] for r in json.load(open(\
-  'products/pc/build/default/intermediates/router_map/default/router_map.json'))['routerMap']])"
+  'products/pc_acl/build/default/intermediates/router_map/default/router_map.json'))['routerMap']])"
 ```
 
 注意第 2 项不能用"各模块 `router_map.json` 条数相加"来替代 —— HAR 的路由是合并进
-`products/pc/build/.../router_map/default/router_map.json` 的，只有那份才是 HAP 里实际生效的。
+`products/pc_acl/build/.../router_map/default/router_map.json` 的，只有那份才是 HAP 里实际生效的。
 
 **第 1 项的 grep 不要加 `^...$` 锚点。** 做 Discover 页时我先用 `grep -c "^BrewDiscoverHomeView$"`
 检查，结果 15 个符号里只有 2 个命中，看起来像"没编进去"；换成不加锚点后全部命中且计数健康
@@ -844,8 +844,8 @@ HUAWEI MateBook Pro  127.0.0.1:42021  device  2in1        <- 正是本项目唯�
 观察到一次（本项目 9 次连续成功构建中的第 8 次），现象：
 
 ```
-Finished :pc:default@CompileArkTS...        <- ArkTS 编译成功
-ERROR: Failed :pc:default@PackageHap...
+Finished :pc_acl:default@CompileArkTS...        <- ArkTS 编译成功
+ERROR: Failed :pc_acl:default@PackageHap...
 [E] get real file path failed![.../resources/rawfile/image/sample/1776934456130_a20c31be.png]
 [E] get real file path failed![.../resources/base/media/ic_background.png]
 [E] filePath is not regular file![.../resfile/.../ManulImages/2.png]
@@ -861,10 +861,10 @@ BUILD FAILED
 3. 同一份代码**重跑一次即成功**，且此前 7 次同样配置的构建全过
 
 怀疑是 `--parallel` 下资源拷贝与打包工具之间的竞争（打包工具 stat 时文件尚未就绪），
-**未确认**。处理办法：直接重跑；若连续复现再清 `products/pc/build` 重试。
+**未确认**。处理办法：直接重跑；若连续复现再清 `products/pc_acl/build` 重试。
 
 注意区分：这类失败与「ArkTS 编译错误」性质不同 —— 前者是环境问题，后者才是代码问题。
-判断依据是看有没有 `Finished :pc:default@CompileArkTS`。**不要因为看到 BUILD FAILED 就去改代码。**
+判断依据是看有没有 `Finished :pc_acl:default@CompileArkTS`。**不要因为看到 BUILD FAILED 就去改代码。**
 
 ### 9.8 编译能过、运行期才崩：组件不能直接写在 `CustomBuilder` 的箭头里
 

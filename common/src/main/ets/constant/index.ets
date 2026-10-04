@@ -25,5 +25,3 @@ export {
 } from './CommonEnums';
 
 export { RequestErrorCode } from './RequestErrorCode';
-
-export { PC_ABILITY } from './FormCardConstant';

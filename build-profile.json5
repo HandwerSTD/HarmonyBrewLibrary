@@ -26,12 +26,50 @@
           "storeFile": "./keys/quickysticker_sign.p12"
         },
         "type": "HarmonyOS"
+      },
+      {
+        "name": "normal_debug",
+        "material": {
+          "storePassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
+          "certpath": "./keys/common_debug.cer",
+          "keyAlias": "QuickySticker",
+          "keyPassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
+          "profile": "./keys/brewdebugDebug.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "./keys/quickysticker_sign.p12"
+        },
+        "type": "HarmonyOS"
+      },
+      {
+        "name": "normal_release",
+        "material": {
+          "storePassword": "0000001D0EC755001FDDF6DEF0636505347EA5FC8953F63A719025E28F4739D8C168E43CC0E961B52CDE2422FC",
+          "certpath": "./keys/common_sign.cer",
+          "keyAlias": "QuickySticker",
+          "keyPassword": "0000001D0EC755001FDDF6DEF0636505347EA5FC8953F63A719025E28F4739D8C168E43CC0E961B52CDE2422FC",
+          "profile": "./keys/brewreleaseRelease.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "./keys/quickysticker_sign.p12"
+        },
+        "type": "HarmonyOS"
       }
     ],
     "products": [
       {
         "name": "default",
         "signingConfig": "default",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "useNormalizedOHMUrl": true
+          }
+        }
+      },
+      {
+        "name": "pc_normal",
+        "signingConfig": "normal_debug",
         "compatibleSdkVersion": "6.1.0(23)",
         "targetSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",
@@ -53,13 +91,25 @@
   },
   "modules": [
     {
-      "name": "pc",
-      "srcPath": "./products/pc",
+      "name": "pc_acl",
+      "srcPath": "./products/pc_acl",
       "targets": [
         {
           "name": "default",
           "applyToProducts": [
             "default"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pc_normal",
+      "srcPath": "./products/pc_normal",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "pc_normal"
           ]
         }
       ]
@@ -75,10 +125,6 @@
     {
       "name": "commonbusiness",
       "srcPath": "./features/commonbusiness"
-    },
-    {
-      "name": "widgetcommon",
-      "srcPath": "./features/widgetcommon"
     },
     {
       "name": "brewcommon",
@@ -101,8 +147,8 @@
       "srcPath": "./features/brewdetail"
     },
     {
-      "name": "abilitycommon",
-      "srcPath": "./features/abilitycommon"
+      "name": "pcui",
+      "srcPath": "./features/pcui"
     },
     {
       "name": "brewsearch",
