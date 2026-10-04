@@ -6,6 +6,7 @@ import { Logger } from '@ohos/common';
 import shellNative from 'libpcnative.so';
 import type { ShellNativeResult } from 'libpcnative.so';
 import {
+  SHELL_DEFAULT_WORKING_DIRECTORY,
   SHELL_ERR_NONE,
   SHELL_ERR_START,
   SHELL_ERR_UNAVAILABLE,
@@ -63,14 +64,17 @@ export class ShellUtils {
    *
    * 失败不抛异常，一律以 `ShellResult` 表达：调用方按 `errorCode` 分段判定，
    * 不要把「命令非零退出」与「命令没跑起来」混成一个布尔值。
+   *
+   * `cwd` 是子进程的工作目录，缺省用 `SHELL_DEFAULT_WORKING_DIRECTORY`。
    */
-  public static async run(command: string, timeoutMs: number = SHELL_TIMEOUT_DEFAULT_MS): Promise<ShellResult> {
+  public static async run(command: string, timeoutMs: number = SHELL_TIMEOUT_DEFAULT_MS,
+    cwd: string = SHELL_DEFAULT_WORKING_DIRECTORY): Promise<ShellResult> {
     const budget: number = ShellUtils.clampTimeout(timeoutMs);
     if (command.length === 0) {
       return ShellResult.failure(SHELL_ERR_START);
     }
     try {
-      const raw: ShellNativeResult = await shellNative.runCommand(command, budget);
+      const raw: ShellNativeResult = await shellNative.runCommand(command, budget, cwd);
       if (!raw) {
         return ShellResult.failure(SHELL_ERR_UNAVAILABLE);
       }
@@ -86,13 +90,14 @@ export class ShellUtils {
    * 同步执行。**禁止在主线程调用** —— 它会阻塞到命令结束或超时。
    * 只有子进程/任务线程或确定是毫秒级的探测才用它。
    */
-  public static runSync(command: string, timeoutMs: number = SHELL_TIMEOUT_DEFAULT_MS): ShellResult {
+  public static runSync(command: string, timeoutMs: number = SHELL_TIMEOUT_DEFAULT_MS,
+    cwd: string = SHELL_DEFAULT_WORKING_DIRECTORY): ShellResult {
     const budget: number = ShellUtils.clampTimeout(timeoutMs);
     if (command.length === 0) {
       return ShellResult.failure(SHELL_ERR_START);
     }
     try {
-      const raw: ShellNativeResult = shellNative.runCommandSync(command, budget);
+      const raw: ShellNativeResult = shellNative.runCommandSync(command, budget, cwd);
       if (!raw) {
         return ShellResult.failure(SHELL_ERR_UNAVAILABLE);
       }

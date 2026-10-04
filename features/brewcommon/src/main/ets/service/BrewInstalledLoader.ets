@@ -118,8 +118,11 @@ export class BrewInstalledLoader {
       return outcome;
     }
 
+    // 工作目录给 brew 的 prefix：应用进程的当前目录是 `/`，应用用户对 `/` 没有读权限，
+    // 而 brew 启动时会检查当前目录可读性
+    const prefix: string = BrewInstalledLoader.prefixOf(brewPath);
     const result: ShellResult = await ShellUtils.run(
-      BrewInstalledLoader.commandOf(brewPath), BREW_INSTALLED_TIMEOUT_MS);
+      BrewInstalledLoader.commandOf(brewPath), BREW_INSTALLED_TIMEOUT_MS, prefix);
     outcome.tookMs = Date.now() - startedAt;
     outcome.stdoutBytes = result.stdout.length;
 
@@ -162,9 +165,8 @@ export class BrewInstalledLoader {
   /**
    * 发现 brew 可执行文件。
    *
-   * 顺序：`HOMEBREW_BREW_FILE` -> PATH 里的 `brew` -> 固定候选路径。
-   * 候选表在 `@ohos/pcnative` 的 `SHELL_BREW_PATH_CANDIDATES`，与执行通道探针共用一份，
-   * 避免两处各写一份路径列表之后漂移。
+   * 顺序：`HOMEBREW_BREW_FILE` -> 固定候选路径。
+   * 候选表在 `@ohos/pcnative` 的 `SHELL_BREW_PATH_CANDIDATES`，与执行通道同层，避免两处各写一份漂移。
    *
    * 结果在进程内缓存：这是一次 `test -x` 的探测，但页面上每次进「我的」都会走到这里。
    */

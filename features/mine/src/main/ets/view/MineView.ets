@@ -186,6 +186,7 @@ export struct MineView {
                   symbolSrc: item.symbolSrc,
                   packages: item.packageCardType === PackageCardType.OUTDATED ?
                     this.minePageState.outdatedPackages : this.minePageState.updatedPackages,
+                  loading: this.minePageState.packagesLoading,
                   handleViewAll: () => {
                     if (item.onclick) {
                       item.onclick();

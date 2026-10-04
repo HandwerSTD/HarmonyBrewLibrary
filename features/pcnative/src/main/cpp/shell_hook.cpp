@@ -86,7 +86,7 @@ bool ShellHookAvailable() {
     return true;
 }
 
-ShellHookResult ShellHookRun(const std::string &command, int timeoutMs) {
+ShellHookResult ShellHookRun(const std::string &command, int timeoutMs, const std::string &cwd) {
     ShellHookResult result;
 
     int outPipe[2] = {-1, -1};
@@ -115,6 +115,14 @@ ShellHookResult ShellHookRun(const std::string &command, int timeoutMs) {
     if (pid == 0) {
         // 子进程：自成进程组，父进程超时时可以整组清掉（brew 会自己再起子进程）
         setpgid(0, 0);
+
+        // 工作目录换成调用方指定的那个。应用进程的当前目录是 `/`，uid 100 对 `/` 没有读权限，
+        // 而 brew 启动时会检查当前目录可读性。换目录失败就退到 `/`，让命令自己报错
+        if (!cwd.empty() && chdir(cwd.c_str()) != 0) {
+            int ignored = chdir("/");
+            (void)ignored;
+        }
+
         close(outPipe[0]);
         close(errPipe[0]);
         dup2(outPipe[1], STDOUT_FILENO);

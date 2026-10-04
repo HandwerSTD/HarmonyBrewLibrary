@@ -5,7 +5,6 @@
 // ---------------------------------------------------------------- 执行通道
 
 export { ShellUtils } from './src/main/ets/util/ShellUtils';
-export { ShellProbe, ShellProbeReport } from './src/main/ets/util/ShellProbe';
 
 export {
   SHELL_BREW_PATH_CANDIDATES,
@@ -18,7 +17,5 @@ export {
   SHELL_OUTPUT_LIMIT_BYTES,
   SHELL_TIMEOUT_DEFAULT_MS,
   SHELL_TIMEOUT_MAX_MS,
-  SHELL_VERIFY,
-  ShellProbeCase,
   ShellResult,
 } from './src/main/ets/constant/ShellConstants';

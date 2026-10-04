@@ -14,7 +14,7 @@
  */
 
 import { BaseVM, Logger, PageContext, PageEnum, StorageKey } from '@ohos/common';
-import { BrewInstalledProbe, BrewTable } from '@ohos/brewcommon';
+import { BrewTable } from '@ohos/brewcommon';
 import { SplashModel } from '../model/SplashModel';
 import { InitCenter } from '../util/InitCenter';
 
@@ -64,10 +64,6 @@ export class SplashViewModel extends BaseVM<SplashModel> {
         // 表落地时通过观察者通知页面重出内容（见 BrewTable.addObserver）。
         BrewTable.refresh().catch((error: Error) => {
           Logger.error(TAG, `table refresh failed, ${error.message}`);
-        });
-        // 本机包自检。开关关闭时立即返回，不进日志、不发命令
-        BrewInstalledProbe.runIfEnabled().catch((error: Error) => {
-          Logger.error(TAG, `installed probe failed, ${error.message}`);
         });
         if (param.needJump) {
           this.jumpToMainPage();

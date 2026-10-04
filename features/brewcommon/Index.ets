@@ -205,6 +205,5 @@ export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
 // 执行设备上的 `brew info --json=v2 --installed` 并把结果归一成三个集合。
 // 失败分类在抛出的异常的 message 里（`BrewInstalledFailure` 的取值）。
 export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewInstalledSets } from './src/main/ets/service/BrewInstalledLoader';
-export { BrewInstalledProbe } from './src/main/ets/service/BrewInstalledProbe';
 export { BrewInstalledParser } from './src/main/ets/util/BrewInstalledParser';
 export type { BrewCaskDoc, BrewFormulaDoc, BrewInstalledDoc, BrewInstalledKegDoc } from './src/main/ets/model/BrewInstalledDoc';

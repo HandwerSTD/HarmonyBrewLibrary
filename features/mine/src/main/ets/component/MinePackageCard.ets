@@ -20,6 +20,9 @@ import type { BrewInstalledPackage } from '@ohos/brewcommon';
 /** 卡片里最多预览几条包 */
 const PREVIEW_COUNT: number = 3;
 
+/** 读取中占位区的高度。取三行预览的高度，数据到位后卡片不会跳高度 */
+const PREVIEW_LOADING_HEIGHT: number = 168;
+
 /**
  * 「我的」页的包预览大卡片（待更新 / 已更新）。
  *
@@ -41,15 +44,23 @@ export struct MinePackageCard {
   @Prop @Require title: ResourceStr;
   @Prop @Require symbolSrc: Resource;
   @Prop @Require packages: BrewInstalledPackage[];
+  /**
+   * 包集合是否还在读取。
+   *
+   * 为真时预览区显示转圈而不走空态：读取要拉起 brew（首次约 2–3 秒），
+   * 而空态文案是「本机暂无可显示的包」—— 还没读到就写这句是在误导用户。
+   */
+  @Prop loading: boolean = false;
   handleViewAll?: () => void;
 
   @Builder
   HeaderBuilder() {
     // 不给 handleClickAction：本卡的点击入口是下面的「查看全部」，头部只做展示
+    // 读取中不显示数量：还没有数据，写 0 会被读成「一个包都没装」
     HmosListItem({
       title: this.title,
       prefixResource: this.symbolSrc,
-      desc: $r('app.string.brew_label_packages_count', this.packages.length),
+      desc: this.loading ? '' : $r('app.string.brew_label_packages_count', this.packages.length),
     })
   }
 
@@ -92,13 +103,31 @@ export struct MinePackageCard {
     })
   }
 
+  /** 读取中的占位：与预览区同底同高，数据到位后卡片不跳高度 */
+  @Builder
+  LoadingBuilder() {
+    Column() {
+      LoadingProgress()
+        .width($r('app.float.loading_size_sm'))
+        .height($r('app.float.loading_size_sm'))
+    }
+    .width(CommonConstants.FULL_PERCENT)
+    .height(PREVIEW_LOADING_HEIGHT)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor($r('sys.color.comp_background_tertiary'))
+    .borderRadius($r('sys.float.corner_radius_level8'))
+    .clip(true)
+  }
+
   build() {
     // 纵向内边距加在最外层；**左右内边距只加在预览区这一层**，头部保持全宽。
     // 这样头部的图标与标题才能和页面上其它 item 对齐（它们都是全宽行 + 分组容器的 level2 内边距）——
     // 如果整张卡都缩进，头部就会比其他 item 多缩一截，实测差 7px 肉眼可见。
     Column({ space: $r('sys.float.padding_level4') }) {
       this.HeaderBuilder()
-      if (this.packages.length > 0) {
+      if (this.loading) {
+        this.LoadingBuilder()
+      } else if (this.packages.length > 0) {
         Column({ space: $r('sys.float.padding_level4') }) {
           this.PreviewBuilder()
           this.ViewAllBuilder()

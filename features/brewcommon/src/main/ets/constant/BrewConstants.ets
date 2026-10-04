@@ -193,14 +193,6 @@ export const BREW_INSTALLED_TTL_MS: number = 60 * 1000;
  */
 export const BREW_INSTALLED_TIMEOUT_MS: number = 30000;
 
-/**
- * 本机包的自检开关。默认关。
- *
- * 与 `BREW_SOURCE_VERIFY` 同一模式：打开后打一组 `[BrewInstalled] verify … ok=<bool>` 判据行，
- * 验证完就关掉。
- */
-export const BREW_INSTALLED_VERIFY: boolean = false;
-
 /** 每张榜展示的条数（与 `check_algo.py` 的榜口径、`brew-discover-algo.md` 一致） */
 export const BREW_CATALOG_TOP_N: number = 10;
 

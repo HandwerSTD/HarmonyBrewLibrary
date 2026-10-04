@@ -26,6 +26,7 @@ const int TIMEOUT_MAX_MS = 600000;
 /** 异步执行的上下文。结果写回 ArkTS 对象在 Complete 回调里做 */
 struct RunContext {
     std::string command;
+    std::string cwd;
     int timeoutMs = TIMEOUT_DEFAULT_MS;
     pcnative::ShellHookResult result;
     napi_async_work work = nullptr;
@@ -102,7 +103,7 @@ napi_value ToJsResult(napi_env env, const pcnative::ShellHookResult &result) {
 /** 线程池里执行的部分：只调用执行通道，不碰 NAPI */
 void ExecuteRun(napi_env env, void *data) {
     RunContext *context = static_cast<RunContext *>(data);
-    context->result = pcnative::ShellHookRun(context->command, context->timeoutMs);
+    context->result = pcnative::ShellHookRun(context->command, context->timeoutMs, context->cwd);
 }
 
 /** 回到 JS 线程：解析 promise */
@@ -128,10 +129,10 @@ napi_value IsAvailable(napi_env env, napi_callback_info info) {
     return result;
 }
 
-/** `runCommand(command: string, timeoutMs?: number): Promise<ShellResult>` */
+/** `runCommand(command: string, timeoutMs?: number, cwd?: string): Promise<ShellResult>` */
 napi_value RunCommand(napi_env env, napi_callback_info info) {
-    size_t argc = 2;
-    napi_value args[2] = {nullptr, nullptr};
+    size_t argc = 3;
+    napi_value args[3] = {nullptr, nullptr, nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
     std::string command = GetStringArg(env, args[0]);
@@ -144,6 +145,7 @@ napi_value RunCommand(napi_env env, napi_callback_info info) {
     RunContext *context = new RunContext();
     context->command = command;
     context->timeoutMs = timeoutMs;
+    context->cwd = GetStringArg(env, args[2]);
 
     napi_value promise = nullptr;
     if (napi_create_promise(env, &context->deferred, &promise) != napi_ok) {
@@ -171,10 +173,10 @@ napi_value RunCommand(napi_env env, napi_callback_info info) {
     return promise;
 }
 
-/** `runCommandSync(command: string, timeoutMs?: number): ShellResult` */
+/** `runCommandSync(command: string, timeoutMs?: number, cwd?: string): ShellResult` */
 napi_value RunCommandSync(napi_env env, napi_callback_info info) {
-    size_t argc = 2;
-    napi_value args[2] = {nullptr, nullptr};
+    size_t argc = 3;
+    napi_value args[3] = {nullptr, nullptr, nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
     std::string command = GetStringArg(env, args[0]);
@@ -183,8 +185,9 @@ napi_value RunCommandSync(napi_env env, napi_callback_info info) {
         return nullptr;
     }
     const int timeoutMs = GetIntArg(env, args[1], TIMEOUT_DEFAULT_MS);
+    const std::string cwd = GetStringArg(env, args[2]);
 
-    pcnative::ShellHookResult result = pcnative::ShellHookRun(command, timeoutMs);
+    pcnative::ShellHookResult result = pcnative::ShellHookRun(command, timeoutMs, cwd);
     return ToJsResult(env, result);
 }
 

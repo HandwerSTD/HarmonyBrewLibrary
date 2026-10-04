@@ -20,8 +20,8 @@ export interface ShellNativeResult {
 /** 平台执行能力是否可用。不执行命令 */
 export const isAvailable: () => boolean;
 
-/** 异步执行一条命令行。`timeoutMs` 缺省 10000，上限 600000 */
-export const runCommand: (command: string, timeoutMs?: number) => Promise<ShellNativeResult>;
+/** 异步执行一条命令行。`timeoutMs` 缺省 10000，上限 600000；`cwd` 是子进程的工作目录，空串时用 `/` */
+export const runCommand: (command: string, timeoutMs?: number, cwd?: string) => Promise<ShellNativeResult>;
 
 /** 同步执行。会阻塞调用线程，只在确定是毫秒级的场景使用 */
-export const runCommandSync: (command: string, timeoutMs?: number) => ShellNativeResult;
+export const runCommandSync: (command: string, timeoutMs?: number, cwd?: string) => ShellNativeResult;

@@ -26,6 +26,13 @@ export class MinePageState extends BaseHomeState {
   public outdatedPackages: BrewInstalledPackage[] = [];
   /** 版本已是最新的包，同上 */
   public updatedPackages: BrewInstalledPackage[] = [];
+  /**
+   * 本机包是否还在读取。
+   *
+   * 读一次要拉起 brew（首次约 2–3 秒），期间三块内容还没有数据：
+   * 不区分「还没读到」与「真的一个都没有」会把空态文案先闪一下。
+   */
+  public packagesLoading: boolean = false;
   public isLogin: boolean = false;
   public isShowAccountInfo: boolean = false;
   public nickName: string = '';

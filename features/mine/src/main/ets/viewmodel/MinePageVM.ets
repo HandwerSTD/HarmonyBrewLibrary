@@ -45,7 +45,7 @@ const TAG: string = '[MinePageVM]';
  * 之所以不做成删代码/注释，是因为这三块都是**阶段性下线**，后面还要按用户体验结论重新设计再上。
  */
 /** 本机包：已安装入口（含数量）+ 待更新 / 已更新预览卡片 */
-export const MINE_SHOW_LOCAL_PACKAGES: boolean = false;
+export const MINE_SHOW_LOCAL_PACKAGES: boolean = true;
 /** 用户体验调研卡片 */
 export const MINE_SHOW_USER_EXPERIENCE: boolean = false;
 /** 问题与建议入口 */
@@ -243,16 +243,19 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
    * 本机包只是其中三块，不该因为它们读不到就让整个「我的」页变成错误页。
    */
   private loadLocalPackages(): void {
+    this.state.packagesLoading = true;
     MinePackagesUtil.loadSets()
       .then((sets: MinePackageSets) => {
         this.state.installedCount = sets.installed.length;
         this.state.outdatedPackages = sets.outdated;
         this.state.updatedPackages = sets.updated;
+        this.state.packagesLoading = false;
       })
       .catch((error: BusinessError) => {
         this.state.installedCount = 0;
         this.state.outdatedPackages = [];
         this.state.updatedPackages = [];
+        this.state.packagesLoading = false;
         Logger.error(TAG, `loadLocalPackages failed. ${error.code} ${error.message}`);
       });
   }

@@ -29,15 +29,20 @@ export const SHELL_TIMEOUT_MAX_MS: number = 600000;
 /** 单路输出上限：8 MB */
 export const SHELL_OUTPUT_LIMIT_BYTES: number = 8 * 1024 * 1024;
 
-/** 执行通道自检开关。默认关，只在验证通道时开一次 */
-export const SHELL_VERIFY: boolean = false;
+/**
+ * 命令的默认工作目录。
+ *
+ * 应用进程的当前目录是 `/`，而应用用户对 `/` 没有读权限。被测命令里凡有
+ * 「检查当前目录可读性」的启动逻辑（brew 就是一个），在当前目录里跑都会直接失败，
+ * 且失败信息与真正的权限问题无关。应用自己的数据目录始终可读，拿它当默认值。
+ */
+export const SHELL_DEFAULT_WORKING_DIRECTORY: string = '/data/storage/el2/base';
 
 /**
  * brew 可执行文件的候选路径。
  *
- * 放在这里而不是 brew 层：探针要用它做 `external` / `read-outside` 两条用例，
- * 而 pcnative 不依赖 brewcommon（依赖方向只能从 brew 层指向能力层）。
- * `BrewInstalledLoader` 按同一份列表发现 brew，两处口径一致。
+ * 放在这里而不是 brew 层：发现入口与执行通道同层，`BrewInstalledLoader` 按这份列表发现 brew，
+ * 两层口径一致。列表按设备上最可能的位置排序，命中第一个可执行的即停。
  */
 export const SHELL_BREW_PATH_CANDIDATES: string[] = [
   '/storage/Users/currentUser/.harmonybrew/bin/brew',
@@ -67,21 +72,5 @@ export class ShellResult {
   /** 「命令没跑完」的结果，供 ArkTS 侧在 NAPI 返回空时兜底 */
   public static failure(errorCode: number): ShellResult {
     return new ShellResult(false, -1, '', '', errorCode);
-  }
-}
-
-/** 执行通道自检的一条用例结果 */
-export class ShellProbeCase {
-  public name: string;
-  public ok: boolean;
-  public detail: string;
-  /** 这条用例自身的耗时；`timeout` 用例靠它判断终止是否按时 */
-  public tookMs: number;
-
-  public constructor(name: string, ok: boolean, detail: string, tookMs: number) {
-    this.name = name;
-    this.ok = ok;
-    this.detail = detail;
-    this.tookMs = tookMs;
   }
 }

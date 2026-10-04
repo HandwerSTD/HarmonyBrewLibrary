@@ -1558,8 +1558,8 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 `BrewInstalledParser` 归一成 `BrewInstalledPackage[]`。
 
 - 执行能力来自 `features/pcnative`（通用 native 能力模块，`ShellUtils` + NAPI）；
-- brew 可执行文件的发现顺序：`HOMEBREW_BREW_FILE` → PATH 里的 `brew` → 固定候选路径
-  （`SHELL_BREW_PATH_CANDIDATES`，与执行通道探针共用一份）；
+- brew 可执行文件的发现顺序：`HOMEBREW_BREW_FILE` → 固定候选路径
+  （`SHELL_BREW_PATH_CANDIDATES`，与执行通道同层，两层共用一份）；
 - 结果在进程内缓存 60 秒（`BREW_INSTALLED_TTL_MS`），不落盘；
 - 失败分六类（`BrewInstalledFailure`：找不到 brew / 执行能力不可用 / 超时 / 非零退出 /
   输出解析失败 / 形状不符），分类名进日志，页面走失败态。

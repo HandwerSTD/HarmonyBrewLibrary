@@ -69,6 +69,26 @@
       },
       {
         "name": "ohos.permission.GYROSCOPE"
+      },
+      {
+        "name": "ohos.permission.READ_WRITE_USER_FILE",
+        "reason": "$string:read_write_user_file_reason",
+        "usedScene": {
+          "abilities": [
+            "PcAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.CUSTOM_SANDBOX",
+        "reason": "$string:custom_sandbox_reason",
+        "usedScene": {
+          "abilities": [
+            "PcAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ]
   }

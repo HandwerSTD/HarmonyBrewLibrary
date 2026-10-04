@@ -8,7 +8,7 @@
           "certpath": "./keys/common_debug.cer",
           "keyAlias": "QuickySticker",
           "keyPassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
-          "profile": "./keys/brewdebugDebug.p7b",
+          "profile": "./keys/BrewTestDebugDebug.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "./keys/quickysticker_sign.p12"
         },

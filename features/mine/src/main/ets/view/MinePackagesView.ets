@@ -20,6 +20,7 @@ import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
   CommonConstants,
+  DelayedLoadingView,
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
@@ -156,6 +157,9 @@ export struct MinePackagesView {
     HdsNavDestination() {
       if (this.packagesState.loadingModel.loadingStatus === LoadingStatus.SUCCESS) {
         this.ContentBuilder()
+      } else if (this.packagesState.loadingModel.loadingStatus === LoadingStatus.LOADING) {
+        // 读取本机包要拉起 brew（首次约 2–3 秒）。延迟出现：缓存命中时不会闪一下
+        DelayedLoadingView({ breakpoint: this.globalInfoModel.widthBreakpoint })
       } else if (this.packagesState.loadingModel.loadingStatus === LoadingStatus.FAILED) {
         LoadingFailedView(this.globalInfoModel.widthBreakpoint, () => {
           this.viewModel.load(this.packagesState.mode);
