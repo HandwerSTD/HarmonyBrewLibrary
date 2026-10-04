@@ -32,18 +32,20 @@ export class BrewSourceRow {
   /**
    * **数据就绪**状态（运行期轴）。只对会话激活源有意义（只有它会被取数），
    * 其余源不展示这一行（它们的运行期记录永远是空的，展示出来只会是误导）。
+   *
+   * **两片都成功过才算 `OK`**，其余一律 `NOT_READY` —— 部分成功不单设状态。
    */
-  public dataState: BrewSourceHealth = BrewSourceHealth.UNKNOWN;
-  /** 目录（成员 + 安装量）是否成功取到过 */
-  public dataCatalogReady: boolean = false;
-  /** 全量包索引（分类用的 desc）是否成功同步过 */
-  public dataIndexReady: boolean = false;
+  public dataState: BrewSourceHealth = BrewSourceHealth.NOT_READY;
+  /** 安装量片（4 个聚合端点，给成员与安装量）是否成功取到过 */
+  public dataVolReady: boolean = false;
+  /** 描述片（两个全量包，给分类用的 desc）是否成功取到过 */
+  public dataDescReady: boolean = false;
   /**
-   * 当前站着的运行期错误通路（`catalog` / `meta` / `hydrate`），空串表示没站着错误。
+   * 当前站着的运行期错误分片（`vol` / `desc`），空串表示没站着错误。
    *
    * 为什么需要它：`dataDetail` 里那串 `ok=false code=0 text=0B pairs=0 skips=0 err=download …`
    * 是给人看日志的，不是给人看设置页的 —— 直接渲染出来用户只会看到一屏乱码。
-   * 有它就能把「哪条通路挂了」翻成人话，而信息量并不比原串少（原串里真正有意义的也只有这个）。
+   * 有它就能把「哪一片挂了」翻成人话，而信息量并不比原串少（原串里真正有意义的也只有这个）。
    */
   public dataErrorKind: string = '';
   /** 运行期原始诊断串（开发者向）。UI 不渲染它，只写 hilog */

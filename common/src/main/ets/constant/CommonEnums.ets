@@ -20,6 +20,13 @@ export enum LoadingStatus {
   IDLE = 'idle',
   OFF = 'off',
   LOADING = 'loading',
+  /**
+   * 正在建立本地数据（首次安装要先把包描述列表拉下来）。
+   *
+   * 与 `LOADING` 分开是因为两者的等待时长差两个数量级：`LOADING` 是百毫秒级的单次请求，
+   * 只给转圈就够；`BUILDING` 是几十秒到几分钟的整表下载，必须给出说明与取消等待的预期。
+   */
+  BUILDING = 'building',
   SUCCESS = 'success',
   FAILED = 'failed',
   NO_NETWORK = 'no_network',

@@ -21,6 +21,18 @@
       "value": "Setting up the network."
     },
     {
+      "name": "state_building",
+      "value": "Preparing local data. The package description list is downloading for the first time."
+    },
+    {
+      "name": "state_no_data",
+      "value": "Unable to load Homebrew data. Check the network or the data source, then try again."
+    },
+    {
+      "name": "state_retry",
+      "value": "Retry"
+    },
+    {
       "name": "feedback_reason",
       "value": "Please provide the reason"
     },

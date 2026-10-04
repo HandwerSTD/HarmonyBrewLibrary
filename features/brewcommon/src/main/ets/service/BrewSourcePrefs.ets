@@ -10,8 +10,6 @@ import { BrewSourceStore } from './BrewSourceStore';
 
 const TAG: string = '[BrewSource]';
 
-const PREFERENCE_NO_DATA_MSG: string = 'There is no data in the Preference.';
-
 /**
  * 每个源一个 Preferences store（`brew_src_<sourceId>`，GSKV 模式）。
  *
@@ -163,42 +161,8 @@ export class BrewSourcePrefs {
   }
 
   /**
-   * 「组键 + 子键」读取。与 `PreferenceCacheHelper.getSubValue` 同形（详情页缓存在用）。
-   *
-   * **reject 的错误形状必须保持一致**（`PREFERENCE_NO_DATA_MSG`）：上层
-   * `BrewService.cachedFormulaDetail` / `cachedCaskDetail` 靠 reject 走回落分支。
+   * 打开任意源的 store（维护页用）。返回 `null` 表示不可用
    */
-  public static getSubValue<T>(groupKey: string, subKey: string): Promise<T> {
-    return new Promise<T>((resolve: (value: T) => void, reject: (reason?: Object) => void) => {
-      const group: Record<string, T> | null = BrewSourcePrefs.get<Record<string, T>>(groupKey);
-      if (group === null) {
-        reject({ message: PREFERENCE_NO_DATA_MSG } as BusinessError);
-        return;
-      }
-      const value: T | undefined = group[subKey];
-      if (value === undefined) {
-        reject({ message: PREFERENCE_NO_DATA_MSG } as BusinessError);
-        return;
-      }
-      resolve(value);
-    });
-  }
-
-  /** 「组键 + 子键」写入：读改写整组。与 `PreferenceCacheHelper.setSubValue` 同形 */
-  public static setSubValue<T>(groupKey: string, subKey: string, data: T): Promise<void> {
-    return new Promise<void>((resolve: () => void) => {
-      const group: Record<string, T> = BrewSourcePrefs.get<Record<string, T>>(groupKey) ?? {};
-      group[subKey] = data;
-      BrewSourcePrefs.set<Record<string, T>>(groupKey, group);
-      // 这是 `brew_detail_page_data` 的**唯一写入口**，之前没有被任何显式刷盘覆盖。
-      // 它量小（单个详情骨架），但语义上应当持久 —— 不刷的话进程被杀就丢，
-      // 下次进详情页要多一次单条请求。见 `persistNow` 的注释。
-      BrewSourcePrefs.persistNow();
-      resolve();
-    });
-  }
-
-  /** 打开任意源的 store（维护页用）。返回 `null` 表示不可用 */
   public static openFor(sourceId: string): preferences.Preferences | null {
     if (sourceId === BrewSourceStore.sessionActive().id) {
       return BrewSourcePrefs.active();

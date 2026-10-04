@@ -53,28 +53,24 @@ export class BrewSourceRegistry {
  *
  * ⚠ 它与「连通性」（`BrewSourceReach`）是**两个正交维度**，不要合成一个值：
  *   - `BrewSourceReach` 回答「这个地址能不能应答」——只在点「测试连接 / 激活」时探测一次；
- *   - 本枚举回答「必需的数据有没有完整取到过」——由三条取数通道（目录 / 全量包 / 单条文档）
- *     的**运行期记录**推导。
+ *   - 本枚举回答「必需的数据有没有完整取到过」——由包表两片的运行期记录推导。
  *
- * 改动前两者挤在同一个 `healthState()` 里（它先看 `lastProbeOk`，再看错误槽），于是
- * 「点测试连接说可用、列表说部分可用」看起来自相矛盾，而实际结论取决于用户刚才点过什么、
- * 进过哪些页面 —— 那是懒加载进度，不是连通性。
- *
- * `PARTIAL` 的口径：**有通道当前站着错误**（国内镜像常见「有 /formula/<token>.json，
- * 没有 /analytics/*」）。
+ * **两片都成功过才算成功**，其余一律未就绪。部分成功不再有单独的表达：
+ * 一片成功一片失败之后能显示的内容本来就很少（只有一档榜有成员、或列表没有排序数字），
+ * 为它单设一个状态并区分「哪一片挂了」成本大于收益。
+ * 哪一片失败仍然查得到 —— 分片错误槽（`volError` / `descError`）与本枚举正交。
  */
 export enum BrewSourceHealth {
   /**
-   * 必需数据**还没有完整取到过一次**：首次安装、刚清空缓存、同步仍在进行，或非激活源。
+   * 必需数据**还没有完整取到过**：首次安装、刚清空缓存、同步仍在进行，
+   * 或只取到了一片。
    *
    * ⚠ 它不是「正常」：旧实现把「没记录到错误」直接当正常，于是全新安装、一页数据都没有时
-   * 卡片就写着正常。现在缺失的那部分由这里表达，取数成功后才转 `OK`。
+   * 卡片就写着正常。现在缺失由这里表达，两片都取到后才转 `OK`。
    */
-  UNKNOWN = 'unknown',
-  /** 三条通道都成功过，且当前没有站着的通道错误 */
+  NOT_READY = 'not_ready',
+  /** 两片都成功过，且当前没有站着的分片错误 */
   OK = 'ok',
-  /** 当前有通道站着错误 → 数据不全 */
-  PARTIAL = 'partial',
 }
 
 /**
@@ -90,16 +86,27 @@ export enum BrewSourceReach {
   FAILING = 'failing',
 }
 
-/** 运行期健康记录。同样是纯数据字段 */
+/**
+ * 运行期健康记录。同样是纯数据字段。
+ *
+ * 两片的错误**分槽存**而不是挤在一个 `lastErrorKind` 里：表写入口知道自己是写成功哪片，
+ * 于是「成功时清掉同类错误」变成自然结果，不需要时间戳比较（原先那套比较正是为了绕过
+ * 同毫秒内成功与失败互相覆盖而写的，而它自己也被真机自检证伪过）。
+ */
 export class BrewSourceHealthRecord {
   public lastProbeOk: boolean = false;
   public lastProbeReason: string = '';
   public lastProbeAt: number = 0;
-  public lastErrorKind: string = '';
-  public lastErrorMessage: string = '';
-  public lastErrorAt: number = 0;
-  public catalogOkAt: number = 0;
-  public metaIndexTokensAt: number = 0;
+  /** 安装量片（4 个聚合端点）成功过的时刻 */
+  public volReadyAt: number = 0;
+  /** 描述片（两个全量包）成功过的时刻 */
+  public descReadyAt: number = 0;
+  public volError: string = '';
+  public volErrorMessage: string = '';
+  public volErrorAt: number = 0;
+  public descError: string = '';
+  public descErrorMessage: string = '';
+  public descErrorAt: number = 0;
 }
 
 /** 探测结果 */

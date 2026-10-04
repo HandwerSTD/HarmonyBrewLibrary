@@ -15,24 +15,22 @@ import {
   BrewPackageItem,
   BrewPageData,
 } from '../model/BrewModels';
-import type { LiveCaskDoc, LiveFormulaDoc } from './BrewApiMapper';
-import type { CatalogEntry } from './BrewService';
+import type { CatalogEntry } from './BrewTable';
 
 /**
- * 用**目录 + 现网单条**在设备端拼出两个首页的数据（形状与内置快照完全一致，UI 零改动）。
+ * 把浏览集算成两个首页的结构（分类卡 / 分类，成员已排序已编号）。
  *
- * 为什么不再读 `brew-{formula,cask}-page.json`：那两个文件就是"分类 + 成员"的一次冻结快照，
- * 而分类是自建词表算出来的（官方 API 无分类字段）、成员只需要安装量排序 —— 两样东西设备端
- * 现在都有（目录给了全量安装量、`BrewTaxonomy` 给了词表），没有理由继续冻结在那 240 个包上。
+ * **纯计算，一次网络请求都不发**：成员来自包表（`BrewTable.rows`，即安装量片的键 ∩
+ * 描述片的键），`desc` 来自同一张表的描述片。所以本文件现在只需要两个入参
+ * （行 + 描述表），原先的 `docs`（逐条 hydrate 的现网单条）已经没有了。
+ *
+ * 调用点只有一处：`BrewTable` 建表时算一次并留在内存里，页面构页变成读引用。
  *
  * 与生成器 `generate.py` 的口径对应关系：
  *   - 成员：按 `vol30d` 降序取**目录全量**（生成器是人工策展清单，这里换成量）；
  *   - 分类：`tokens.json` 策展覆盖 → `lexicon.json` 关键词 → 兜底档（见 `BrewTaxonomy`）；
  *   - 版面：`styleType` 按 `STYLE_CYCLE` 轮转、`sequence` 递增、`hasMore = itemCount > 5`；
  *   - 名次：**分类内按 30d 安装量重排**，`categoryRank/categorySize` 在目录全量内计算。
- *
- * `desc` 有两个来源，`descIndex`（元数据索引，后台同步 `formula.json`/`cask.json` 的产物）优先，
- * `docs`（逐条 hydrate 到的现网单条）补位 —— 索引就绪时一个单条请求都不用发。
  */
 
 /** 版面节奏，与 `generate.py` 的 `STYLE_CYCLE` 一致 */
@@ -62,19 +60,22 @@ export class BrewBrowseBuilder {
     return (hash >>> 0) % 2000000000 + 1;
   }
 
-  /** formula 首页：8 张分类卡，卡内是该分类的条目 */
-  public static formulaPage(rows: CatalogEntry[], docs: Record<string, LiveFormulaDoc>,
-    descIndex: Record<string, string>, categoryOrder: string[], pageSize: number):
-    BrewPageData<BrewFormulaPageData> {
-    // [perf] 把「逐条分类 + 建 item」与「分组/排序/建卡」分开计时：
-    // 首页只渲染 8 卡 × 5 条预览，但这里给**全量 rows** 都建了 item 并塞进 card.formulaContents。
+  /**
+   * formula 首页：分类卡，卡内是该分类的条目。
+   *
+   * **不再接现网单条文档**：描述片（`brew_table` 的 `desc` 一半）里已经有 desc，
+   * 而行组件只渲染四项（token / desc / 分类内名次 / 30 天安装量）——版本、许可、
+   * 主页、kegOnly、deprecated 全仓库只有详情页读，而详情页本来就会重新取单条。
+   * 所以浏览页构页现在是纯计算，一次网络请求都不发。
+   */
+  public static formulaPage(rows: CatalogEntry[], descIndex: Record<string, string>,
+    categoryOrder: string[]): BrewCategoryCard[] {
     const t0: number = Date.now();
     const grouped: Map<string, BrewPackageItem[]> = new Map<string, BrewPackageItem[]>();
     rows.forEach((row: CatalogEntry) => {
-      const doc: LiveFormulaDoc | undefined = docs[row.token];
-      const desc: string = BrewBrowseBuilder.descOf(row.token, descIndex, doc?.desc);
+      const desc: string = descIndex[row.token] ?? '';
       const categoryKey: string = BrewTaxonomy.categoryOf(BrewKind.FORMULA, row.token, desc);
-      const item: BrewPackageItem = BrewBrowseBuilder.formulaItem(row, doc, desc, categoryKey);
+      const item: BrewPackageItem = BrewBrowseBuilder.formulaItem(row, desc, categoryKey);
       const bucket: BrewPackageItem[] = grouped.get(categoryKey) ?? [];
       bucket.push(item);
       grouped.set(categoryKey, bucket);
@@ -99,27 +100,22 @@ export class BrewBrowseBuilder {
       card.formulaContents = items;
       cards.push(card);
     });
-    const data: BrewFormulaPageData = new BrewFormulaPageData();
-    data.cardData = cards;
     if (BREW_PERF_TRACE) {
       Logger.info(TAG, `[perf] formulaPage rows=${rows.length} groupMs=${tGroup - t0} ` +
         `cardMs=${Date.now() - tGroup} cards=${cards.length}`);
     }
-    return BrewBrowseBuilder.page(cards.length, pageSize, data);
+    return cards;
   }
 
-  /** cask 首页：8 张分类卡（与 formulaPage 同构，只是卡的数据多一层 `caskCards`） */
-  public static caskPage(rows: CatalogEntry[], docs: Record<string, LiveCaskDoc>,
-    descIndex: Record<string, string>, categoryOrder: string[], categoryNames: string[],
-    pageSize: number): BrewPageData<BrewCaskPageData> {
-    // [perf] 同 formulaPage：分类+建 item 与建卡分开计时
+  /** cask 首页：分类卡（与 formulaPage 同构，只是卡的数据多一层 `caskCards`） */
+  public static caskPage(rows: CatalogEntry[], descIndex: Record<string, string>,
+    categoryOrder: string[]): BrewCaskCategory[] {
     const t0: number = Date.now();
     const grouped: Map<string, BrewPackageItem[]> = new Map<string, BrewPackageItem[]>();
     rows.forEach((row: CatalogEntry) => {
-      const doc: LiveCaskDoc | undefined = docs[row.token];
-      const desc: string = BrewBrowseBuilder.descOf(row.token, descIndex, doc?.desc);
+      const desc: string = descIndex[row.token] ?? '';
       const categoryKey: string = BrewTaxonomy.categoryOf(BrewKind.CASK, row.token, desc);
-      const item: BrewPackageItem = BrewBrowseBuilder.caskItem(row, doc, desc, categoryKey);
+      const item: BrewPackageItem = BrewBrowseBuilder.caskItem(row, desc, categoryKey);
       const bucket: BrewPackageItem[] = grouped.get(categoryKey) ?? [];
       bucket.push(item);
       grouped.set(categoryKey, bucket);
@@ -149,26 +145,20 @@ export class BrewBrowseBuilder {
       const category: BrewCaskCategory = new BrewCaskCategory();
       category.id = index + 1;
       category.categoryKey = categoryKey;
-      category.categoryName = categoryNames[index] ?? card.title;
+      category.categoryName = BrewBrowseBuilder.categoryEn(BrewKind.CASK, categoryKey);
       category.sequence = index + 1;
       category.caskCards = [card];
       categories.push(category);
     });
-    const data: BrewCaskPageData = new BrewCaskPageData();
-    data.caskCategories = categories;
     if (BREW_PERF_TRACE) {
       Logger.info(TAG, `[perf] caskPage rows=${rows.length} groupMs=${tGroup - t0} ` +
         `cardMs=${Date.now() - tGroup} categories=${categories.length}`);
     }
-    return BrewBrowseBuilder.page(categories.length, pageSize, data);
+    return categories;
   }
 
   /**
-   * 空页（目录拿不到时用）。
-   *
-   * 内置的 `brew-{formula,cask}-page.json` 已经删除（C 档），所以"无目录"确实无内容可渲染 ——
-   * 这时返回空列表让 UI 走它自己的空态，比抛错让页面变成失败态更合适：
-   * 断网时"什么都没加载出来"是事实，不是错误。
+   * 空页。表里没有任何成员时用它（只可能在两片都还没到的进程初期出现）。
    */
   public static emptyFormulaPage(pageSize: number): BrewPageData<BrewFormulaPageData> {
     const data: BrewFormulaPageData = new BrewFormulaPageData();
@@ -183,8 +173,8 @@ export class BrewBrowseBuilder {
     return BrewBrowseBuilder.page(0, pageSize, data);
   }
 
-  /** 页信封：`totalSize` 给卡片数（Formulae 的"加载更多"判据是卡片数 × pageSize），单页返回 */
-  private static page<T>(totalSize: number, pageSize: number, data: T): BrewPageData<T> {
+  /** 页信封：`totalSize` 给卡片数（"加载更多"判据是卡片数），单页返回 */
+  public static page<T>(totalSize: number, pageSize: number, data: T): BrewPageData<T> {
     const page: BrewPageData<T> = {
       currentPage: 1,
       pageSize: pageSize,
@@ -206,58 +196,33 @@ export class BrewBrowseBuilder {
   }
 
   /**
-   * `desc` 的唯一取数口径：**元数据索引优先、逐条 doc 补位**。
-   *
-   * 为什么把优先级写在这里而不是各个调用点：`desc` 同时是**分类输入**和**列表主文案**
-   * （`item.title`），两处必须永远取到同一个值 —— 分开写就会出现"分类按索引、文案按 doc"
-   * 这类不一致（看起来正常，但行与分类对不上）。
-   *
-   * 调用方用**它的长度**当"能不能上屏"的判据（空串 = 没东西可展示）：
-   * `"desc": null`（cask 有 2,645 条）与空串都会落到 `''`，那种行不应上屏。
-   */
-  public static descOf(token: string, descIndex: Record<string, string>, docDesc?: string): string {
-    return descIndex[token] ?? docDesc ?? '';
-  }
-
-  /**
    * 行数据的唯一构造口径（分类首页与搜索结果都用它，避免两处各写一遍导致漂移）。
-   * `doc` 允许 `undefined`：搜索结果不拉现网单条，而下面每个字段都是 `doc?.x ?? ''`，
-   * 缺省时拿到空串而不是崩 —— 列表行只展示 `token` / `desc` / `installs30d`。
+   *
+   * **只填四项**：token、desc（`title` 槽位）、分类、30 天安装量 —— 就是行组件渲染的四项。
+   * 版本、许可、主页、kegOnly、deprecated 这些**浏览页一个都不显示**，
+   * 全仓库只有详情页读，而详情页本来就会重新取单条。
    */
-  public static formulaItem(row: CatalogEntry, doc: LiveFormulaDoc | undefined, desc: string,
-    categoryKey: string): BrewPackageItem {
+  public static formulaItem(row: CatalogEntry, desc: string, categoryKey: string): BrewPackageItem {
     const item: BrewPackageItem = new BrewPackageItem();
     item.id = BrewBrowseBuilder.tokenId(row.token);
     item.token = row.token;
-    // 展示槽位：primary=token、secondary=英文 desc（与内置快照的槽位语义一致）
+    // 展示槽位：primary=token、secondary=英文 desc
     item.subTitle = row.token;
     item.title = desc;
     item.categoryKey = categoryKey;
-    item.stableVersion = doc?.versions?.stable ?? '';
-    item.license = doc?.license ?? '';
-    item.homepage = doc?.homepage ?? '';
     item.installs30d = row.vol30d;
-    item.kegOnly = doc?.keg_only ?? false;
-    item.deprecated = doc?.deprecated ?? false;
-    item.disabled = doc?.disabled ?? false;
     return item;
   }
 
-  /** 同 `formulaItem`：`doc` 允许缺省，搜索结果不拉单条 */
-  public static caskItem(row: CatalogEntry, doc: LiveCaskDoc | undefined, desc: string,
-    categoryKey: string): BrewPackageItem {
+  /** 同 `formulaItem` */
+  public static caskItem(row: CatalogEntry, desc: string, categoryKey: string): BrewPackageItem {
     const item: BrewPackageItem = new BrewPackageItem();
     item.id = BrewBrowseBuilder.tokenId(row.token);
     item.token = row.token;
     item.subTitle = row.token;
     item.title = desc;
     item.categoryKey = categoryKey;
-    item.stableVersion = doc?.version ?? '';
-    item.homepage = doc?.homepage ?? '';
     item.installs30d = row.vol30d;
-    item.autoUpdates = doc?.auto_updates ?? false;
-    item.deprecated = doc?.deprecated ?? false;
-    item.disabled = doc?.disabled ?? false;
     return item;
   }
 

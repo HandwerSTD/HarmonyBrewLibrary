@@ -8,8 +8,9 @@ import { Logger } from '@ohos/common';
 import { BrewSource, BrewSourceCacheStats } from '../model/BrewSourceModels';
 import { objKeys } from '../util/objkeys';
 import { BrewCacheEpoch } from './BrewCacheEpoch';
+import { BrewCatalogFile } from './BrewCatalogFile';
 import { BrewService } from './BrewService';
-import { BrewMetaSync } from './BrewMetaSync';
+import { BrewTable } from './BrewTable';
 import { BrewSourcePrefs } from './BrewSourcePrefs';
 import { BrewSourceStore } from './BrewSourceStore';
 
@@ -25,14 +26,20 @@ const TAG: string = '[BrewCache]';
  *
  * ## 为什么清空激活源要重置内存
  *
- * 内存里还有一份 `liveCache` / `catalog` / 索引。只清盘不重置内存，下一次 flush
- * 就会把它们写回去 —— 用户看到「清了但数据还在」。配合 `BrewCacheEpoch` 一起，
- * 在途的后台写入也会被丢弃。
+ * 内存里还有一份包表与详情缓存。只清盘不重置内存，下一次写入就会把它们写回去 ——
+ * 用户看到「清了但数据还在」。配合 `BrewCacheEpoch` 一起，在途的后台写入也会被丢弃。
  *
  * ## 为什么删激活源被拒绝
  *
  * 本进程的 store 句柄正指着它，删掉会让句柄悬空；而「切走」这个动作本身就是重启，
  * 重启后再删即可。拒绝比「自动切回官方 + 重启」更可预测。
+ *
+ * ## 为什么要连带删目录文件
+ *
+ * Harmonybrew 的归一化目录正文（约 3.4MB）留在 `filesDir`，不在 Preferences 里，
+ * 清 Preferences 清不到它。而 `BrewCatalogFile.readRange` 在偏移表缺失时会从残留正文
+ * 重建索引继续供数 —— 只清 store 等于没清。所以 clear 与 drop 都要调
+ * `BrewCatalogFile.delete`。
  */
 export class BrewCacheAdmin {
   private static queue: Promise<void> = Promise.resolve();
@@ -77,6 +84,8 @@ export class BrewCacheAdmin {
     return BrewCacheAdmin.enqueue(() => {
       const isActive: boolean = sourceId === BrewSourceStore.sessionActive().id;
       const before: number = BrewCacheEpoch.current();
+      Logger.info(TAG, `[clear] begin id=${sourceId} active=${isActive} epoch=${before} ` +
+        `table=${BrewTable.statsLine()}`);
       // **只在清空当前会话激活源时才推进世代号**。
       //
       // 世代号保护的是「激活源正在进行中的写入」。非激活源在本次会话里没有任何写入者
@@ -89,12 +98,16 @@ export class BrewCacheAdmin {
       // 在途写入读到的是已重置的内存指针，且世代号已不匹配（见 `BrewCacheEpoch`）。
       if (isActive) {
         BrewService.resetMemoryCaches();
-        BrewMetaSync.resetMemoryIndex();
+        BrewTable.resetMemory();
+        Logger.debug(TAG, `[clear] 内存副本已重置（服务详情缓存 + 包表），世代号已推进至 ${after}`);
       }
-      // 数据轴记录随缓存一起作废：`catalogOkAt` / `metaIndexTokensAt` / 站着的错误都是
-      // **上一份数据**的结论。不重置就会出现「清空缓存了，列表还写着部分可用」。
+      // 数据轴记录随缓存一起作废：两片的「成功过」时刻与站着的错误都是
+      // **上一份数据**的结论。不重置就会出现「清空缓存了，列表还写着已就绪」。
       // 探测记录（连通性）保留 —— 它描述远端地址，与本地缓存无关。
       BrewSourceStore.resetDataHealth(sourceId);
+      // 必须先删目录正文与源目录，再清 store。`BrewCatalogFile.readRange` 在偏移表
+      // 缺失时会从正文重建索引继续供数，正文留着就清不干净。
+      BrewCatalogFile.delete(sourceId);
       const store: preferences.Preferences | null = BrewSourcePrefs.openFor(sourceId);
       if (store !== null) {
         try {
@@ -109,7 +122,12 @@ export class BrewCacheAdmin {
       // 而 `BrewCacheEpoch` 只能挡住同一会话内的在途写入，跨不了进程。
       // `persistNow` 同时会作废该源的句柄（所以下面不再需要 `releaseFor`）。
       BrewSourcePrefs.persistNow(sourceId);
-      Logger.info(TAG, `clear id=${sourceId} active=${isActive} epoch=${before}→${after}`);
+      // 通知放在清盘完成之后：订阅者收到通知会立刻读盘，早一步通知就会把还没被
+      // 清掉的旧内容重新装进内存副本，用户看到「清了但列表还在」。
+      if (isActive) {
+        BrewTable.notifyObservers();
+      }
+      Logger.info(TAG, `clear id=${sourceId} active=${isActive} epoch=${before}→${after} done`);
       return Promise.resolve();
     });
   }
@@ -134,6 +152,8 @@ export class BrewCacheAdmin {
         Logger.error(TAG, `drop rejected, builtin id=${sourceId}`);
         return Promise.resolve();
       }
+      // 与 `clear` 同理：正文与源目录要一并删掉，否则留下约 3.4MB 正文和它的偏移表
+      BrewCatalogFile.delete(sourceId);
       BrewSourcePrefs.releaseFor(sourceId);
       // **先删 store，成功才删注册表**。
       // 反过来的话，`deleteStore` 失败（Context 未就绪 / `deletePreferences` 抛错）时，
@@ -164,31 +184,18 @@ export class BrewCacheAdmin {
   /** 结构化条目数。口径见 spec §9.1。用 `objKeys`（ArkTS 不允许 `Object.keys(Object)`） */
   private static countEntries(key: string, raw: string): number {
     try {
-      if (key === 'brew_live_data') {
-        return objKeys(JSON.parse(raw) as Object).length;
-      }
-      if (key === 'brew_meta_index') {
-        const index: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
-        const formula: Record<string, string> | undefined = index['formula'] as Record<string, string> | undefined;
-        const cask: Record<string, string> | undefined = index['cask'] as Record<string, string> | undefined;
-        const n1: number = formula !== undefined ? objKeys(formula as Object).length : 0;
-        const n2: number = cask !== undefined ? objKeys(cask as Object).length : 0;
-        return n1 + n2;
-      }
-      if (key === 'brew_catalog') {
-        const catalog: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
-        const top: Record<string, Object[]> | undefined = catalog['topTokens'] as Record<string, Object[]> | undefined;
-        if (top === undefined) {
-          return 0;
-        }
+      if (key === 'brew_table') {
+        const table: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
         let n: number = 0;
-        objKeys(top as Object).forEach((kind: string) => {
-          const rows: Object[] | undefined = top[kind];
-          n += rows !== undefined ? rows.length : 0;
+        objKeys(table['vol'] as Object).forEach((kind: string) => {
+          n += objKeys((table['vol'] as Record<string, Object>)[kind] as Object).length;
+        });
+        objKeys(table['desc'] as Object).forEach((kind: string) => {
+          n += objKeys((table['desc'] as Record<string, Object>)[kind] as Object).length;
         });
         return n;
       }
-      if (key === 'brew_detail_page_data') {
+      if (key === 'brew_detail_cache' || key === 'brew_detail_view') {
         return objKeys(JSON.parse(raw) as Object).length;
       }
     } catch (err) {
@@ -199,13 +206,12 @@ export class BrewCacheAdmin {
 
   private static extractTs(key: string, raw: string): number {
     try {
-      if (key === 'brew_catalog') {
-        const catalog: Record<string, number> = JSON.parse(raw) as Record<string, number>;
-        return catalog['ts'] ?? 0;
-      }
-      if (key === 'brew_meta_index') {
-        const index: Record<string, number> = JSON.parse(raw) as Record<string, number>;
-        return index['ts'] ?? 0;
+      if (key === 'brew_table') {
+        const table: Record<string, number> = JSON.parse(raw) as Record<string, number>;
+        // 表没有单一的 ts：两片各自有「成功过」的时刻，取较晚的那个作为整表的写入时刻
+        const vol: number = table['volReadyAt'] ?? 0;
+        const desc: number = table['descReadyAt'] ?? 0;
+        return Math.max(vol, desc);
       }
     } catch (err) {
       return 0;

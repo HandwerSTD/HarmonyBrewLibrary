@@ -57,13 +57,7 @@ export const BREW_LOAD_SLOW_MS: number = 2000;
  * 详见 `docs/superpowers/specs/2026-09-22-brew-fetch-toast-design.md` §13.6。
  */
 
-// ——— 元数据索引（`BrewMetaSync`）：后台同步全量元数据，抽 token → desc，替代“逐条拉 desc”。
-
-/** 开关。false 即完全退回“逐条 hydrate”的老路径（浏览集会跟着降级到前 N 个）。 */
-export const BREW_META_SYNC: boolean = true;
-
-/** 索引的独立存储 key。**严禁并入 `brew_live_data`**（那是“整份 doc ~5KB/条”的口径，1.3 万条≈65MB） */
-export const BREW_META_INDEX_KEY: string = 'brew_meta_index';
+// ——— 描述片（`BrewMetaSync` → `BrewTable`）：后台拉全量包，只抽 token → desc。
 
 /** 全量元数据请求的响应体上限。http 默认只有 5MB，而 formula.json 的 gzip 体就有 5.29MB。 */
 export const BREW_META_MAX_LIMIT: number = 100 * 1024 * 1024;
@@ -96,8 +90,8 @@ export const BREW_META_READ_TIMEOUT_MS: number = 600000;
 /**
  * 一个 kind 的**等待预算**（不是超时）：超过它就先开始下一个 kind，**不丢弃结果**。
  *
- * 作用只有一个：让第二个 kind 不必排在一个慢下载后面。落盘由下载**真正结束**时触发
- * （见 `BrewMetaSync.syncKindWithBudget` 的“迟到落盘”）。
+ * 作用只有一个：让第二个 kind 不必排在一个慢下载后面。写入由下载**真正结束**时触发
+ * （见 `BrewMetaSync.startKind` 的“迟到写入”）。
  *
  * 取 90s 的依据：上游健康时单文件实测 **21.7s**，所以正常情况不会触发；只有上游慢时才生效。
  * ⚠ 不要拿它当 `readTimeout` 用（见上）。
@@ -105,15 +99,7 @@ export const BREW_META_READ_TIMEOUT_MS: number = 600000;
 export const BREW_META_SYNC_BUDGET_MS: number = 90000;
 
 /**
- * 全量包的 `Last-Modified` 基准（kind → 值），条件请求用。
- *
- * 与 `brew_meta_index` 分开存：索引是**结果**，基准是**下次怎么问**，两者生命周期不同
- * （索引可以因格式变化被丢弃，基准仍有效）。
- */
-export const BREW_META_STAMP_KEY: string = 'brew_meta_stamp';
-
-/**
- * 可选自检：抽 200 个 token，把索引里的 desc 与单条 API 逐字比对并打日志。
+ * 可选自检：抽 200 个 token，把描述片里的 desc 与单条 API 逐字比对并打日志。
  *
  * 默认关：它要多发 200 个请求，只应该在验证扫描器改动时开一次。
  */
@@ -122,65 +108,98 @@ export const BREW_META_VERIFY: boolean = false;
 /**
  * 现网单条数据的**新鲜窗口**（不是“过期就重下”的 TTL）。
  *
- * 窗口内直接用缓存；超出窗口后**先探针、再条件请求**（见 BrewService.datasetProbe）：
- *   - 探针 304（数据集未变）→ 全部缓存续期，**0 字节**；
- *   - 数据集变了 → 对该 token 发 `If-None-Match`，304 也只需 0 字节。
- * 实测（curl）：两个条件请求都是 `code=304 bytes=0`，HEAD 探针 `200/304` 也是 0 字节。
- *
- * 所以窗口可以取得比“盲猜 TTL”短很多：官方 `Cache-Control: max-age=600`、数据按天生成，
- * 这里取 1 小时 —— 最多每小时花 2 次 HEAD（formula / cask 各一）就能确认全量数据是否变过。
+ * 窗口内直接用；超出后带 `If-Modified-Since` 发条件请求，304 就 0 字节续期。
+ * 官方 `Cache-Control: max-age=600`、数据按天生成，这里取 1 小时 ——
+ * 一小时里一个包最多多付一次 0 字节的条件请求。
  */
 export const BREW_LIVE_FRESH_MS: number = 60 * 60 * 1000;
 
-/** 数据集版本戳的存储 key（Last-Modified / ETag 基准，跨进程保留） */
-export const BREW_LIVE_DATASET_KEY: string = 'brew_live_dataset';
-
-/** 现网数据的 Preference 存储 key。2026-10 起 brew 只剩这一类存储（内置 mock 的 rawfile 链路已删） */
-export const BREW_LIVE_STORAGE_KEY: string = 'brew_live_data';
-
 /**
- * hydrate（把列表条目刷成现网值）的并发上限。
+ * 单条文档缓存的 key。条目是 `{ts, schemaVersion, lastModified, data}` ——
+ * `lastModified` 跟着条目走，所以仍然能用 `If-Modified-Since` 拿 304 的 0 字节续期。
  *
- * 官网是 GitHub Pages + Fastly，单条 5 KB；并发 6 实测不会触发限流，
- * 同时也不会把页面的首屏时间拉长到不可接受（100 条约 2s，第二次走 TTL 缓存为 0）。
+ * 与 `brew_detail_view`（归一后的详情）同 store、不同 key：前者按 `kind_token` 索引、
+ * 存原始文档；后者按 componentId 索引、存 UI 直接消费的视图数据。
  */
-export const BREW_HYDRATE_CONCURRENCY: number = 6;
+export const BREW_DETAIL_CACHE_KEY: string = 'brew_detail_cache';
+
+/** 归一后详情的缓存 key（按 componentId 索引）。现网失败时的回落来源 */
+export const BREW_DETAIL_VIEW_KEY: string = 'brew_detail_view';
+
+/** 聚合单文件最大 ~3.9 MB（365d）、gzip 后 ~750 KB，给足读取时间 */
+export const BREW_CATALOG_TIMEOUT_MS: number = 30000;
 
 /**
- * 一次页面加载最多花在 hydrate 上的时间。
+ * 包表的存储 key。**本层唯一的 brew 缓存键**（原先是六个：
+ * `brew_catalog` / `brew_meta_index` / `brew_meta_stamp` / `brew_live_data` /
+ * `brew_live_dataset` / `brew_detail_page_data`，后者并入详情缓存）。
  *
- * 超时不是失败：已拿到的值照常用，剩下的请求继续在后台跑并把结果写进 TTL 缓存，
- * 下一次进页面直接命中。这样“现网”不会变成“网差就打不开页面”。
+ * 表分两片：安装量片（4 个聚合端点）与描述片（两个全量包），各自记条件请求基准、
+ * 各自标记新鲜度，一片失败不牵连另一片。浏览集成员规则是 `vol` 的键 ∩ `desc` 的键。
  */
-export const BREW_HYDRATE_TIMEOUT_MS: number = 6000;
+export const BREW_TABLE_STORAGE_KEY: string = 'brew_table';
 
 /**
- * 目录（全量 token + 三张榜）的存储 key。
- *
- * 与 `BREW_LIVE_STORAGE_KEY`（单包文档缓存）分开存：两者生命周期完全不同 ——
- * 单包文档按 token 逐条过期，目录是**整批**一起生成的（按天）。
+ * 表的形状版本。**结构一变就 +1**，读盘时版本对不上整表按空处理。
+ * 留着是为了防止「旧版留了某个字段、新版直接 `Object.keys` 它」那类崩溃。
  */
-export const BREW_CATALOG_STORAGE_KEY: string = 'brew_catalog';
+export const BREW_TABLE_SCHEMA_VERSION: number = 1;
 
 /**
- * 目录的新鲜窗口。
+ * 安装量片的新鲜窗口。
  *
- * **2026-09-23 从 1h 调到 6h，并推翻了两条旧描述：**
+ * 2026-09-23 从 1h 调到 6h，并推翻了两条旧描述：
  *   - 旧注释写“源站每天重新生成一次” —— **实测是每 ~5~10 分钟一代**
  *     （`Last-Modified` 在 5 分钟内从 `00:58:15` 变成 `01:38:38`）。
  *   - 旧注释写“超出窗口先条件请求，全 304 就 0 字节” —— 实测**条件请求几乎永不命中**：
  *     内容每 10 分钟变，而本窗口是小时级，基准必然对不上 → 每次都是全量下载。
  *     而且边缘 `Cache-Control: max-age=600`（10 分钟）比本窗口短得多，
- *     所以探针必然打在过期的边缘副本上 → 回源 → 实测 `catalog_fetch ms=17437`（设备）。
+ *     所以条件请求必然回源 → 设备实测 `catalog_fetch ms=17437`。
  *
- * 调大的理由：探针的成本是**用户实打实等的 17 秒**（Discover 整页实测 21.7s），
- * 而榜单最多旧 6 小时的代价用户感知不到 —— 它本来就每 10 分钟在变。
+ * 调大的理由：探针的成本是**用户实打实等的十几秒**，而榜单最多旧 6 小时的代价用户感知不到。
  * 6h 的含义：隔夜后第一次打开不再吃这个等待。
  *
- * 仍保留条件请求：它是**免费**的（未命中只是多一个被忽略的头），
- * 在“10 分钟内重复打开”这类场景下能省 358KB。
+ * 仍保留条件请求：它是**免费**的（未命中只是多一个被忽略的头）。
  */
-export const BREW_CATALOG_FRESH_MS: number = 6 * 60 * 60 * 1000;
+export const BREW_VOL_FRESH_MS: number = 6 * 60 * 60 * 1000;
+
+/**
+ * 描述片的新鲜窗口。12 小时。
+ *
+ * 上游的两个全量包按天生成，所以一次进程启动最多一次条件请求就该够了；
+ * 取 12 小时是给「用户把应用开着过夜」留余量 —— 命中时 0 字节，
+ * 没命中也只是重下一次（gzip 合计 7.3 MB）。
+ */
+export const BREW_DESC_FRESH_MS: number = 12 * 60 * 60 * 1000;
+
+// ——— 本机包（`BrewInstalledLoader`）：执行设备上的 brew 命令，读已安装列表。
+
+/**
+ * 本机包结果的**进程内**缓存时长。
+ *
+ * 「我的」页与「本机包」二级页在一次操作里会各取一次，两次之间数据不可能变，
+ * 而每次调用都要付一次 Ruby 启动成本。取 60 秒：足够覆盖「页面上下来回切」，
+ * 又不会让刚装完包的用户看到过期列表。
+ *
+ * 不落盘 —— 本机包是设备上随时可读的现状数据，落盘只会引入失效判定。
+ */
+export const BREW_INSTALLED_TTL_MS: number = 60 * 1000;
+
+/**
+ * 本机包命令的超时。
+ *
+ * 30 秒是上限：brew 启动要拉起 vendored Ruby，首跑可能到秒级；
+ * 实测值在设备上量过之后按需调整（见 spec §9）。
+ */
+export const BREW_INSTALLED_TIMEOUT_MS: number = 30000;
+
+/**
+ * 本机包的自检开关。默认关。
+ *
+ * 与 `BREW_SOURCE_VERIFY` 同一模式：打开后打一组 `[BrewInstalled] verify … ok=<bool>` 判据行，
+ * 验证完就关掉。
+ */
+export const BREW_INSTALLED_VERIFY: boolean = false;
 
 /** 每张榜展示的条数（与 `check_algo.py` 的榜口径、`brew-discover-algo.md` 一致） */
 export const BREW_CATALOG_TOP_N: number = 10;
@@ -194,54 +213,6 @@ export const BREW_CATALOG_TOP_N: number = 10;
 export const BREW_CATALOG_KEEP: number = 40;
 
 /**
- * **降级**浏览集的请求预算：只在元数据索引**不可信**（`covered < BREW_INDEX_MIN_TRUST`，
- * 即首次安装 / 同步失败 / 断网 / 扫描口径变了）时生效。
- *
- * 索引可信时浏览集 = 目录 ∩ 索引、首屏零请求，这个常量**完全不参与**；它管的是另一件事：
- * 当 `desc` 只能逐条拉时，一次进页面只能支付这么多请求（前 100 个 × 单条 gzip 约 1.2KB
- * ≈ 120KB，并发 6 冷启动约 5s；之后走 TTL 缓存）。没有这道闸，索引不可用时会把 1.3 万
- * 个 token 全丢给 hydrate，超时批量返回，页面反而只剩零星几条。
- *
- * 为什么要保留降级而不是硬依赖索引：索引是后台下载的，首次启动必然“还没有”；
- * 那时页面必须仍然像今天一样能用（只是少一点）。
- */
-export const BREW_BROWSE_HYDRATE_LIMIT: number = 100;
-
-/**
- * 元数据索引的**可信度闸门**：某 kind 的索引至少覆盖这么多条目录行，才把索引当作
- * "上游有哪些包"的权威清单（从而走主路径：候选 = 目录 ∩ 索引、首屏零请求）。
- *
- * 为什么"非空 + 够一页"就够了，而不是用覆盖率比例（例如 `covered/all ≥ 0.9`）：
- * 一个 kind 的索引表是**原子地产出**的 —— `BrewMetaSync.syncKind()` 只在整份大文件扫完
- * 且 `pairs > 0` 时才返回新表，否则返回 `undefined` 让调用方保留旧表。所以不存在"半张表"，
- * 非空就意味着它是某次全量扫描的完整结果（只可能来自更早的一次同步，即已接受的 staleness）。
- *
- * 而**比例闸门会误伤 cask**：`cask.json` 有 2,645 条 `desc: null`，落盘时故意不写空串
- * （见 `brew-catalog-fullsync-spec.md` §4.6③），所以 cask 的覆盖率天然只有一半左右 ——
- * 用 0.9 会让 cask 永远走降级路径。
- *
- * 取 100（与 `BREW_BROWSE_HYDRATE_LIMIT` 同值但是**两个不同的概念**）：真出现
- * "表非空但覆盖率极低"（例如上游改了标识键导致只扫出几十条错配）时，此时"前 100 条 +
- * 逐条 hydrate"比"只显示这几十条"更有用，与改动前的行为一致。两个常量恰好同值，
- * 但改一个不必改另一个。
- */
-export const BREW_INDEX_MIN_TRUST: number = 100;
-
-/**
- * 负缓存时长：把一个"确认上游不存在"的 token 挡在逐条 hydrate 之外的时长。
- *
- * 目录来自 analytics（30d/90d/365d 安装量），会**保留历史上已下线/改名/弃用的包名**，
- * 而索引来自当前的 `formula.json` / `cask.json` —— 两者的差集里有相当一部分是幽灵 token：
- * 逐条拉必然 404，而 404 不进 `brew_live_data`（失败不缓存），于是**每轮页面重绘都要重打一遍**
- * （真机实测：一轮 94 次 404，且首屏被拖到 4.8s）。
- *
- * 只记确定性失败（404/410）：超时/断网这类瞬时失败不入负缓存，网络恢复后照常重试。
- * 定 6h 是为了“万一它真回来了”时不至于离线太久 —— 进程重启不影响（内存态），
- * 即每次启动最多重试一轮，成本可控。
- */
-export const BREW_MISS_TTL_MS: number = 6 * 60 * 60 * 1000;
-
-/**
  * 首页分类卡**卡内预览**的条数。超过这个数的大卡在底部给一行「查看全部」（进分类二级页）。
  *
  * 同时是数据层的 `hasMore` 判据与 UI 的截断口径 —— 两处必须同源：
@@ -250,38 +221,8 @@ export const BREW_MISS_TTL_MS: number = 6 * 60 * 60 * 1000;
  */
 export const BREW_CATEGORY_PREVIEW_COUNT: number = 5;
 
-/**
- * 浏览页拉 desc 的预算（**比 hydrate 的 6s 宽**）。
- *
- * 只在不降级路径上才用得上：索引就绪时页面一个单条请求都不发；索引不可用时才走 hydrate，
- * 而这批请求是**构页的输入**（分类要看 desc），所以宁可等也不能给出错分类的页面。
- *
- * 为什么必须单独给：分类要看 desc，所以这批单条请求是**构页的输入**，不是"锦上添花的刷新"。
- * 实测 100 条在 6s 预算下只到 53 条（单条中位 273ms、并发 6），剩下的 desc 为空会让关键词
- * 判不出来 → 全被塞进兜底分类，页面看起来正常但**分类是错的**。宁可等（15s 上限，
- * 且 TTL 缓存命中后为 0）也不能给出错分类的页面。
- */
-export const BREW_BROWSE_HYDRATE_MS: number = 15000;
-
-/**
- * 在途去重的 **join 时效上限**：超过它就不再复用那个未完成的构建，改为新建一个。
- *
- * 为什么需要它：`hydrate` 的截止时间只在**每个 worker 取下一个 token 之前**检查，而它最后
- * `Promise.all` 等所有 lane —— 若某个 `BrewHttp.request` 永不 settle（平台层面），整个构建就永不 settle。
- * 没有这道守卫的话，那个死 Promise 会**永久**留在在途字段里，之后每次构页（含重进页签、
- * 失败页的重试按钮）都 join 它 → 页面永久停在 LOADING 直到重启 App。这比改动前**更糟**
- * （改动前只是慢，重试会重新发起）—— 所以它是本次新增去重所欠下的债，必须当场还。
- *
- * 取值 = 浏览页 hydrate 预算 + 两个单条请求超时（`BrewHttp.TIMEOUT_DEFAULT = 10000`：
- * connect / read 各一次）—— 正常情况下早就该结束了。
- */
-export const BREW_PAGE_INFLIGHT_JOIN_MS: number = BREW_BROWSE_HYDRATE_MS + 20000;
-
-/** 聚合单文件最大 ~3.9 MB（365d）、gzip 后 ~750 KB，给足读取时间 */
-export const BREW_CATALOG_TIMEOUT_MS: number = 30000;
-
 // 2026-10：内置 mock 数据与其 trigger 枚举（`common` 的 `TriggerEnums` / `MockRequest`）已整条删除，
-// 本层不再有「内置快照」这种数据来源：成员由目录 + 词表现算，详情由现网单条渲染，
+// 本层不再有「内置快照」这种数据来源：成员由包表 + 词表现算，详情由现网单条渲染，
 // Discover 的榜骨架在代码里构造（`BrewRepository.emptyDiscoverPage`）。
 
 /** 分类 key。与 mockgen/categories.json、页面 JSON 的 categoryKey 一一对应。 */

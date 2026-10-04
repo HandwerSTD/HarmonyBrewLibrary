@@ -4,7 +4,7 @@
 
 import type { BusinessError } from '@kit.BasicServicesKit';
 import { LoadingStatus, Logger, PageContext, PageEnum, RequestErrorCode, StorageKey } from '@ohos/common';
-import { BrewDiscoverModel, BrewFormat } from '@ohos/brewcommon';
+import { BrewDiscoverModel, BrewFormat, BrewTable } from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewDiscoverBoard, BrewDiscoverEntry, BrewDiscoverPageData } from '@ohos/brewcommon';
 import { BrewDiscoverBoardState } from './BrewDiscoverBoardState';
 
@@ -35,25 +35,43 @@ export class BrewDiscoverBoardVM {
   /**
    * 按 id 取整张榜。
    *
-   * 不新增端点：首页已经把这 6 张榜整份加载并写进 Preference 缓存，
-   * 这里再取一次是命中缓存（比把整张榜当路由参数穿过页面栈稳）。
+   * 不新增端点、不发请求：数据全部来自包表（`brew_table` 的 `boards` 一半）。
    */
   public load(boardId: number, state: BrewDiscoverBoardState): void {
     state.boardId = boardId;
-    state.loadingModel.loadingStatus = LoadingStatus.LOADING;
+    const tableState: string = BrewTable.state();
+    Logger.debug(TAG, `[load] 榜单二级页构建开始 boardId=${boardId} tableState=${tableState}`);
+    state.loadingModel.loadingStatus = tableState === 'building' ? LoadingStatus.BUILDING :
+      (tableState === 'ready' ? LoadingStatus.LOADING : LoadingStatus.EMPTY_DATA);
     this.discoverModel.getDiscoverPage()
       .then((data: BrewDiscoverPageData) => {
         const boards: BrewDiscoverBoard[] = data.boards ?? [];
         state.snapshotDate = data.snapshotDate ?? '';
         state.board = boards.find((item: BrewDiscoverBoard) => item.id === boardId);
+        if (tableState !== 'ready') {
+          state.loadingModel.loadingStatus = tableState === 'building' ?
+            LoadingStatus.BUILDING : LoadingStatus.EMPTY_DATA;
+          Logger.info(TAG, `board ${boardId} waiting, table state=${tableState}`);
+          return;
+        }
+        // 骨架恒为 6 张榜，所以 `board` 一定找得到；找不到就是数据真的不对，给失败态
         state.loadingModel.loadingStatus = state.board ? LoadingStatus.SUCCESS : LoadingStatus.FAILED;
-        Logger.info(TAG, `load board ${boardId}: ${state.board?.entryCount ?? 0} entries`);
+        Logger.info(TAG, `load board ${boardId}: ${state.board?.entryCount ?? 0} entries ` +
+          `kind=${state.board?.kind ?? '?'}/${state.board?.boardKey ?? '?'} | ${BrewTable.statsLine()}`);
       })
       .catch((error: BusinessError) => {
         state.loadingModel.loadingStatus =
           error.code === RequestErrorCode.NETWORK_CONNECT_FAILED ? LoadingStatus.NO_NETWORK : LoadingStatus.FAILED;
         Logger.error(TAG, `load board ${boardId} failed: ${error.code} ${error.message}`);
       });
+  }
+
+  /** 重试按钮：强制重取两片，再重载本页 */
+  public retry(boardId: number, state: BrewDiscoverBoardState): void {
+    this.load(boardId, state);
+    BrewTable.refresh(true).then(() => {
+      this.load(boardId, state);
+    });
   }
 
   public jumpDetail(entry: BrewDiscoverEntry, kind: string): void {

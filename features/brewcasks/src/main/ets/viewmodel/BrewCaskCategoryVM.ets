@@ -3,7 +3,7 @@
  */
 
 import { LoadingStatus, Logger, PageContext, PageEnum, StorageKey } from '@ohos/common';
-import { adapterFor, BrewCaskModel, BrewKind, BrewSourceStore } from '@ohos/brewcommon';
+import { adapterFor, BrewCaskModel, BrewKind, BrewSourceStore, BrewTable } from '@ohos/brewcommon';
 import type { BrewCaskCategory, BrewCategoryParams, BrewDetailParams, BrewPackageItem } from '@ohos/brewcommon';
 import { BrewCaskCategoryState } from './BrewCaskCategoryState';
 
@@ -41,28 +41,49 @@ export class BrewCaskCategoryVM {
    *
    * 空数组的语义**按源能力分**：
    *   - 源**支持** cask（上游）时，本页只能从「卡片还有更多」进入，所以空数组不可能是
-   *     「这个分类本来就空」，而是目录没拿到（无网）—— 给失败态 + 重试，比显示一张空列表有用。
-   *   - 源**不支持** cask（Harmonybrew）时，空数组就是**正常结果**，判成 FAILED 会让用户看到
+   *     「这个分类本来就空」，而是表里没有成员 —— 给状态提示 + 重试，比显示一张空列表有用。
+   *   - 源**不支持** cask（Harmonybrew）时，空数组就是**正常结果**，判成失败会让用户看到
    *     「加载失败」，而实际上只是这个源没有 cask。这类「把空当成失败」的误报比空列表更坑。
    *
-   * 仓库层把异常吞成空数组（`getCaskCategories`），所以这里不写 catch，只按能力与长度判状态。
-   * 能力查询不能放到 `BrewSourceStore` 上（`BrewSourceAdapter` 已 import 它，反向会成环）。
+   * 状态优先按包表两片判定（与三个首页同一口径），不按「数组是否为空」——
+   * 后者会把「描述片到了但某个分类恰好没有成员」误判成故障。
    */
   public load(params: BrewCategoryParams | undefined, state: BrewCaskCategoryState): Promise<number> {
+    const t0: number = Date.now();
     state.initialCategoryKey = params?.categoryKey ?? '';
-    state.loadingModel.loadingStatus = LoadingStatus.LOADING;
+    const tableState: string = BrewTable.state();
+    state.loadingModel.loadingStatus = tableState === 'building' ? LoadingStatus.BUILDING :
+      (tableState === 'ready' ? LoadingStatus.LOADING : LoadingStatus.EMPTY_DATA);
+    Logger.debug(TAG, `[load] cask 分类二级页构建开始 tableState=${tableState} ` +
+      `categoryKey=${state.initialCategoryKey}`);
     return this.caskModel.getCaskCategories()
       .then((categories: BrewCaskCategory[]) => {
         state.categories = categories;
         const index: number = this.indexOfCategory(categories, state.initialCategoryKey);
         const sessionId: string = BrewSourceStore.sessionActive().id;
         const casksSupported: boolean = adapterFor(BrewSourceStore.dialectOf(sessionId)).supportsCasks;
+        if (tableState !== 'ready') {
+          state.loadingModel.loadingStatus = tableState === 'building' ?
+            LoadingStatus.BUILDING : LoadingStatus.EMPTY_DATA;
+          Logger.info(TAG, `cask category page waiting, table state=${tableState}`);
+          return index;
+        }
         state.loadingModel.loadingStatus = (!casksSupported || categories.length > 0)
-          ? LoadingStatus.SUCCESS : LoadingStatus.FAILED;
+          ? LoadingStatus.SUCCESS : LoadingStatus.EMPTY_DATA;
+        // `casksSupported=false` 时空分类是**正常**（本源不提供 cask），与「有 cask 但没分类」要分得开
         Logger.info(TAG,
-          `load ${categories.length} categories, selected=${this.categoryKeyAt(categories, index)} index=${index}`);
+          `load ${categories.length} categories, selected=${this.categoryKeyAt(categories, index)} ` +
+          `index=${index} casksSupported=${casksSupported} in ${Date.now() - t0}ms | ${BrewTable.statsLine()}`);
         return index;
       });
+  }
+
+  /** 重试按钮：强制重取两片，再重载本页 */
+  public retry(state: BrewCaskCategoryState): void {
+    this.load({ categoryKey: state.initialCategoryKey }, state);
+    BrewTable.refresh(true).then(() => {
+      this.load({ categoryKey: state.initialCategoryKey }, state);
+    });
   }
 
   /**

@@ -38,11 +38,17 @@ export struct BrewCaskBaseView {
   @State caskState: BrewCaskState = this.viewModel.getState();
 
   aboutToAppear(): void {
-    this.viewModel.sendEvent({ type: BrewCaskEventType.LOAD_CASK_PAGE, param: null });
+    this.viewModel.subscribeTable();
+    this.viewModel.refreshTable();
     this.viewModel.sendEvent<OffsetParam>({
       type: BaseHomeEventType.HANDLE_BREAKPOINT_CHANGE,
       param: { yOffset: 0, tabIndex: TabBarType.CASKS },
     });
+  }
+
+  // 包表落地时的回调靠页面生命周期退订（VM 是单例，不退会累积）
+  aboutToDisappear(): void {
+    this.viewModel.unsubscribeTable();
   }
 
   handleBreakPointChange(): void {
@@ -164,7 +170,7 @@ export struct BrewCaskBaseView {
         this.ContentViewBuilder();
       },
       reloadData: () => {
-        this.viewModel.sendEvent({ type: BrewCaskEventType.LOAD_CASK_PAGE, param: null });
+        this.viewModel.retryLoad();
       },
     })
   }

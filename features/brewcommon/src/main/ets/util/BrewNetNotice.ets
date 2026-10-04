@@ -82,8 +82,9 @@ export class BrewNetNotice {
    * 数据已到达（或该页加载结束）：撤掉常驻提示。
    *
    * **必须与 `willFetch` 成对**，否则提示会一直挂着（用户还能用关闭按钮自救）。
-   * 目前挂在两处「构页完成」判据上：`BrewService.logPageLoad`（两个浏览页共用一个函数）
-   * 与 `BrewRepository.getDiscoverPage` 的 `discover_page assembled`。
+   * 挂在三处判据上：`BrewTable.rebuild`（两片都到）、`BrewTable.doRefresh` 收尾
+   * （本轮结束仍有片未到 —— 两片同时失败时没有写入，也就没有 `rebuild`）
+   * 与 `BrewRepository.getDiscoverPage`。
    */
   public static settle(reason: string, detail: string): void {
     const was: boolean = BrewNetNotice.shown;

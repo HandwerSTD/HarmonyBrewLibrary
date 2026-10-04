@@ -3,7 +3,7 @@
  */
 
 import { LoadingStatus, Logger, PageContext, PageEnum, StorageKey } from '@ohos/common';
-import { BrewFormulaModel, BrewKind } from '@ohos/brewcommon';
+import { BrewFormulaModel, BrewKind, BrewTable } from '@ohos/brewcommon';
 import type { BrewCategoryCard, BrewCategoryParams, BrewDetailParams, BrewPackageItem } from '@ohos/brewcommon';
 import { BrewFormulaCategoryState } from './BrewFormulaCategoryState';
 
@@ -45,22 +45,41 @@ export class BrewFormulaCategoryVM {
    * 不新增端点：分类与成员本来就是设备端用「目录 + 词表」现算的，首页刚算过一次，
    * 这里再取一次是命中目录缓存（与榜单二级页按 boardId 重取 discover 页同款做法）。
    *
-   * 空数组按**失败**处理：本页只能从「卡片还有更多」进入，所以空数组不可能是「这个分类本来就空」，
-   * 而是目录没拿到（无网）—— 给失败态 + 重试，比显示一张空列表有用。
-   * 仓库层把异常吞成空数组（`getFormulaCategories`），所以这里不写 catch，只按长度判状态。
+   * 状态按包表两片判定（与三个首页同一口径），不按「卡片数组是否为空」——
+   * 后者会把「描述片到了但某个分类恰好没有成员」误判成故障。
    */
   public load(params: BrewCategoryParams | undefined, state: BrewFormulaCategoryState): Promise<number> {
+    const t0: number = Date.now();
     state.initialCategoryKey = params?.categoryKey ?? '';
-    state.loadingModel.loadingStatus = LoadingStatus.LOADING;
+    const tableState: string = BrewTable.state();
+    state.loadingModel.loadingStatus = tableState === 'building' ? LoadingStatus.BUILDING :
+      (tableState === 'ready' ? LoadingStatus.LOADING : LoadingStatus.EMPTY_DATA);
+    Logger.debug(TAG, `[load] 分类二级页构建开始 tableState=${tableState} ` +
+      `categoryKey=${state.initialCategoryKey}`);
     return this.formulaModel.getFormulaCategories()
       .then((cards: BrewCategoryCard[]) => {
         state.cards = cards;
         const index: number = this.indexOfCategory(cards, state.initialCategoryKey);
-        state.loadingModel.loadingStatus = cards.length > 0 ? LoadingStatus.SUCCESS : LoadingStatus.FAILED;
+        if (tableState !== 'ready') {
+          state.loadingModel.loadingStatus = tableState === 'building' ?
+            LoadingStatus.BUILDING : LoadingStatus.EMPTY_DATA;
+          Logger.info(TAG, `category page waiting, table state=${tableState}`);
+          return index;
+        }
+        state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
         Logger.info(TAG,
-          `load ${cards.length} categories, selected=${this.categoryKeyAt(cards, index)} index=${index}`);
+          `load ${cards.length} categories, selected=${this.categoryKeyAt(cards, index)} index=${index} ` +
+          `in ${Date.now() - t0}ms | ${BrewTable.statsLine()}`);
         return index;
       });
+  }
+
+  /** 重试按钮：强制重取两片，再重载本页 */
+  public retry(state: BrewFormulaCategoryState): void {
+    this.load({ categoryKey: state.initialCategoryKey }, state);
+    BrewTable.refresh(true).then(() => {
+      this.load({ categoryKey: state.initialCategoryKey }, state);
+    });
   }
 
   /**

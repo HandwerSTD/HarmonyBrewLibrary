@@ -14,6 +14,7 @@
  */
 
 import { ColorMetrics } from '@kit.ArkUI';
+import type { BusinessError } from '@kit.BasicServicesKit';
 import Logger from './Logger';
 
 /**
@@ -82,7 +83,15 @@ export class ColorUtil {
         ColorMetrics.resourceColor(backgroundColor).blendColor(ColorMetrics.resourceColor(foregroundColor)).color;
     } catch (error) {
       Logger.error(tag, `getBelndColor failed. Cause: ${error.code}, ${error.message}.`);
-      resultColor = ColorMetrics.resourceColor(foregroundColor).color;
+      // 回落路径要再读一次色，若这里也抛就把调用方传入的 foregroundColor 原样透回去，
+      // 不能再让回落失败顶掉上面已经打好的原始错误上下文
+      try {
+        resultColor = ColorMetrics.resourceColor(foregroundColor).color;
+      } catch (fallbackError) {
+        const err = fallbackError as BusinessError;
+        Logger.error(tag, `getBelndColor fallback failed. Cause: ${err.code}, ${err.message}.`);
+        resultColor = foregroundColor;
+      }
     }
     return resultColor;
   }

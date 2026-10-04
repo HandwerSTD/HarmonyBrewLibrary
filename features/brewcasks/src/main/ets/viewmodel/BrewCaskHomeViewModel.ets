@@ -25,7 +25,8 @@ import {
   TAB_CONTENT_STATUSES,
 } from '@ohos/commonbusiness';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
-import { BrewCaskModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect, brewLogRampForPage } from '@ohos/brewcommon';
+import { BrewCaskModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect,
+  brewLogRampForPage, BrewTable } from '@ohos/brewcommon';
 import type {
   BrewCaskCard,
   BrewCaskCategory,
@@ -145,21 +146,64 @@ export class BrewCaskHomeViewModel extends BaseHomeViewModel<BrewCaskState> {
     brewLogRampForPage('casks');
   }
 
+  private tableObserver: () => void = () => {
+    Logger.debug(TAG, `[load] 包表已落地（${BrewTable.statsLine()}），重出 Casks 页`);
+    this.loadCaskPage();
+  };
+
+  public subscribeTable(): void {
+    Logger.debug(TAG, '[subscribe] 注册包表观察者（成对：aboutToAppear / aboutToDisappear）');
+    BrewTable.addObserver(this.tableObserver);
+  }
+
+  public unsubscribeTable(): void {
+    BrewTable.removeObserver(this.tableObserver);
+  }
+
+  /** 重试按钮：强制重取两片（跳过新鲜窗口判定） */
+  public retryLoad(): void {
+    this.loadCaskPage();
+    BrewTable.refresh(true).then(() => {
+      this.loadCaskPage();
+    });
+  }
+
+  /**
+   * 每次进页面都推一次取数（非强制）：内部按两片各自的新鲜窗口判定要不要真发请求，
+   * 两片都在窗口内时**一个字节都不发**。
+   */
+  public refreshTable(): void {
+    BrewTable.refresh().then(() => {
+      this.loadCaskPage();
+    });
+  }
+
   protected loadCaskPage(): void {
+    const t0: number = Date.now();
     const isDark: boolean = AppStorage.get(StorageKey.COLOR_MODE) === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
-    this.state.loadingModel.loadingStatus = LoadingStatus.LOADING;
     WindowUtil.updateStatusBarColor(isDark);
+    // 状态按包表两片分别判定（与 Formulae 首页同一口径）
+    const tableState: string = BrewTable.state();
+    Logger.debug(TAG, `[load] Casks 页构建开始 tableState=${tableState} page=${this.state.currentPage}`);
     this.caskModel.getCaskPage(this.state.currentPage, this.pageSize)
       .then((result: BrewPageData<BrewCaskPageData>) => {
         const categories: BrewCaskCategory[] = result.data.caskCategories ?? [];
         const cards: BrewCaskCard[] = BrewCaskHomeViewModel.flattenCards(categories);
         this.state.cardSource.setDataArray(cards);
         this.updateFlowSection();
-        // Casks 一次返回全部分类（该 JSON 的 totalPage = 1），页签内不需要「加载更多」
+        // Casks 一次返回全部分类，页签内不需要「加载更多」
         this.state.loadingModel.hasNextPage = false;
+        if (tableState !== 'ready') {
+          this.state.loadingModel.loadingStatus = tableState === 'building' ?
+            LoadingStatus.BUILDING : LoadingStatus.EMPTY_DATA;
+          TAB_CONTENT_STATUSES[TabBarType.CASKS] = false;
+          Logger.info(TAG, `cask page waiting, table state=${tableState}`);
+          return;
+        }
         this.state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
         TAB_CONTENT_STATUSES[TabBarType.CASKS] = true;
-        Logger.info(TAG, `loadCaskPage success, ${categories.length} categories, ${cards.length} cards`);
+        Logger.info(TAG, `loadCaskPage success, ${categories.length} categories, ${cards.length} cards ` +
+          `in ${Date.now() - t0}ms | ${BrewTable.statsLine()}`);
       })
       .catch((error: BusinessError) => {
         WindowUtil.updateStatusBarColor(isDark);

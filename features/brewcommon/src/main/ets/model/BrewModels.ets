@@ -41,6 +41,13 @@ export interface BrewRequirement {
  *
  * 用 class 而非 interface：UI 层（LazyForEach / 卡片组件）需要能直接实例化它做兜底，
  * 且作为 IDataSource 的返回类型。字段一律给默认值，避免 JSON 缺字段时拿到 undefined。
+ *
+ * **只有四项有来源**：`token` / `title`（描述）/ `categoryKey` / `installs30d`，
+ * 加上 `id` 与 `categoryRank` / `categorySize` / `sequence` 这几个本地算出来的。
+ * 原先还有 `stableVersion` / `license` / `homepage` / `kegOnly` / `deprecated` /
+ * `disabled` / `autoUpdates` / `mediaUrl` —— 它们全部来自现网单条文档，而浏览页
+ * 已经不拉单条了（数据全部来自包表），行组件也从来不渲染它们。留着只会在每个条目上
+ * 挂几个恒为空的字段，让人以为「这个值怎么没填」。
  */
 export class BrewPackageItem {
   public id: number = 0;
@@ -49,7 +56,6 @@ export class BrewPackageItem {
   /** Casks 页：所属卡片 id */
   public caskCardId: number = 0;
   public mediaType: string = 'IMAGE';
-  public mediaUrl: string = '';
   /** 展示槽位 secondaryText：英文 desc */
   public title: string = '';
   /** 展示槽位 primaryText：token */
@@ -60,18 +66,11 @@ export class BrewPackageItem {
   public contentType: number = 1;
   /** brew 包名，如 ripgrep / google-chrome */
   public token: string = '';
-  public license: string = '';
-  public homepage: string = '';
-  public stableVersion: string = '';
   public installs30d: number = 0;
   /** 分类内安装量排名（从 1 开始） */
   public categoryRank: number = 0;
   /** 分类内包总数 */
   public categorySize: number = 0;
-  public kegOnly: boolean = false;
-  public autoUpdates: boolean = false;
-  public deprecated: boolean = false;
-  public disabled: boolean = false;
   public categoryKey: string = '';
 }
 

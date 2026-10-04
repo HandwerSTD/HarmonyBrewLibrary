@@ -14,6 +14,7 @@ import type {
   BrewRequirement,
 } from '../model/BrewModels';
 import { BrewKind } from '../model/BrewModels';
+import { BrewBrowseBuilder } from './BrewBrowseBuilder';
 
 /**
  * formulae.brew.sh 现网 JSON → 应用模型。
@@ -387,78 +388,21 @@ export class BrewApiMapper {
     target.disableReason = disableReason ?? '';
   }
 
-  // -------------------------------------------------- 列表条目（卡片）
+  // -------------------------------------------------- 列表条目
 
   /**
-   * 把现网值填进列表条目（原地修改 `item`）。
-   *
-   * 只覆盖**包自身属性**：desc / 版本 / 依赖 / bottle / 生命周期 / 许可 / 主页。
-   * **不碰 `id` / `categoryKey` / `categoryRank` / `categorySize`** ——
-   * 前两个是本地清单的主键，后两个是排序结果，由 Repository 在 hydrate 完成后
-   * 统一按「当前可见的安装量」重算（见 BrewFormulaModel.rerankCategory）。
-   *
-   * `installs30d` 单独用 `applyFormulaInstalls` 写，原因同上：
-   * 先把一个分类的安装量全部写完再重排名次，否则会拿一半新一半旧的数据排名。
+   * `token` 的稳定 id。与 `BrewBrowseBuilder.tokenId` 同一个函数，避免两个地方算出不同值。
    */
-  public static applyFormulaItem(item: BrewPackageItem, doc: LiveFormulaDoc): void {
-    const versions: LiveVersions = doc.versions ?? {};
-    item.token = doc.token ?? item.token;
-    // title / subTitle 是卡片展示槽位：title 放 desc，subTitle 放 token（见 BrewModels 文件头）
-    item.title = doc.desc ?? item.title;
-    item.subTitle = item.token;
-    item.stableVersion = versions.stable ?? item.stableVersion;
-    item.license = doc.license ?? item.license;
-    item.homepage = doc.homepage ?? item.homepage;
-    item.kegOnly = doc.keg_only ?? item.kegOnly;
-    item.deprecated = doc.deprecated ?? false;
-    item.disabled = doc.disabled ?? false;
-    // 刻意不碰 mediaUrl / version / sequence / tagIds：
-    // 它们是原样例卡片引擎的展示字段（图标、序号、标签），与官方 API 无关，
-    // 交给内置清单管。
+  public static tokenId(token: string): number {
+    return BrewBrowseBuilder.tokenId(token);
   }
 
-  /** 列表条目的安装量（现网 `install_on_request`，与 generate.py 同口径） */
-  public static applyFormulaInstalls(item: BrewPackageItem, doc: LiveFormulaDoc): void {
-    const bucket: LiveAnalytics = doc.analytics ?? {};
-    item.installs30d = BrewApiMapper.installCount(bucket.install_on_request?.['30d'], item.token);
-  }
-
-  /** 同 applyFormulaItem；cask 的安装量口径是 `install` */
-  public static applyCaskItem(item: BrewPackageItem, doc: LiveCaskDoc): void {
-    item.token = doc.token ?? item.token;
-    item.title = doc.desc ?? item.title;
-    item.subTitle = item.token;
-    item.stableVersion = doc.version ?? item.stableVersion;
-    item.homepage = doc.homepage ?? item.homepage;
-    item.autoUpdates = doc.auto_updates ?? item.autoUpdates;
-    item.deprecated = doc.deprecated ?? false;
-    item.disabled = doc.disabled ?? false;
-  }
-
-  /** 同 applyFormulaInstalls（cask 用 `install`） */
-  public static applyCaskInstalls(item: BrewPackageItem, doc: LiveCaskDoc): void {
-    const bucket: LiveAnalytics = doc.analytics ?? {};
-    item.installs30d = BrewApiMapper.installCount(bucket.install?.['30d'], item.token);
-  }
-
-  /**
-   * 列表条目按「当前可见的安装量」重算分类内排名与总数。
-   *
-   * 只在**原数组的副本上**排序，不重排 `items` 本身：卡片的条目顺序是生成期调过的
-   * 版面节奏（`sequence`），而 `categoryRank` 只是一个展示值。两者混在一起会把版面改掉。
-   *
-   * 口径与 generate.py 一致：同分类成员按 `installs30d` 降序，1 起算。
-   * 这里用的是「hydrate 后的安装量」，因此**名次永远与卡片上的数字自洽** ——
-   * 不会出现“安装量是现网的、排名还是旧快照”这种看得到的矛盾。
-   */
-  public static rerankCategory(items: BrewPackageItem[]): void {
-    const sorted: BrewPackageItem[] = items.slice().sort((a: BrewPackageItem, b: BrewPackageItem) =>
-      b.installs30d - a.installs30d);
-    sorted.forEach((item: BrewPackageItem, index: number) => {
-      item.categoryRank = index + 1;
-      item.categorySize = sorted.length;
-    });
-  }
+  // 下列四个「把现网值填进列表条目」的方法（`applyFormulaItem` / `applyFormulaInstalls` /
+  // `applyCaskItem` / `applyCaskInstalls`）与 `rerankCategory` 已随列表页改读包表而**整组删除**：
+  // 浏览页构页不再拉单条文档，行上的版本 / 许可 / 主页 / kegOnly / deprecated 全部没有来源，
+  // 而行组件本来就不渲染它们 —— 全仓库只有详情页读那些字段，而详情页走 `mergeFormula` /
+  // `mergeCask`。留着它们只会让「这个字段怎么永远为空」变成一个需要查代码才能回答的问题。
+  // 分类内名次改由 `BrewBrowseBuilder.rankWithin` 在建表时一次算好。
 
   // -------------------------------------------------- 小工具（与 generate.py 一一对应）
 

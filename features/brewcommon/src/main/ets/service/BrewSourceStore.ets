@@ -223,94 +223,83 @@ export class BrewSourceStore {
   }
 
   /**
-   * 记录一个「当前站着」的错误。
+   * 记录一个「当前站着」的错误。**纯诊断，不参与 `healthState` 判定**。
    *
-   * `kind` **只接受** `catalog` / `meta` / `hydrate`（spec §9.5 的三个运行期写入点）。
-   * 其它 kind 一律拒绝并打 warn —— 因为本字段是**单槽**语义（`healthState` 只看
-   * `lastErrorKind` 是哪一种），任何无关 kind 都会冲掉「当前站着的是哪个错误」。
-   * 探测的结果不走这里，它由 `noteProbe` 单独表达；而两者现在分属两个正交维度，
-   * 不再参与同一个状态判定（见 `healthState` / `reachState`）。
+   * `kind` **只接受** `vol` / `desc`（包表的两个分片）。其它 kind 一律拒绝并打 warn ——
+   * 错误按片分槽，一个无关 kind 会占错槽位，让用户看到一片明明正常的提示。
+   * 探测的结果不走这里，它由 `noteProbe` 单独表达。
    */
   public static noteError(id: string, kind: string, message: string): void {
-    if (kind !== 'catalog' && kind !== 'meta' && kind !== 'hydrate') {
-      Logger.warn(TAG, `noteError ignored, kind=${kind} 不在词表内（catalog/meta/hydrate）, id=${id}`);
+    if (kind !== 'vol' && kind !== 'desc') {
+      Logger.warn(TAG, `noteError ignored, kind=${kind} 不在词表内（vol/desc）, id=${id}`);
       return;
     }
     const one: BrewSourceHealthRecord = BrewSourceStore.healthOf(id);
-    one.lastErrorKind = kind;
-    one.lastErrorMessage = message;
-    one.lastErrorAt = Date.now();
+    const at: number = Date.now();
+    if (kind === 'vol') {
+      one.volError = 'vol';
+      one.volErrorMessage = message;
+      one.volErrorAt = at;
+    } else {
+      one.descError = 'desc';
+      one.descErrorMessage = message;
+      one.descErrorAt = at;
+    }
     BrewSourceStore.persistHealth();
+    Logger.info(TAG, `shard error noted, id=${id}, kind=${kind}, ${message}`);
   }
 
   /**
-   * 目录（聚合端点）**取数成功**。
+   * 安装量片取数**成功**。
    *
-   * 成功时必须**主动清掉同类错误**：`lastErrorKind` 表达的是「当前站着什么错误」，
-   * 而不是「历史上出过错」。靠时间戳先后去推「错误是否被后续成功覆盖」在时钟分辨率内必然失效
-   * （真机自检实测：同一毫秒内的成功 + 失败让 `PARTIAL` 被判成 `OK`）。
+   * 成功时必须**清掉本片的错误槽** —— 它表达的是「当前站着什么错误」，
+   * 而不是「历史上出错过」。
    */
-  public static noteCatalogOk(id: string): void {
+  public static noteVolOk(id: string): void {
     const one: BrewSourceHealthRecord = BrewSourceStore.healthOf(id);
-    one.catalogOkAt = Date.now();
-    if (one.lastErrorKind === 'catalog') {
-      one.lastErrorKind = '';
-      one.lastErrorMessage = '';
-    }
+    const hadError: boolean = one.volError.length > 0;
+    one.volReadyAt = Date.now();
+    one.volError = '';
+    one.volErrorMessage = '';
+    one.volErrorAt = 0;
     BrewSourceStore.persistHealth();
-    Logger.info(TAG, `catalog ok noted, id=${id}`);
+    Logger.info(TAG, `vol shard ok noted, id=${id}${hadError ? '（清掉了上一个错误槽）' : ''}`);
   }
 
-  /**
-   * 元数据索引（全量包）**同步成功**。与 `noteCatalogOk` 对称。
-   *
-   * `tokens` 是当前索引里的条目数（formula + cask），只用于日志与后续展示；
-   * 「是否仍然可用」靠的是清掉同类错误，不是比较时间戳（见 `healthState` 注释）。
-   */
-  public static noteMetaOk(id: string, tokens: number): void {
+  /** 描述片取数**成功**。与 `noteVolOk` 对称 */
+  public static noteDescOk(id: string): void {
     const one: BrewSourceHealthRecord = BrewSourceStore.healthOf(id);
-    one.metaIndexTokensAt = Date.now();
-    if (one.lastErrorKind === 'meta') {
-      one.lastErrorKind = '';
-      one.lastErrorMessage = '';
-    }
+    const hadError: boolean = one.descError.length > 0;
+    one.descReadyAt = Date.now();
+    one.descError = '';
+    one.descErrorMessage = '';
+    one.descErrorAt = 0;
     BrewSourceStore.persistHealth();
-    Logger.info(TAG, `meta ok noted, id=${id}, tokens=${tokens}`);
+    Logger.info(TAG, `desc shard ok noted, id=${id}${hadError ? '（清掉了上一个错误槽）' : ''}`);
   }
 
   /**
    * 状态判定（**数据轴**）：只读运行期取数记录，**绝不看 `lastProbe*`**。
    *
-   *   - 有通道当前站着错误（`catalog` / `meta` / `hydrate`）→ `PARTIAL`（数据不全）；
-   *   - 否则，目录与全量包**都成功过至少一次** → `OK`；
-   *   - 其余 → `UNKNOWN`（数据未就绪：首次安装 / 刚清空缓存 / 同步仍在进行）。
+   * 两片都成功过 → `OK`；其余一律 `NOT_READY`。
+   * 部分成功不单设状态（见 `BrewSourceHealth` 的注释）。
    *
-   * 改动前这里先看 `lastProbeAt` / `lastProbeOk`，把「连通性」与「数据是否取到」
-   * 混成了一个值 —— 那正是本次拆开的对象（见 `BrewSourceHealth` 注释）。
-   * 数据轴**不做预探测**：它只说明「至今为止各通道的实际取数结果」。
-   *
-   * 三条错误通道对应 spec §9.5 的三个写入点：`catalog`（`getCatalog`）、
-   * `meta`（`BrewMetaSync`）、`hydrate`（`BrewService.hydrate` 失败率超阈值）。
-   *
-   * ⚠ `UNKNOWN` 不等于「正常」：这是刻意的。旧实现把「没记录到错误」当正常，于是全新安装、
-   * 一页数据都没有时卡片就写着正常；现在未就绪由 `UNKNOWN` 表达，不再指望「没出错」。
-   *
-   * **为什么不比时间戳**：原先写的是 `lastErrorAt > catalogOkAt`，用来表达「错误发生在最后一次成功之后」。
-   * 但同一毫秒内的成功与失败会让这个比较失效（真机自检实测：`partial` 被判成 `ok`），
-   * 而根因是时间戳本来就不该承担「错误是否仍然成立」这个语义。改成成功时主动清掉同类错误后，
-   * `lastErrorKind` 本身就表达了「当前站着什么错误」—— 不需要时间比较，也没有分辨率问题。
+   * 数据轴**不做预探测**：它只说明「至今为止两片各自的实际取数结果」。
    */
   public static healthState(id: string): BrewSourceHealth {
     const one: BrewSourceHealthRecord = BrewSourceStore.healthOf(id);
-    const broken: boolean = one.lastErrorKind === 'catalog' || one.lastErrorKind === 'meta' ||
-      one.lastErrorKind === 'hydrate';
-    if (broken) {
-      return BrewSourceHealth.PARTIAL;
-    }
-    // 目录与全量包都必须「成功过至少一次」才算就绪。两者分工不同：目录给成员与安装量，
-    // 全量包给分类用的 desc；只有其一可用时浏览页/榜单确实是不完整的。
-    const ready: boolean = one.catalogOkAt > 0 && one.metaIndexTokensAt > 0;
-    return ready ? BrewSourceHealth.OK : BrewSourceHealth.UNKNOWN;
+    return one.volReadyAt > 0 && one.descReadyAt > 0 ? BrewSourceHealth.OK : BrewSourceHealth.NOT_READY;
+  }
+
+  /**
+   * 当前站着的分片错误（`''` 表示没有）。设置页拿它决定要不要给 warning 色与说明文字。
+   *
+   * 这是诊断，不影响状态：一个曾经失败过、现在早已恢复的源，它的槽已被成功写入清空，
+   * 所以这里返回 `''`。
+   */
+  public static standingError(id: string): string {
+    const one: BrewSourceHealthRecord = BrewSourceStore.healthOf(id);
+    return one.volError.length > 0 ? 'vol' : (one.descError.length > 0 ? 'desc' : '');
   }
 
   /**
@@ -331,7 +320,7 @@ export class BrewSourceStore {
    * 作废某源的**数据轴**记录（清空缓存 / 改地址后调）。
    *
    * 为什么必须做：这些字段是「上一份数据的取数结论」。缓存被清掉后，
-   * `catalogOkAt` / `metaIndexTokensAt` 已经不成立、`lastErrorKind` 也是旧数据的错误，
+   * `volReadyAt` / `descReadyAt` 已经不成立、错误槽也是旧数据的错误，
    * 不重置就会出现「清空缓存了，列表还写着部分可用」这种自相矛盾的状态。
    *
    * ⚠ **探测记录（`lastProbe*`）故意保留**：它描述的是远端地址能不能应答，
@@ -343,11 +332,14 @@ export class BrewSourceStore {
     if (one === undefined) {
       return;
     }
-    one.lastErrorKind = '';
-    one.lastErrorMessage = '';
-    one.lastErrorAt = 0;
-    one.catalogOkAt = 0;
-    one.metaIndexTokensAt = 0;
+    one.volReadyAt = 0;
+    one.descReadyAt = 0;
+    one.volError = '';
+    one.volErrorMessage = '';
+    one.volErrorAt = 0;
+    one.descError = '';
+    one.descErrorMessage = '';
+    one.descErrorAt = 0;
     BrewSourceStore.persistHealth();
     Logger.info(TAG, `data health reset, id=${id}`);
   }

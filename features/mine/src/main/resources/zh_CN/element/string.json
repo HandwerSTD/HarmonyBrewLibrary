@@ -217,16 +217,12 @@
       "value": "输入不合法，请检查名称与地址"
     },
     {
-      "name": "brew_source_health_err_catalog",
-      "value": "目录数据获取失败"
+      "name": "brew_source_health_err_vol",
+      "value": "安装量数据获取失败"
     },
     {
-      "name": "brew_source_health_err_meta",
-      "value": "全量包索引同步失败"
-    },
-    {
-      "name": "brew_source_health_err_hydrate",
-      "value": "部分包数据获取失败"
+      "name": "brew_source_health_err_desc",
+      "value": "包描述同步失败"
     },
     {
       "name": "brew_source_reach_unknown",
@@ -241,12 +237,16 @@
       "value": "已就绪"
     },
     {
-      "name": "brew_source_data_no_catalog",
-      "value": "目录未获取"
+      "name": "brew_source_data_no_shard",
+      "value": "尚未获取"
     },
     {
-      "name": "brew_source_data_no_index",
-      "value": "全量包索引未同步"
+      "name": "brew_source_data_no_vol",
+      "value": "安装量数据未获取"
+    },
+    {
+      "name": "brew_source_data_no_desc",
+      "value": "包描述未同步"
     },
     {
       "name": "brew_source_probing",

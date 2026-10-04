@@ -576,9 +576,13 @@ export struct BrewSourceSettingView {
   /**
    * 下行（数据就绪）用色。**恒为次要色**，除非当前真站着通道错误才给 warning ——
    * 它永远不抢图标、也不使用 brand 色（“数据已就绪”不是一个需要庆祝的状态）。
+   *
+   * 判据只看有没有站着错误，**不看状态**：`dataText` 把错误分支排在状态分支之前，
+   * 「两片都成功过、之后某一片又失败」时文案已经在报错了，此时再按 `NOT_READY`
+   * 限定，就会让同一行出现「报错的文案 + 就绪的次要色」。
    */
   private dataTint(row: BrewSourceRow): ResourceColor {
-    return row.dataState === BrewSourceHealth.PARTIAL ?
+    return row.dataErrorKind.length > 0 ?
       $r('sys.color.warning') : $r('sys.color.font_secondary');
   }
 
@@ -671,22 +675,24 @@ export struct BrewSourceSettingView {
    * 只说“未就绪”会让用户无法判断该不该等下去。
    */
   private dataText(row: BrewSourceRow): ResourceStr {
-    if (row.dataErrorKind === 'catalog') {
-      return $r('app.string.brew_source_health_err_catalog');
+    if (row.dataErrorKind === 'vol') {
+      return $r('app.string.brew_source_health_err_vol');
     }
-    if (row.dataErrorKind === 'meta') {
-      return $r('app.string.brew_source_health_err_meta');
+    if (row.dataErrorKind === 'desc') {
+      return $r('app.string.brew_source_health_err_desc');
     }
-    if (row.dataErrorKind === 'hydrate') {
-      return $r('app.string.brew_source_health_err_hydrate');
+    if (row.dataState === BrewSourceHealth.OK) {
+      return $r('app.string.brew_source_data_ready');
     }
-    if (!row.dataCatalogReady) {
-      return $r('app.string.brew_source_data_no_catalog');
+    // 还缺什么必须说清楚：两片分工不同（安装量片给成员与安装量，描述片给分类用的文案），
+    // 只说“未就绪”会让用户无法判断该不该等下去。
+    if (!row.dataVolReady && !row.dataDescReady) {
+      return $r('app.string.brew_source_data_no_shard');
     }
-    if (!row.dataIndexReady) {
-      return $r('app.string.brew_source_data_no_index');
+    if (!row.dataVolReady) {
+      return $r('app.string.brew_source_data_no_vol');
     }
-    return $r('app.string.brew_source_data_ready');
+    return $r('app.string.brew_source_data_no_desc');
   }
 }
 

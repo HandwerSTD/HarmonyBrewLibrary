@@ -25,7 +25,7 @@ import {
   TAB_CONTENT_STATUSES,
 } from '@ohos/commonbusiness';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
-import { BrewFormulaModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect, brewLogRampForPage } from '@ohos/brewcommon';
+import { BrewFormulaModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect, brewLogRampForPage, BrewTable } from '@ohos/brewcommon';
 import type {
   BrewCategoryCard,
   BrewCategoryParams,
@@ -142,20 +142,72 @@ export class BrewFormulaHomeViewModel extends BaseHomeViewModel<BrewFormulaState
     brewLogRampForPage('formulae');
   }
 
+  /**
+   * 订阅包表落地。**必须由页面成对订阅与退订**（见 `BrewFormulaBaseView` 的
+   * `aboutToAppear` / `aboutToDisappear`）。
+   *
+   * 为什么需要它：页面是「派发一次加载、等Promise 返回」的单次流程，而包表的两片
+   * 是分批落地的 —— 首次安装时安装量片先到（21.7 秒的是描述片），页面会先显示
+   * 「正在准备本地数据」，只有靠这个回调才知道什么时候重出内容。
+   *
+   * 本类是单例，所以订阅者必须是**同一个函数引用**，否则退订删不掉。
+   */
+  private tableObserver: () => void = () => {
+    Logger.debug(TAG, `[load] 包表已落地（${BrewTable.statsLine()}），重出 Formulae 页`);
+    this.loadFormulaPage();
+  };
+
+  public subscribeTable(): void {
+    Logger.debug(TAG, '[subscribe] 注册包表观察者（成对：aboutToAppear / aboutToDisappear）');
+    BrewTable.addObserver(this.tableObserver);
+  }
+
+  public unsubscribeTable(): void {
+    BrewTable.removeObserver(this.tableObserver);
+  }
+
+  /** 重试按钮：强制重取两片（跳过新鲜窗口判定），取数期间页面显示 BUILDING */
+  public retryLoad(): void {
+    this.loadFormulaPage();
+    BrewTable.refresh(true).then(() => {
+      this.loadFormulaPage();
+    });
+  }
+
+  /**
+   * 每次进页面都推一次取数（非强制）：内部按两片各自的新鲜窗口判定要不要真发请求，
+   * 两片都在窗口内时**一个字节都不发**。
+   *
+   * 顺带覆盖「上一轮取数失败、这一轮网络恢复」的恢复路径 —— 否则失败的表不会自己复活。
+   */
+  public refreshTable(): void {
+    BrewTable.refresh().then(() => {
+      this.loadFormulaPage();
+    });
+  }
+
   protected loadFormulaPage(): void {
     const isDark: boolean = AppStorage.get(StorageKey.COLOR_MODE) === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
-    this.state.loadingModel.loadingStatus = LoadingStatus.LOADING;
     WindowUtil.updateStatusBarColor(isDark);
+    // 状态按包表两片分别判定，不按「卡片数是否为空」——后者会把
+    // 「描述片到了但某个分类恰好没有成员」误判成故障
+    const tableState: string = BrewTable.state();
     this.formulaModel.getFormulaPage(this.state.currentPage, this.pageSize)
       .then((result: BrewPageData<BrewFormulaPageData>) => {
         const cards: BrewCategoryCard[] = result.data.cardData;
         this.state.cardSource.setDataArray(cards);
         this.updateFlowSection();
-        this.state.loadingModel.hasNextPage =
-          cards.length === this.pageSize && (result.totalSize > this.state.currentPage * this.pageSize);
+        this.state.loadingModel.hasNextPage = false;
+        if (tableState !== 'ready') {
+          this.state.loadingModel.loadingStatus = tableState === 'building' ?
+            LoadingStatus.BUILDING : LoadingStatus.EMPTY_DATA;
+          TAB_CONTENT_STATUSES[TabBarType.FORMULAE] = false;
+          Logger.info(TAG, `formula page waiting, table state=${tableState}`);
+          return;
+        }
         this.state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
         TAB_CONTENT_STATUSES[TabBarType.FORMULAE] = true;
-        Logger.info(TAG, `loadFormulaPage success, ${cards.length} category cards`);
+        Logger.info(TAG, `loadFormulaPage success, ${cards.length} category cards | ${BrewTable.statsLine()}`);
       })
       .catch((error: BusinessError) => {
         WindowUtil.updateStatusBarColor(isDark);

@@ -100,10 +100,15 @@ export {
 
 export { BrewService } from './src/main/ets/service/BrewService';
 
-// 阶段 0 原型（可一键移除）：后台同步全量元数据、抽 token → desc。
-// 见 docs/brew-catalog-fullsync-spec.md §9；开关 BREW_META_SYNC。
+// 设备端包表：安装量片（4 个聚合端点）+ 描述片（两个全量包），两片独立。
+// 浏览页、榜单、搜索全部读它（稳态零请求）；详情页的现网单条是唯一的另一个消费者。
+// 启动入口是 `BrewTable.refresh()`。
+export { BrewTable, BrewKindText } from './src/main/ets/service/BrewTable';
+export type { CatalogEntry, CatalogKindMeta, BrewVolRow } from './src/main/ets/service/BrewTable';
+
+// 描述片构建器：把两个全量包抽成 `token → desc` 交给包表。见 docs/brew-catalog-fullsync-spec.md。
 export { BrewMetaSync } from './src/main/ets/service/BrewMetaSync';
-export { BREW_META_SYNC } from './src/main/ets/constant/BrewConstants';
+export type { DescShardOutcome } from './src/main/ets/service/BrewMetaSync';
 
 export { BrewCommandGenerator } from './src/main/ets/util/BrewCommandGenerator';
 
@@ -187,11 +192,19 @@ export {
 export type { BrewCatalogResult, BrewSourceAdapter } from './src/main/ets/service/source/BrewSourceAdapter';
 export { adapterFor } from './src/main/ets/service/source/BrewSourceAdapter';
 
-export { BrewSourceUrl, BrewSourceUrlCheck } from './src/main/ets/service/BrewSourceUrl';
-export { BrewSourceStore, BrewSourceUpdateResult } from './src/main/ets/service/BrewSourceStore';
+export { BrewSourceUrl, BrewSourceUrlCheck } from './src/main/ets/service/BrewSourceUrl';export { BrewSourceStore, BrewSourceUpdateResult } from './src/main/ets/service/BrewSourceStore';
 export { BrewSourceDiagnostics } from './src/main/ets/service/BrewSourceDiagnostics';
 export { BrewSourcePrefs } from './src/main/ets/service/BrewSourcePrefs';
 export { BrewSourceProbe } from './src/main/ets/service/BrewSourceProbe';
 export { BrewCacheAdmin } from './src/main/ets/service/BrewCacheAdmin';
 export { BrewCacheEpoch } from './src/main/ets/service/BrewCacheEpoch';
 export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
+
+// ------------------------------------------------------------------ 本机包（设备上的 brew 安装记录）
+
+// 执行设备上的 `brew info --json=v2 --installed` 并把结果归一成三个集合。
+// 失败分类在抛出的异常的 message 里（`BrewInstalledFailure` 的取值）。
+export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewInstalledSets } from './src/main/ets/service/BrewInstalledLoader';
+export { BrewInstalledProbe } from './src/main/ets/service/BrewInstalledProbe';
+export { BrewInstalledParser } from './src/main/ets/util/BrewInstalledParser';
+export type { BrewCaskDoc, BrewFormulaDoc, BrewInstalledDoc, BrewInstalledKegDoc } from './src/main/ets/model/BrewInstalledDoc';

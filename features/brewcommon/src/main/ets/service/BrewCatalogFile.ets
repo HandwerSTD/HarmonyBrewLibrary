@@ -93,7 +93,13 @@ export class BrewCatalogFile {
       file = undefined;
     } catch (error) {
       if (file !== undefined) {
-        fileIo.closeSync(file);
+        // close 本身也会抛；不兜住就会顶掉下面带着 at=step 的原始错误上下文
+        try {
+          fileIo.closeSync(file);
+        } catch (closeError) {
+          const closeErr = closeError as BusinessError;
+          Logger.warn(TAG, `file close failed in handler, id=${sourceId}, code=${closeErr?.code}`);
+        }
       }
       const err = error as BusinessError;
       // **必须带上 `at=${step}`**：整段共用一个 catch 会把 mkdir / unlink / open / write / close
@@ -181,7 +187,12 @@ export class BrewCatalogFile {
       return line.substring(separator + 1, end);
     } catch (error) {
       if (file !== undefined) {
-        fileIo.closeSync(file);
+        try {
+          fileIo.closeSync(file);
+        } catch (closeError) {
+          const closeErr = closeError as BusinessError;
+          Logger.warn(TAG, `file close failed in handler, id=${sourceId} token=${token}, code=${closeErr?.code}`);
+        }
       }
       const err = error as BusinessError;
       Logger.error(TAG, `file read failed, id=${sourceId} token=${token}, code=${err?.code}, msg=${err?.message}`);
@@ -289,7 +300,12 @@ export class BrewCatalogFile {
       return offsets;
     } catch (error) {
       if (file !== undefined) {
-        fileIo.closeSync(file);
+        try {
+          fileIo.closeSync(file);
+        } catch (closeError) {
+          const closeErr = closeError as BusinessError;
+          Logger.warn(TAG, `file close failed in handler, id=${sourceId}, code=${closeErr?.code}`);
+        }
       }
       const err = error as BusinessError;
       Logger.error(TAG, `offsets rebuild failed, id=${sourceId}, code=${err?.code}, msg=${err?.message}`);

@@ -166,16 +166,16 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
       const record: BrewSourceHealthRecord = BrewSourceStore.healthOf(one.id);
       // 两个正交维度分别取值（见 `BrewSourceReach` / `BrewSourceHealth` 的类注释）：
       //   reach    ← 探测记录（只有「测试连接 / 激活」会写）
-      //   dataState ← 运行期取数记录（目录 / 全量包 / hydrate 三个写入点）
+      //   dataState ← 运行期取数记录（包表两片）
       // 旧代码在这里按「谁决定了当前状态」把两者合并成一行，于是同一张卡片上
       // 「刚点的测试连接」与「历史上的取数失败」互相覆盖，用户读到的取决于他刚才点过什么。
       row.reach = BrewSourceStore.reachState(one.id);
       row.reachReason = record.lastProbeAt > 0 && !record.lastProbeOk ? record.lastProbeReason : '';
       row.dataState = BrewSourceStore.healthState(one.id);
-      row.dataCatalogReady = record.catalogOkAt > 0;
-      row.dataIndexReady = record.metaIndexTokensAt > 0;
-      row.dataErrorKind = record.lastErrorMessage.length > 0 ? record.lastErrorKind : '';
-      row.dataDetail = record.lastErrorMessage;
+      row.dataVolReady = record.volReadyAt > 0;
+      row.dataDescReady = record.descReadyAt > 0;
+      row.dataErrorKind = BrewSourceStore.standingError(one.id);
+      row.dataDetail = row.dataErrorKind === 'vol' ? record.volErrorMessage : record.descErrorMessage;
       row.isSessionActive = one.id === sessionId;
       rows.push(row);
     });

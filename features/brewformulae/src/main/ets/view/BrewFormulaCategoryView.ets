@@ -12,6 +12,8 @@ import {
   LoadingFailedView,
   LoadingStatus,
   NoNetworkView,
+  StatePlaceholderKind,
+  StatePlaceholderView,
   StatusBarColorType,
   StorageKey,
 } from '@ohos/common';
@@ -244,6 +246,21 @@ export struct BrewFormulaCategoryView {
       } else if (this.categoryState.loadingModel.loadingStatus === LoadingStatus.NO_NETWORK) {
         NoNetworkView(this.globalInfoModel.widthBreakpoint, () => {
           this.reload();
+        })
+      } else if (this.categoryState.loadingModel.loadingStatus === LoadingStatus.BUILDING) {
+        // 正在建立本地数据：转圈 + 说明，不给重试按钮（进度会自己往前走）
+        StatePlaceholderView({
+          kind: StatePlaceholderKind.BUILDING,
+          message: $r('app.string.state_building'),
+        })
+      } else if (this.categoryState.loadingModel.loadingStatus === LoadingStatus.EMPTY_DATA) {
+        StatePlaceholderView({
+          kind: StatePlaceholderKind.EMPTY,
+          message: $r('app.string.state_no_data'),
+          actionLabel: $r('app.string.state_retry'),
+          onAction: () => {
+            this.viewModel.retry(this.categoryState);
+          },
         })
       }
     }

@@ -25,7 +25,8 @@ import {
   TAB_CONTENT_STATUSES,
 } from '@ohos/commonbusiness';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
-import { BrewDiscoverBoard, BrewDiscoverModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect, brewLogRampForPage } from '@ohos/brewcommon';
+import { BrewDiscoverBoard, BrewDiscoverModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect,
+  brewLogRampForPage, BrewTable } from '@ohos/brewcommon';
 import { BrewDiscoverFeedItem, BrewDiscoverFeedType } from '../model/BrewDiscoverFeedItem';
 import type {
   BrewDetailParams,
@@ -191,14 +192,17 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
   }
 
   protected loadDiscover(): void {
+    const t0: number = Date.now();
     const isDark: boolean =
       AppStorage.get(StorageKey.COLOR_MODE) === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
-    this.state.loadingModel.loadingStatus = LoadingStatus.LOADING;
     WindowUtil.updateStatusBarColor(isDark);
+    // 状态按包表两片分别判定（与两个浏览页同一口径）
+    const tableState: string = BrewTable.state();
+    Logger.debug(TAG, `[load] Discover 页构建开始 tableState=${tableState}`);
     this.discoverModel.getDiscoverPage()
       .then((result: BrewDiscoverPageData) => {
         // **空榜不上屏**：骨架恒为 6 张榜（boardId 1..6 稳定，二级页照旧按 id 路由），
-        // 但目录拿不到时六张榜都没有成员。过滤后 feed 为空 → SUCCESS + 0 项，页面走空态，
+        // 但安装量片未到时六张榜都没有成员。过滤后 feed 为空 → 走 BUILDING / EMPTY_DATA，
         // 而不是摆出 6 张只有标题的空榜卡。
         const boards: BrewDiscoverBoard[] = (result.boards ?? [])
           .filter((b: BrewDiscoverBoard) => b.entries.length > 0);
@@ -211,6 +215,13 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
         this.state.snapshotDate = result.snapshotDate ?? '';
         this.updateFlowSection();
         this.state.loadingModel.hasNextPage = false;
+        if (tableState !== 'ready') {
+          this.state.loadingModel.loadingStatus = tableState === 'building' ?
+            LoadingStatus.BUILDING : LoadingStatus.EMPTY_DATA;
+          TAB_CONTENT_STATUSES[TabBarType.DISCOVER] = false;
+          Logger.info(TAG, `discover waiting, table state=${tableState}`);
+          return;
+        }
         this.state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
         TAB_CONTENT_STATUSES[TabBarType.DISCOVER] = true;
         // 打出组装后的类型顺序（F=大图卡 B=榜卡）：混排规则唯一可核对的地方，
@@ -221,7 +232,8 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
         });
         Logger.info(TAG,
           `loadDiscover success, ${featured.length} featured + ${boards.length} boards, ` +
-          `order [${order.trim()}], snapshot ${result.snapshotDate}`);
+          `order [${order.trim()}], snapshot ${result.snapshotDate} in ${Date.now() - t0}ms | ` +
+          `${BrewTable.statsLine()}`);
       })
       .catch((error: BusinessError) => {
         WindowUtil.updateStatusBarColor(isDark);
@@ -233,6 +245,43 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
         }
         Logger.error(TAG, `loadDiscover failed: ${error.code} ${error.message}`);
       });
+  }
+
+  /**
+   * 订阅包表落地。**必须由页面成对订阅与退订**（见 `BrewDiscoverBaseView`）。
+   *
+   * 本类是单例，所以订阅者必须是**同一个函数引用**，否则退订删不掉。
+   */
+  private tableObserver: () => void = () => {
+    Logger.debug(TAG, `[load] 包表已落地（${BrewTable.statsLine()}），重出 Discover 页`);
+    this.loadDiscover();
+  };
+
+  public subscribeTable(): void {
+    Logger.debug(TAG, '[subscribe] 注册包表观察者（成对：aboutToAppear / aboutToDisappear）');
+    BrewTable.addObserver(this.tableObserver);
+  }
+
+  public unsubscribeTable(): void {
+    BrewTable.removeObserver(this.tableObserver);
+  }
+
+  /** 重试按钮：强制重取两片（跳过新鲜窗口判定） */
+  public retryLoad(): void {
+    this.loadDiscover();
+    BrewTable.refresh(true).then(() => {
+      this.loadDiscover();
+    });
+  }
+
+  /**
+   * 每次进页面都推一次取数（非强制）：内部按两片各自的新鲜窗口判定要不要真发请求，
+   * 两片都在窗口内时**一个字节都不发**。
+   */
+  public refreshTable(): void {
+    BrewTable.refresh().then(() => {
+      this.loadDiscover();
+    });
   }
 
   /**

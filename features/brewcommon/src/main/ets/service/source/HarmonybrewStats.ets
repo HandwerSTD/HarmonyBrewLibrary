@@ -354,7 +354,15 @@ export class HarmonybrewStats {
   private static evictOutside(cacheDirectory: string, window: WindowDay[]): number {
     const keep: Set<string> = new Set<string>();
     window.forEach((day: WindowDay) => keep.add(day.key + '.json'));
-    const names: string[] = fileIo.listFileSync(cacheDirectory);
+    // 目录不存在时 listFileSync 会抛；这里直接当作「无可淘汰」，与调用方的 evict 兜底一致
+    let names: string[] = [];
+    try {
+      names = fileIo.listFileSync(cacheDirectory);
+    } catch (error) {
+      const err = error as BusinessError;
+      Logger.warn(TAG, `at=evict-list code=${err?.code} msg=${err?.message}`);
+      return 0;
+    }
     let removed: number = 0;
     names.forEach((name: string) => {
       if (name.length !== 13 || !name.endsWith('.json') || keep.has(name)) {
@@ -483,7 +491,13 @@ export class HarmonybrewStats {
       return decoder.decodeToString(new Uint8Array(buffer), { stream: false });
     } catch (error) {
       if (file !== undefined) {
-        fileIo.closeSync(file);
+        // close 也会抛；不兜住就会顶掉下面带 at= 的原始错误上下文
+        try {
+          fileIo.closeSync(file);
+        } catch (closeError) {
+          const closeErr = closeError as BusinessError;
+          Logger.warn(TAG, `at=cache-read close failed date=${day} code=${closeErr?.code}`);
+        }
       }
       const err = error as BusinessError;
       Logger.warn(TAG, `at=cache-read date=${day} failed code=${err?.code} msg=${err?.message}`);
@@ -511,7 +525,12 @@ export class HarmonybrewStats {
       return true;
     } catch (error) {
       if (file !== undefined) {
-        fileIo.closeSync(file);
+        try {
+          fileIo.closeSync(file);
+        } catch (closeError) {
+          const closeErr = closeError as BusinessError;
+          Logger.warn(TAG, `at=cache-write close failed date=${day} code=${closeErr?.code}`);
+        }
       }
       const err = error as BusinessError;
       Logger.error(TAG, `at=cache-write date=${day} failed code=${err?.code} msg=${err?.message}`);

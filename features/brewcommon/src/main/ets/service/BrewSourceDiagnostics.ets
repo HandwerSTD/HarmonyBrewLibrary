@@ -311,31 +311,34 @@ export class BrewSourceDiagnostics {
       // **断言的核心是两条轴互不影响**（改动前 `healthState` 先读 `lastProbe*`，
       // 于是「探测失败」会把数据状态一起拉成 FAILING，卡片上就出现
       // 「刚点测试连接说可用、列表说部分可用」这种看起来自相矛盾的状态）：
-      //   - 数据轴 `healthState`：只由 catalog / meta / hydrate 三个写入点决定；
+      //   - 数据轴 `healthState`：两片都成功过才是 `OK`，其余 `NOT_READY`；
       //   - 连通性轴 `reachState`：只由 `noteProbe` 决定。
-      // 另外覆盖「没取到数据 ≠ 正常」（`UNKNOWN`）与「清缓存后数据轴作废、连通性保留」。
-      // 自检在 `BrewMetaSync.start()` 里、早于真实 sync 与目录取数，所以这里改过的记录
-      // 随后会被真实事件覆盖，不会掩盖真问题。
+      // 另外覆盖「没取到数据 ≠ 正常」（`NOT_READY`）与「清缓存后数据轴作废、连通性保留」。
       const id2: string = BrewSourceStore.sessionActive().id;
       BrewSourceStore.noteProbe(id2, true, 'ok');
       const rOk: BrewSourceReach = BrewSourceStore.reachState(id2);
       const sNotReady: BrewSourceHealth = BrewSourceStore.healthState(id2);
-      BrewSourceStore.noteCatalogOk(id2);
-      const sCatalogOnly: BrewSourceHealth = BrewSourceStore.healthState(id2);
-      BrewSourceStore.noteMetaOk(id2, 100);
+      // 只有安装量片 → 仍未就绪（两片都成功才算）
+      BrewSourceStore.noteVolOk(id2);
+      const sVolOnly: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      BrewSourceStore.noteDescOk(id2);
       const sOk: BrewSourceHealth = BrewSourceStore.healthState(id2);
 
-      BrewSourceStore.noteError(id2, 'meta', 'verify-meta');
-      const sMetaErr: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      // 错误不改变状态（状态只看两片是否成功过），只填诊断槽；
+      // 而下一片的成功写入会清掉**本片**的槽。
+      BrewSourceStore.noteError(id2, 'desc', 'verify-desc');
+      const sDescErr: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      const errAfterDesc: string = BrewSourceStore.standingError(id2);
 
-      BrewSourceStore.noteMetaOk(id2, 100);
-      const sMetaOk: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      BrewSourceStore.noteDescOk(id2);
+      const sDescOk: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      const errAfterDescOk: string = BrewSourceStore.standingError(id2);
 
-      BrewSourceStore.noteError(id2, 'catalog', 'verify-catalog');
-      const sCatalogErr: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      BrewSourceStore.noteError(id2, 'vol', 'verify-vol');
+      const sVolErr: BrewSourceHealth = BrewSourceStore.healthState(id2);
 
-      BrewSourceStore.noteCatalogOk(id2);
-      const sCatalogOk: BrewSourceHealth = BrewSourceStore.healthState(id2);
+      BrewSourceStore.noteVolOk(id2);
+      const sVolOk: BrewSourceHealth = BrewSourceStore.healthState(id2);
 
       // 探测失败：连通性轴转 FAILING，**数据轴必须原样不动**（=OK）
       BrewSourceStore.noteProbe(id2, false, 'http-404');
@@ -349,20 +352,22 @@ export class BrewSourceDiagnostics {
 
       const allOk: boolean = rOk === BrewSourceReach.OK && rFailing === BrewSourceReach.FAILING &&
         rAfterReset === BrewSourceReach.FAILING &&
-        sNotReady === BrewSourceHealth.UNKNOWN && sCatalogOnly === BrewSourceHealth.UNKNOWN &&
-        sOk === BrewSourceHealth.OK && sMetaErr === BrewSourceHealth.PARTIAL &&
-        sMetaOk === BrewSourceHealth.OK && sCatalogErr === BrewSourceHealth.PARTIAL &&
-        sCatalogOk === BrewSourceHealth.OK && sAfterProbeFail === BrewSourceHealth.OK &&
-        sAfterReset === BrewSourceHealth.UNKNOWN;
+        sNotReady === BrewSourceHealth.NOT_READY && sVolOnly === BrewSourceHealth.NOT_READY &&
+        sOk === BrewSourceHealth.OK && sDescErr === BrewSourceHealth.OK &&
+        errAfterDesc === 'desc' && sDescOk === BrewSourceHealth.OK && errAfterDescOk === '' &&
+        sVolErr === BrewSourceHealth.OK && sVolOk === BrewSourceHealth.OK &&
+        sAfterProbeFail === BrewSourceHealth.OK &&
+        sAfterReset === BrewSourceHealth.NOT_READY;
       Logger.info(TAG, `verify health axisSplit reach=${rOk}/${rFailing}/${rAfterReset} ` +
-        `data notReady=${sNotReady} catalogOnly=${sCatalogOnly} ok=${sOk} metaErr=${sMetaErr} ` +
-        `metaOk=${sMetaOk} catalogErr=${sCatalogErr} catalogOk=${sCatalogOk} ` +
-        `afterProbeFail=${sAfterProbeFail} afterReset=${sAfterReset} allOk=${allOk}`);
+        `data notReady=${sNotReady} volOnly=${sVolOnly} ok=${sOk} descErr=${sDescErr} ` +
+        `standingAfterDesc=${errAfterDesc} descOk=${sDescOk} standingAfterDescOk=${errAfterDescOk} ` +
+        `volErr=${sVolErr} volOk=${sVolOk} afterProbeFail=${sAfterProbeFail} afterReset=${sAfterReset} ` +
+        `allOk=${allOk}`);
 
       // 复原：别把自检造出来的失败记录留在真实源上
       BrewSourceStore.noteProbe(id2, true, 'ok');
-      BrewSourceStore.noteCatalogOk(id2);
-      BrewSourceStore.noteMetaOk(id2, 100);
+      BrewSourceStore.noteVolOk(id2);
+      BrewSourceStore.noteDescOk(id2);
     }).catch(() => Logger.error(TAG, 'verify cache chain threw'));
   }
 }

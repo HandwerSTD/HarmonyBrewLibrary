@@ -33,11 +33,18 @@ export struct BrewFormulaBaseView {
   @State formulaState: BrewFormulaState = this.viewModel.getState();
 
   aboutToAppear(): void {
-    this.viewModel.sendEvent({ type: BrewFormulaEventType.LOAD_FORMULA_PAGE, param: null });
+    this.viewModel.subscribeTable();
+    this.viewModel.refreshTable();
     this.viewModel.sendEvent<OffsetParam>({
       type: BaseHomeEventType.HANDLE_BREAKPOINT_CHANGE,
       param: { yOffset: 0, tabIndex: TabBarType.FORMULAE },
     });
+  }
+
+  // 包表落地时的回调（`subscribeTable` 订阅的）靠页面生命周期退订。
+  // 不退的话单例 VM 会一直持有回调，而下一次进页面又会订阅一个新的 —— 表一变就多跑一次加载。
+  aboutToDisappear(): void {
+    this.viewModel.unsubscribeTable();
   }
 
   handleBreakPointChange(): void {
@@ -170,7 +177,7 @@ export struct BrewFormulaBaseView {
         this.ContentViewBuilder();
       },
       reloadData: () => {
-        this.viewModel.sendEvent({ type: BrewFormulaEventType.LOAD_FORMULA_PAGE, param: null });
+        this.viewModel.retryLoad();
       },
     })
   }

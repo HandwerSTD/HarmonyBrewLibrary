@@ -22,3 +22,5 @@ export { EmptyContentView } from './EmptyContentView';
 export { NoNetworkView } from './NoNetworkView';
 
 export { DelayedLoadingView } from './DelayedLoadingView';
+
+export { StatePlaceholderView, StatePlaceholderKind } from './StatePlaceholderView';

@@ -21,6 +21,18 @@
       "value": "设置网络"
     },
     {
+      "name": "state_building",
+      "value": "正在准备本地数据，首次使用需要下载包描述列表"
+    },
+    {
+      "name": "state_no_data",
+      "value": "无法获取 Homebrew 数据，请检查网络或数据源设置后重试"
+    },
+    {
+      "name": "state_retry",
+      "value": "重试"
+    },
+    {
       "name": "feedback_reason",
       "value": "请反馈原因"
     },

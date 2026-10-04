@@ -221,16 +221,12 @@
       "value": "Invalid input, check name and URL"
     },
     {
-      "name": "brew_source_health_err_catalog",
-      "value": "Failed to load the catalog"
+      "name": "brew_source_health_err_vol",
+      "value": "Failed to load install counts"
     },
     {
-      "name": "brew_source_health_err_meta",
-      "value": "Package index sync failed"
-    },
-    {
-      "name": "brew_source_health_err_hydrate",
-      "value": "Some package data failed to load"
+      "name": "brew_source_health_err_desc",
+      "value": "Package descriptions sync failed"
     },
     {
       "name": "brew_source_reach_unknown",
@@ -245,12 +241,16 @@
       "value": "Ready"
     },
     {
-      "name": "brew_source_data_no_catalog",
-      "value": "Catalog not fetched"
+      "name": "brew_source_data_no_shard",
+      "value": "Nothing fetched yet"
     },
     {
-      "name": "brew_source_data_no_index",
-      "value": "Package index not synced"
+      "name": "brew_source_data_no_vol",
+      "value": "Install counts not fetched"
+    },
+    {
+      "name": "brew_source_data_no_desc",
+      "value": "Package descriptions not synced"
     },
     {
       "name": "brew_source_probing",
