@@ -33,7 +33,7 @@
 | ~~`brew-formula-details`~~ / ~~`brew-cask-details`~~ | ~~`getFormulaDetail(id)`~~ | ~~`BrewFormulaDetail`~~ | **已删除**：详情页骨架改从首页条目合成（`BrewApiMapper.formulaBaseOf/caskBaseOf`），不再有按 `id` 的单条快照查询 |
 | ~~`brew-formula-banner`~~ / ~~`brew-cask-banner`~~ | ~~`getFormulaBanner()`~~ | ~~`BrewBanner[]`~~ | **已删除**：从来没有 UI 调用点 |
 | ~~`brew-discover-page`~~ | ~~`getDiscoverPage()`~~ | ~~`BrewDiscoverPageData`~~ | **已删除（2026-10）**。它是 Discover 的**回落快照**：目录拿不到时当成员用，目录可用时被目录成员覆盖。回落删除后六张榜的骨架改为**代码构造**（`BrewRepository.emptyDiscoverPage`，`id = sequence = 1..6` 与旧快照逐字一致 → 二级页路由零影响），成员唯一来源 = 设备端目录；目录拿不到 → **空榜**，`loadDiscover` 过滤空榜后页面走空态 |
-| ~~`brew-local-formulae`~~ / ~~`brew-local-casks`~~ / ~~`brew-local-outdated`~~ | ~~`getInstalledFormulae()` / `getInstalledCasks()` / `getOutdated()`~~ | ~~`BrewInstalledPackage[]`~~ | **已删除（2026-10）**。HarmonyOS 上没有 brew，本机包数据本就是虚构的。`MinePackagesUtil.loadSets` 改为返回空 `MinePackageSets`：**Mine 三区块与二级页 UI 结构全部保留，显示 0 个包 / 空列表**，签名未变（将来接真实数据源只改这一个方法） |
+| ~~`brew-local-formulae`~~ / ~~`brew-local-casks`~~ / ~~`brew-local-outdated`~~ | ~~`getInstalledFormulae()` / `getInstalledCasks()` / `getOutdated()`~~ | ~~`BrewInstalledPackage[]`~~ | **已删除（2026-10）**。那三份内置 mock 随快照链路一并删除。本机包现在的数据源是设备上的 brew 命令（`BrewInstalledLoader`，见 §12.1.1）：`MinePackagesUtil.loadSets()` 的签名未变，UI 结构未变 |
 | ~~`brew-local-overview`~~ / ~~`brew-local-taps`~~ / ~~`brew-local-services`~~ | ~~`getLocalOverview()` / `getTaps()` / `getLocalServices()`~~ | —— | **已删除（2026-09）**：从未有 UI 调用点 |
 
 **BREW_DATA_MODE**：原 §7.5 的「REMOTE / SNAPSHOT」开关**已于 2026-10 随内置快照一并删除**
@@ -199,7 +199,7 @@ UI (view/viewmodel)  →  BrewFormulaModel / BrewCaskModel / BrewSearchModel  (m
 ```
 
 > 2026-10：`HmosRequest = MockRequest → rawfile/mockdata/*.json` 这一层已删除。
-> `BrewLocalModel` 也删了（Mine 本机包恒为空集，见 §12.1.1）。
+> `BrewLocalModel` 也删了（它的替代品是 `BrewInstalledLoader`，见 §12.1.1）。
 
 缓存策略（沿用 `ComponentListModel` 范式）：
 
@@ -1544,7 +1544,7 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 | 1 | 华为账号 | `AccountService` | 原有 `LOGIN_ITEM`，未改动 |
 | 2 | 用户体验调研 | `QuestionnaireViewBuilder` | 原有 `USER_EXPERIENCE_CARD`，未改动 |
 | 3 | 内容上新 & 最新公告 | `NewContentModel` / `BulletinModel` | 原有 `CARD_ITEM` + 角标，未改动 |
-| 4 | **已安装** | ~~`BrewLocalModel`~~ → **空集** | 新增。**item 行入口**，右侧显示数量（`HmosListItem` 的 `desc` 槽位）。2026-10 起数据源恒为空（见 §12.1.1） |
+| 4 | **已安装** | `BrewInstalledLoader` | 新增。**item 行入口**，右侧显示数量（`HmosListItem` 的 `desc` 槽位）。数据来自设备上的 brew 命令（见 §12.1.1） |
 | 5 | **待更新** | 同上 | 新增。**大卡片**：图标 + 标题 + 数量 + 前 3 条 + 「查看全部」 |
 | 6 | **已更新** | 同上 | 新增。同上 |
 | 7 | 设置 & 反馈 | `MineSettingBuilder` | 原有，未改动 |
@@ -1552,20 +1552,23 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 第 4-6 块的入口都进**同一个子页面** `MinePackagesView`，只靠路由参数 `mode` 区分
 （`all` / `outdated` / `updated`）。三个页面各自实现会让筛选 chips、空态、加载态、返回处理各写三遍。
 
-#### 12.1.1 本机包数据：2026-10 起恒为空（保壳）
+#### 12.1.1 本机包数据：读设备上的 brew 安装记录
 
-原先这三块读的是 `BrewLocalModel` → 内置 mock（`brew-local-*.json`，60 个 formula/cask + 8 个可升级）。
-**HarmonyOS 上没有 brew，也没有可执行的本机包管理接口**（不像 macOS 能跑 `brew list` / `brew outdated`），
-所以那三份数据本来就是虚构的，2026-10 随内置快照整条链路一并删除：
+数据来自一条命令：`<brew> info --json=v2 --installed`，由 `BrewInstalledLoader` 执行、
+`BrewInstalledParser` 归一成 `BrewInstalledPackage[]`。
 
-- `BrewLocalModel` 类已删除，`BrewService` 的 `getInstalledFormulae/getInstalledCasks/getOutdated` 也删了；
-- `MinePackagesUtil.loadSets()` 改为 `Promise.resolve(new MinePackageSets())`；
-- **UI 结构零改动**：三个区块、`MinePackagesView` 二级页、筛选 chips 全部保留，显示 0 个包 / 空列表。
+- 执行能力来自 `features/pcnative`（通用 native 能力模块，`ShellUtils` + NAPI）；
+- brew 可执行文件的发现顺序：`HOMEBREW_BREW_FILE` → PATH 里的 `brew` → 固定候选路径
+  （`SHELL_BREW_PATH_CANDIDATES`，与执行通道探针共用一份）；
+- 结果在进程内缓存 60 秒（`BREW_INSTALLED_TTL_MS`），不落盘；
+- 失败分六类（`BrewInstalledFailure`：找不到 brew / 执行能力不可用 / 超时 / 非零退出 /
+  输出解析失败 / 形状不符），分类名进日志，页面走失败态。
 
-为什么是「保壳」而不是「删整块」：签名（`loadSets(): Promise<MinePackageSets>`）与
-`pick` / `filter` / `byName` 都没动，将来接上真实本机数据源（Harmonybrew 侧的安装记录，
-或可执行命令行 + 权限）时**只需改 `loadSets` 一个方法**。
-`BrewInstalledPackage` 模型也保留（Mine 的行组件与筛选仍按它渲染）。
+原先读内置 mock（`brew-local-*.json`）的 `BrewLocalModel` 已随 2026-10 的快照下线一并删除，
+`MinePackagesUtil.loadSets()` 从「返回空集」改为转调 `BrewInstalledLoader.loadSets()`；
+`pick` / `filter` / `byName` 与全部 UI 结构未变。
+`BrewInstalledPackage` 模型的每个字段到命令输出的映射见
+`docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md` §6。
 
 ### 12.2 三个集合的口径定义在一处
 

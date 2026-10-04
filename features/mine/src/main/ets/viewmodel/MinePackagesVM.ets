@@ -14,7 +14,7 @@
  */
 
 import type { BusinessError } from '@kit.BasicServicesKit';
-import { LoadingStatus, Logger, RequestErrorCode } from '@ohos/common';
+import { LoadingStatus, Logger } from '@ohos/common';
 import { BrewChipItem } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { PackageListMode } from '../model/MinePackagesModels';
@@ -78,9 +78,11 @@ export class MinePackagesVM {
         Logger.info(TAG, `load success, mode=${mode} count=${list.length}`);
       })
       .catch((error: BusinessError) => {
-        this.state.loadingModel.loadingStatus = error.code === RequestErrorCode.NETWORK_CONNECT_FAILED ?
-          LoadingStatus.NO_NETWORK : LoadingStatus.FAILED;
-        Logger.error(TAG, `load failed. ${error.code} ${error.message}`);
+        // 本机包读不到一律走失败态：`error.message` 里是 `BrewInstalledFailure` 的分类
+        // （找不到 brew / 执行能力不可用 / 超时 / 非零退出 / 输出解析失败 / 形状不符）。
+        // 分类只进日志 —— 用户看到「读不到本机包」就够，不需要知道是超时还是输出形状变了。
+        this.state.loadingModel.loadingStatus = LoadingStatus.FAILED;
+        Logger.error(TAG, `load failed. reason=${error.message} code=${error.code}`);
       });
   }
 

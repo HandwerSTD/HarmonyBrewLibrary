@@ -14,7 +14,7 @@
  */
 
 import { BaseVM, Logger, PageContext, PageEnum, StorageKey } from '@ohos/common';
-import { BREW_META_SYNC, BrewMetaSync } from '@ohos/brewcommon';
+import { BrewInstalledProbe, BrewTable } from '@ohos/brewcommon';
 import { SplashModel } from '../model/SplashModel';
 import { InitCenter } from '../util/InitCenter';
 
@@ -59,11 +59,16 @@ export class SplashViewModel extends BaseVM<SplashModel> {
         return;
       }
       InitCenter.initAfterAgreement(context).then(() => {
-        // 阶段 0 原型（见 docs/brew-catalog-fullsync-spec.md §9）：进程启动后后台跑一次元数据同步实验。
-        // 不 await、不阻塞首屏；实验内容与开关都在 BrewMetaSync 里，移除时删这三行即可。
-        if (BREW_META_SYNC) {
-          BrewMetaSync.start();
-        }
+        // 数据层的**唯一取数入口**。不 await、不阻塞首屏：
+        // 包表的两片各自独立推进，页面用 `BrewTable.current()` 读内存派生结构，
+        // 表落地时通过观察者通知页面重出内容（见 BrewTable.addObserver）。
+        BrewTable.refresh().catch((error: Error) => {
+          Logger.error(TAG, `table refresh failed, ${error.message}`);
+        });
+        // 本机包自检。开关关闭时立即返回，不进日志、不发命令
+        BrewInstalledProbe.runIfEnabled().catch((error: Error) => {
+          Logger.error(TAG, `installed probe failed, ${error.message}`);
+        });
         if (param.needJump) {
           this.jumpToMainPage();
         }

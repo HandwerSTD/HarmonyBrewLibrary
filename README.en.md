@@ -28,7 +28,7 @@ Desktop card code (`features/widgetcommon`, `products/pc/src/main/ets/widget/pag
 | --- | --- |
 | `formulae.brew.sh/api` (upstream) | Live package details, per-token index |
 | `harmonybrew.atomgit.com` (Harmonybrew mirror) | Normalized full catalog + stats snapshot |
-| Built-in snapshot `common/src/main/resources/rawfile/mockdata/` | Fallback on first launch, offline, or request failure |
+| The on-device `brew` command (`features/pcnative` + `BrewInstalledLoader`) | Installed / outdated packages on the **Me** page |
 
 The two dialects are abstracted by `features/brewcommon/src/main/ets/service/source/BrewSourceAdapter.ets` (`UpstreamAdapter` / `HarmonybrewAdapter`); the source URL and probe result can be inspected and switched on the **Me** page. The taxonomy and board algorithms are project-specific, not official API fields — see `docs/brew-marketplace-content-plan.md` and `docs/brew-discover-algo.md`.
 

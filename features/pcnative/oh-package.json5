@@ -1,11 +1,12 @@
 {
   "name": "@ohos/pcnative",
   "version": "1.0.0",
-  "description": "Platform native capability layer (shell execution) for HarmonyOS PC","
+  "description": "Platform native capability layer (shell execution) for HarmonyOS PC",
   "main": "Index.ets",
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@ohos/common": "file:../../common",
     "libpcnative.so": "file:./src/main/cpp/types/libpcnative"
   }
 }

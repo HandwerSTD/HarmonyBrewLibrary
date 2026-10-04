@@ -15,6 +15,8 @@
 
 import { BrewKind } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
+import { BrewInstalledLoader } from '@ohos/brewcommon';
+import type { BrewInstalledSets } from '@ohos/brewcommon';
 import { MinePackageSets, PackageListMode } from '../model/MinePackagesModels';
 
 /**
@@ -23,19 +25,22 @@ import { MinePackageSets, PackageListMode } from '../model/MinePackagesModels';
  */
 export class MinePackagesUtil {
   /**
-   * 一次取齐三个集合。**当前恒为空集**（2026-10 起）。
+   * 一次取齐三个集合。
    *
-   * 为什么是空集：HarmonyOS 上没有 brew，也没有可执行的本机包管理接口（不像 macOS 能跑
-   * `brew list` / `brew outdated`），而原读的那三份内置 mock（`brew-local-*.json`）已随
-   * 整条 mock 链路删除。所以本机包数据**只能**来自将来真机上可用的能力（e.g. 命令行 +
-   * 权限，或 Harmonybrew 侧的安装记录）。
+   * 数据来自设备上的 brew 命令（`brew info --json=v2 --installed`），
+   * 由 `BrewInstalledLoader` 负责执行、解析与进程内缓存。
    *
-   * 所以这里是**空态保壳**而不是删代码：「我的」页的三个区块、「本机包」二级页、筛选 chips
-   * 全部保留，显示 0 个包 / 空列表。签名不变 → 将来接上真实数据源时只需改这一个方法，
-   * `pick` / `filter` / `byName` 与全部 UI 都不用动。
+   * 读取失败会抛异常，失败分类在 `error.message` 里；调用方转成页面的失败态。
+   * 「我的」页的 `loadLocalPackages` 只记日志不改成错误态（本机包只是整页的一部分），
+   * 二级页 `MinePackagesVM` 则把它当作整页失败。
    */
-  public static loadSets(): Promise<MinePackageSets> {
-    return Promise.resolve(new MinePackageSets());
+  public static async loadSets(): Promise<MinePackageSets> {
+    const sets: MinePackageSets = new MinePackageSets();
+    const loaded: BrewInstalledSets = await BrewInstalledLoader.loadSets();
+    sets.installed = loaded.installed;
+    sets.outdated = loaded.outdated;
+    sets.updated = loaded.updated;
+    return sets;
   }
 
   /** 按模式取对应的集合 */

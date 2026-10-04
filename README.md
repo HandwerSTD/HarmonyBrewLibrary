@@ -26,7 +26,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 | --- | --- |
 | `formulae.brew.sh/api`（官方上游） | 包详情现网数据、per-token 索引 |
 | `harmonybrew.atomgit.com`（Harmonybrew 镜像） | 归一化全量目录 + 统计快照 |
-| 内置快照 `common/src/main/resources/rawfile/mockdata/` | 首启、断网或请求失败时的回落 |
+| 设备上的 `brew` 命令（`features/pcnative` + `BrewInstalledLoader`） | 「我的」页的本机已安装 / 可升级包 |
 
 两条方言由 `features/brewcommon/src/main/ets/service/source/BrewSourceAdapter.ets` 抽象（`UpstreamAdapter` / `HarmonybrewAdapter`），数据源地址与探活结果可在「我的」页切换查看。分类体系与榜单算法是本项目自建的，不是官方 API 字段——见 `docs/brew-marketplace-content-plan.md`、`docs/brew-discover-algo.md`。
 

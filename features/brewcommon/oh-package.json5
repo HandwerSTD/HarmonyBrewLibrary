@@ -8,5 +8,6 @@
   "dependencies": {
     "@ohos/common": "file:../../common",
     "@ohos/commonbusiness": "file:../commonbusiness",
+    "@ohos/pcnative": "file:../pcnative"
   }
 }
