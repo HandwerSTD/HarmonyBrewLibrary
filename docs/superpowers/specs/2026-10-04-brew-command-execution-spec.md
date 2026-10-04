@@ -563,10 +563,11 @@ strings "$ABC" | grep -c BrewCommandRunner
 strings "$ABC" | grep -c BrewCli
 ```
 
-执行通道自检（`SHELL_STREAM_VERIFY = true` 后安装运行）：
+执行通道自检（`SHELL_STREAM_VERIFY = true` 后安装运行；探针在启动 5 秒后才开跑，避开界面初始化占用 JS 线程的窗口）：
 
 ```bash
-devecocli log --device 127.0.0.1:42021 --keyword "[pcnative] verify"
+devecocli run --device 127.0.0.1:42021 --product default --module pc_acl
+devecocli log --device 127.0.0.1:42021 --keyword pcnative --tail 200
 ```
 
 | 用例 | 命令 | 判据 |

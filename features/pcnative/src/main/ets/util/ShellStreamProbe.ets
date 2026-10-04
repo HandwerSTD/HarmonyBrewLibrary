@@ -20,6 +20,15 @@ const TAG: string = '[pcnative] verify';
 /** 轮询间隔。与命令层的 200ms 同量级，探针不需要跟界面一样密 */
 const PROBE_POLL_MS: number = 100;
 
+/**
+ * 启动后延迟多久开始跑用例。
+ *
+ * Ability 刚起来时 JS 线程被界面初始化占着，第一次轮询会晚到；两路管道都堆满之后，
+ * 一次 `select` 只能先排空 stdout 再排空 stderr，到达顺序的判据会误报。
+ * 等启动阶段过去再跑，读方才能及时把两路按到达顺序取走。
+ */
+const PROBE_START_DELAY_MS: number = 5000;
+
 /** 单个用例的等待上限。用例里的命令最多睡 30 秒，给足余量即可 */
 const PROBE_CASE_BUDGET_MS: number = 20000;
 
@@ -70,11 +79,13 @@ export class ShellStreamProbe {
     if (!SHELL_STREAM_VERIFY) {
       return;
     }
-    ShellStreamProbe.runCases().then(() => {
-      Logger.info(TAG, 'verify done');
-    }, () => {
-      Logger.error(TAG, 'verify aborted');
-    });
+    setTimeout(() => {
+      ShellStreamProbe.runCases().then(() => {
+        Logger.info(TAG, 'verify done');
+      }, () => {
+        Logger.error(TAG, 'verify aborted');
+      });
+    }, PROBE_START_DELAY_MS);
   }
 
   private static async runCases(): Promise<void> {
