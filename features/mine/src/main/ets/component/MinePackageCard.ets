@@ -20,8 +20,14 @@ import type { BrewInstalledPackage } from '@ohos/brewcommon';
 /** 卡片里最多预览几条包 */
 const PREVIEW_COUNT: number = 3;
 
-/** 读取中占位区的高度。取三行预览的高度，数据到位后卡片不会跳高度 */
-const PREVIEW_LOADING_HEIGHT: number = 168;
+/**
+ * 读取中占位区的高度。
+ *
+ * 与加载完成后的预览区等高，数据到位时卡片不会跳一下。
+ * 这个值是实测出来的：「我的」页加载态与加载完成态两次 dump 里，
+ * 第二张卡的 y 相差 74px（3 倍屏 ≈ 24.7vp），从三行预览的 168vp 里减掉它。
+ */
+const PREVIEW_LOADING_HEIGHT: number = 143;
 
 /**
  * 「我的」页的包预览大卡片（待更新 / 已更新）。

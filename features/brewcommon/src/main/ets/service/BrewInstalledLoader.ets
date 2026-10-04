@@ -169,23 +169,30 @@ export class BrewInstalledLoader {
    * 候选表在 `@ohos/pcnative` 的 `SHELL_BREW_PATH_CANDIDATES`，与执行通道同层，避免两处各写一份漂移。
    *
    * 结果在进程内缓存：这是一次 `test -x` 的探测，但页面上每次进「我的」都会走到这里。
+   *
+   * 同步调用的代价只发生在本进程第一次取数时，所以把它量出来写进日志：
+   * 主线程上跑命令是通道里唯一会阻塞界面的地方，其余都走线程池。
    */
   public static discoverBrewPath(): string {
     if (BrewInstalledLoader.brewPathCache !== null) {
       return BrewInstalledLoader.brewPathCache;
     }
+    const startedAt: number = Date.now();
     const fromEnv: string = BrewInstalledLoader.envBrewPath();
     if (fromEnv.length > 0) {
       BrewInstalledLoader.brewPathCache = fromEnv;
+      Logger.info(TAG, `discover brew from env, sync=${Date.now() - startedAt}ms brew=${fromEnv}`);
       return fromEnv;
     }
     for (const candidate of SHELL_BREW_PATH_CANDIDATES) {
       const check: ShellResult = ShellUtils.runSync(`test -x "${candidate}" && echo yes`, 5000);
       if (check.ok && check.stdout.trim() === 'yes') {
         BrewInstalledLoader.brewPathCache = candidate;
+        Logger.info(TAG, `discover brew from candidates, sync=${Date.now() - startedAt}ms brew=${candidate}`);
         return candidate;
       }
     }
+    Logger.warn(TAG, `discover brew failed, sync=${Date.now() - startedAt}ms`);
     return '';
   }
 
