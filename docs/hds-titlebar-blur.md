@@ -333,10 +333,11 @@ Scroll() {
 | 文章详情 | Web | 内联（无区间） | 默认 `[0,8]` | —（Web 自滚） | ⚠️ 无渐变 |
 | 内容上新 / 实践详情 | List | 内联 `enableScrollEffect: false` | — | — | ❌ 刻意关闭 |
 
-包详情页的 `Scroll` 自 2026-10-05 起嵌在单页签 `HdsTabs` 的 `TabContent` 里（页签栏就是底部主操作栏）。
-**嵌了 `HdsTabs` 之后，标题栏模糊不再能靠 HDS 自动识别滚动容器，必须显式绑定** ——
-页面持有一个 `Scroller` 交给 `Scroll`，并在 `HdsNavDestination` 上写 `.bindToScrollable([this.scroller])`，
-否则模糊直接丢失（与 §3 场景 H 同一个原因，官方 FAQ `faqs-arkui-1095` 场景二）。
+包详情页自 2026-10-05 起在 `HdsTabs` 的 `TabContent` 里放内容，页签栏就是底部主操作栏
+（白色渐变遮罩 + 唯一的主操作按钮，模糊已关）。**嵌了 `HdsTabs` 之后，标题栏模糊不再能靠 HDS
+自动识别滚动容器，必须显式绑定** —— 页面持有一个 `Scroller` 交给 `Scroll`，并在
+`HdsNavDestination` 上写 `.bindToScrollable([this.scroller])`，否则模糊直接丢失
+（与 §3 场景 H 同一个原因，官方 FAQ `faqs-arkui-1095` 场景二）。
 只有一页，不需要「切页时重新绑」与「存档/恢复滚动位置」那两步。
 
 ---

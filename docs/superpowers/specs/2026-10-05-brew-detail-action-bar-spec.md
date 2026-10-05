@@ -2,7 +2,7 @@
 
 > 日期：2026-10-05。状态：待评审。评审通过后由 `writing-plans` 产出实施计划。
 > 范围：`features/brewdetail` —— 把包详情页的主操作按钮（安装 / 升级 / 已安装）从「安装命令」卡片的标题行挪出来，
-> 变成页面底部的一条悬浮操作栏：白色渐变模糊背板 + 宽度占内容区 60% 的强调按钮；内容区底部为它留出滚动空间。
+> 变成页面底部的一条悬浮操作栏：白色渐变半透明遮罩 + 宽度占内容区 60% 的强调按钮；内容区底部为它留出滚动空间。
 > 相关文档：`../../brew-api-design.md` §5.3（分区清单）、`../../hds-titlebar-blur.md`（标题栏模糊与内容让位口径）、
 > `2026-10-04-brew-command-execution-spec.md` §3.2（按钮文案与可点性的来源）、`../../brew-handover.md` §6.2。
 
@@ -27,7 +27,7 @@
 
 | # | 判据 | 可观测证据 |
 | --- | --- | --- |
-| G1 | 详情页底边出现一条白色渐变模糊背板：内容压到它下面时被模糊，背板上沿是一条渐变的过渡带 | 真机截图（滚到压住操作栏） |
+| G1 | 详情页底边出现一条白色渐变半透明遮罩：内容压到它下面时被白纱压住，顶部渐变到透明（不做模糊） | 真机截图（滚到压住操作栏） |
 | G2 | 强调按钮的宽度 = 内容区宽度的 60%，且不超过 448vp；水平居中 | 真机截图；`[BrewActionBar]` 行 |
 | G3 | 「安装命令」卡片里不再有按钮，命令文本与「复制」按钮保持原样 | 真机截图 |
 | G4 | 按钮的四种状态（安装 / 升级 / 已安装 / 执行中…）与点击行为跟现在逐字相同 | 真机对照；`[brew-cmd] start args=…` |
@@ -48,38 +48,38 @@
 | NavDestination 的工具栏能否压在内容之上 | 不能。`BarStyle` 的说明写明「标题栏或工具栏的布局样式。NavDestination 的工具栏不支持设置该属性」，即 STACK 只对 `HdsNavigation` 的工具栏有效；`HdsNavDestination` 的工具栏只能占内容区下方的一行 |
 | 标题栏那套渐变有没有底部版本 | 没有。`TitleBarStyleOptions.scrollEffectOpts`（HDS）与 ArkUI 26.0.0 新增的 `NavigationTitleOptions.scrollEffectOptions` 都只作用于标题栏 |
 
-底部渐变模糊这条能力在导航组件里不存在，按需求改用 HdsTabs 的页签栏渐变模糊。
+底部渐变模糊这条能力在导航组件里不存在；本页要的是页签栏那层白色渐变遮罩（不带模糊），
+而 HdsTabs 的页签栏正好由 HDS 画出这层背板，所以操作栏直接用页签栏承载。
 
 ### 3.2 用单页签 `HdsTabs` 的页签栏承载操作栏
 
-HdsTabs 的页签栏自带渐变模糊（指南「设置页签栏的模糊样式」）。三个条件同时满足就生效：页签栏在容器底部
-（`barPosition(BarPosition.End)` + `vertical(false)`）、页签栏叠加在内容之上（`barOverlap(true)`）、
-页签栏自己的模糊关掉（`barBackgroundBlurStyle(BlurStyle.NONE)`）。模糊的颜色与高度由
-`barBackgroundStyle({ maskColor, maskHeight })` 给出，`maskHeight` 不写时默认是页签栏高度 + 32vp（`HdsTabsBackgroundStyle` 声明里写明的默认值）。
+页签栏的背板由 `barBackgroundStyle({ maskColor, maskHeight })` 给出（蒙层颜色与高度），
+模糊由两个开关关掉：`barBackgroundBlurStyle(BlurStyle.NONE)` 关掉页签栏自带的
+`COMPONENT_THICK`（`barOverlap(true)` 会把它打开），`blurStrategy(BlurStrategy.DISABLE)` 关掉
+模糊生效策略 —— 两者都关掉之后，页签栏只剩那层白色渐变遮罩。
 
-页面结构因此改成一个只有一页的 `HdsTabs`：原来的 `Scroll` 进 `TabContent`（`barOverlap` 让内容压到页签栏下面并被模糊），
-页签栏的自定义构建器就是这条操作栏：
+页面结构因此是一个只有一页的 `HdsTabs`：原来的 `Scroll` 进 `TabContent`（`barOverlap` 让内容
+压到页签栏下面），页签栏的自定义构建器就是这条操作栏（按钮）：
 
 ```ets
 HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
   TabContent() {
     Scroll(this.scroller) { /* 原内容（内层 Column） */ }
   }
-  .tabBar(this.ActionBarBuilder())          // 页签栏内容 = 唯一的主操作按钮
+  .tabBar(this.ActionBarBuilder())      // 页签栏内容 = 唯一的主操作按钮
 }
-.scrollable(false)                          // 只有一个页签，不需要左右滑动
+.scrollable(false)                      // 只有一个页签，不需要左右滑动
 .vertical(false)
-.barOverlap(true)
-.barHeight(this.actionBarHeight())          // 56vp + naviIndicatorHeight
-.divider({ mode: DividerMode.NONE })        // 关掉跟手渐变的分割线
-.barBackgroundBlurStyle(BlurStyle.NONE)     // 关掉页签栏自带的 COMPONENT_THICK，让渐变模糊生效
+.barOverlap(true)                       // 页签栏叠在内容之上，遮罩才盖得住
+.barHeight(this.actionBarHeight())      // 56vp + naviIndicatorHeight
+.divider({ mode: DividerMode.NONE })    // 关掉跟手渐变的分割线
+.barBackgroundBlurStyle(BlurStyle.NONE) // 关掉页签栏自带的 COMPONENT_THICK 模糊
+.blurStrategy(BlurStrategy.DISABLE)    // 模糊生效策略：关
 .barBackgroundStyle({
   maskColor: $r('app.color.brew_action_bar_mask'),
   maskHeight: this.actionBarMaskHeight(),  // 栏高 + 32vp
 })
 .animationDuration(0)
-.width('100%')
-.height('100%')
 ```
 
 每一个写法的用途：
@@ -87,10 +87,13 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 | 写法 | 用途 |
 | --- | --- |
 | `index: 0` 固定、不要 controller | 只有一页，不存在切换；`scrollable(false)` 同时挡住左右滑动手势 |
-| `divider({ mode: DividerMode.NONE })` | 默认的 `FOLLOW_SCROLL` 会在内容滚过页签栏时画一条分割线，与渐变背板冲突（`features/pcui` 的侧边栏页签也是这么关的） |
-| `barBackgroundBlurStyle(BlurStyle.NONE)` | `barOverlap(true)` 会把页签栏的默认模糊设成 `COMPONENT_THICK`；指南写明渐变模糊要求页签栏自身的模糊为 `NONE` |
-| `animationDuration(0)` | 页签栏上的点击会走一次 Tabs 的切换逻辑；单页签下这次切换没有任何可见效果，把动效时长设为 0 |
-| 按钮放在 `tabBar` 的自定义构建器里 | 页签栏高度、模糊区间与按钮中线只需要一个来源（`barHeight`），不会出现「背板 56vp、按钮按另一个数字摆」的错位。FAQ `faqs-arkui-1072` 场景三写明自定义构建器里的子组件能收到自己的点击事件（点空白处才走 Tabs 自带的切换逻辑），按钮的点击不会被页签吞掉 |
+| `divider({ mode: DividerMode.NONE })` | 默认的 `FOLLOW_SCROLL` 会在内容滚过页签栏时画一条分割线，与遮罩冲突（`features/pcui` 的侧边栏页签也是这么关的） |
+| `barBackgroundBlurStyle(BlurStyle.NONE)` | `barOverlap(true)` 会把页签栏的默认模糊设成 `COMPONENT_THICK` |
+| `blurStrategy(BlurStrategy.DISABLE)` | 页签栏模糊的生效策略关掉：只要那层遮罩，不要模糊 |
+| `animationDuration(0)` | 页签栏上的点击会走一次 Tabs 的切换逻辑；单页签下这次切换没有任何可见效果 |
+| 按钮放在 `tabBar` 的自定义构建器里 | 栏高、遮罩区间与按钮中线只需要一个来源（`barHeight`），不会出现「遮罩 56vp、按钮按另一个数字摆」的错位。FAQ `faqs-arkui-1072` 场景三写明自定义构建器里的子组件能收到自己的点击事件（点空白处才走 Tabs 自带的切换逻辑），按钮的点击不会被页签吞掉 |
+
+页签栏上方的渐变区是 HDS 自己画的，不吃触摸，所以那里仍然可以滚动内容。
 
 `HdsTabs` 嵌进 `HdsNavDestination` 之后，标题栏的动态模糊不能再靠 HDS 自动识别滚动容器（FAQ `faqs-arkui-1095` 场景二正是这个问题），
 必须显式绑定：页面新增一个 `Scroller` 交给 `Scroll`，并在 `HdsNavDestination` 上写 `.bindToScrollable([this.scroller])`。
@@ -116,9 +119,10 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 | 项 | 取值 | 依据 |
 | --- | --- | --- |
 | 栏高 | 56vp（`ACTION_BAR_HEIGHT`），设备有底部导航条时再加 `naviIndicatorHeight` | 与 `CommonConstants.NAVIGATION_HEIGHT` / `TAB_BAR_HEIGHT` 同值，和标题栏同高；按钮上下各留 8vp |
-| 背板蒙层颜色 | `$r('app.color.brew_action_bar_mask')`：浅色 `#33FFFFFF`、深色 `#33000000` | 参考图实测约 20% 白色的蒙层；深色用同一档透明度的黑色 |
-| 渐变长度 | 32vp（`ACTION_BAR_BLUR_RAMP`），`maskHeight` = 栏高 + 32 | HDS 渐变模糊的默认长度就是页签栏高度 + 32vp；显式写出来，让这个数字在代码里可见 |
-| 栏的水平范围 | 满宽（`HdsTabs` 的宽度） | 页签栏本身满宽，与标题栏那层模糊同一口径 |
+| 遮罩颜色 | `$r('app.color.brew_action_bar_mask')`：浅色 `#CCFFFFFF`、深色 `#CC000000` | 去掉模糊后由遮罩自己压住底下的内容，取值与 HDS 页签栏默认蒙层（浅色 `#CCFFFFFF`、深色 `#CC000000`）同值 |
+| 遮罩渐变长度 | 32vp（`ACTION_BAR_MASK_LENGTH`），`maskHeight` = 栏高 + 32 | HDS 页签栏渐变遮罩的默认渐变长度（页签栏高度 + 32vp）。遮罩总高 = 栏高 56 + 32 = 88vp；比这更高会让底部大片被白纱盖住 |
+| 栏的水平范围 | 满宽（页签栏宽度） | 页签栏本身满宽 |
+| 模糊 | 关（`barBackgroundBlurStyle(BlurStyle.NONE)` + `blurStrategy(BlurStrategy.DISABLE)`） | 需求给定：只保留白色渐变遮罩 |
 
 ### 4.2 按钮
 
@@ -126,10 +130,11 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 | --- | --- | --- |
 | 宽度 | 内容区宽度的 60%（`ACTION_BUTTON_WIDTH = '60%'`），上限 448vp（`ACTION_BUTTON_MAX_WIDTH`） | 需求给定；构建器的根 `Row` 左右都用本页的 `contentLeft()`（本页左右同值，与 `Scroll` 内层 Column 的左右内缩同源），按钮的 60% 因此是内容区宽度的 60%。上限 448vp 由参考图估算：623px ↔ 328vp、851px ↔ 448vp，同一比例下按钮高度 76px ↔ 40vp |
 | 高度 | 40vp（`ACTION_BUTTON_HEIGHT`） | 栏高 56vp 减上下各 8vp |
+| 下沿到栏底 | 额外 16vp（`ACTION_BUTTON_BOTTOM_EXTRA`） | 需求给定：按钮垂直居中时离底边偏近，额外留 16vp 把按钮抬起来 |
 | 圆角 | 系统默认（`ButtonType.ROUNDED_RECTANGLE`，本机实测渲染约 6vp），不设 `borderRadius` | 需求给定：不用自定义圆角 |
 | 文字 | `$r('sys.float.Body_L')` + `FontWeight.Medium` | 主操作按钮的字号 |
 | 底色与文字色 | 可点时 `$r('sys.color.ohos_id_color_emphasize')` + `$r('sys.color.font_on_primary')`；「已安装」（不可点）时 `$r('sys.color.comp_background_tertiary')` + `$r('sys.color.font_tertiary')` | 强调蓝用项目已有的强调色 token；「已安装」表达的是状态，沿用现在的次要配色 |
-| 底部内边距 | 构建器的根 `Row` 加 `padding.bottom = naviIndicatorHeight` | 有底部导航条时按钮在栏内上移，不压在导航条上 |
+| 底部内边距 | 栏高那一行加 `padding.bottom = naviIndicatorHeight + ACTION_BUTTON_BOTTOM_EXTRA` | 有底部导航条时按钮在栏内上移，不压在导航条上；再额外抬高 16vp |
 
 按钮状态（文案与可点性沿用 `2026-10-04-brew-command-execution-spec.md` §3.2，逐字不变）：
 
@@ -176,10 +181,10 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 操作栏渲染时打一行（每个页面实例一行，取值直接写进格式串，不需要探针）：
 
 ```
-[BrewActionBar], action bar: height=56 mask=88 ramp=32 button=60% max=448 navi=0 breakpoint=lg
+[BrewActionBar], action bar: height=56 mask=88 gradient=32 button=60% max=448 navi=0 breakpoint=lg
 ```
 
-`mask` − `height` 必须等于 `ramp`（32），`height` 必须等于 56 + `navi`；对不上说明两个高度用了不同的来源。
+`mask` − `height` 必须等于 `gradient`（32），`height` 必须等于 56 + `navi`；对不上说明两个高度用了不同的来源。
 
 ---
 
@@ -196,7 +201,7 @@ devecocli build --product pc_normal
 
 | 判据 | 怎么量 |
 | --- | --- |
-| G1 / G2 / G3 | 打开任一 formula 详情页截图；把内容滚到压住操作栏再截一张，对比背板上沿是否有模糊拖影与渐变过渡 |
+| G1 / G2 / G3 | 打开任一 formula 详情页截图；把内容滚到压住操作栏再截一张，对比底部遮罩是否白纱渐变到透明（背板上沿看不到模糊拖影） |
 | G4 | 对未安装的包点「安装」看 Sheet 与 `[brew-cmd] start args=install …`；对已安装且有新版本的包看按钮是否为「升级」；对已是最新的包看按钮是否为「已安装」且不可点 |
 | G5 | 滚到底截图，看最后一张卡片是否完整位于背板上方 |
 | G6 | `devecocli log --follow --keyword "BrewTitleBar"` 看到 `page=detail start=0 end=104`；滚动时标题栏仍渐显模糊 |

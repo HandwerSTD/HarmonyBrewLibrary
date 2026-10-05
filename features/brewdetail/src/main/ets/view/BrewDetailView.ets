@@ -4,7 +4,7 @@
 
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { LengthMetrics } from '@kit.ArkUI';
-import { HdsNavDestination, HdsTabs, DividerMode } from '@kit.UIDesignKit';
+import { BlurStrategy, DividerMode, HdsNavDestination, HdsTabs } from '@kit.UIDesignKit';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
@@ -48,13 +48,23 @@ const TAG: string = '[BrewActionBar]';
 const ACTION_BAR_HEIGHT: number = 56;
 
 /**
- * 操作栏背板的渐变长度（vp）。HDS 的 `maskHeight` 默认就是「页签栏高度 + 32vp」，
- * 显式写出来是为了让这个数字在代码里可见。
+ * 遮罩的渐变长度（vp）—— 从底部实色渐变到顶部全透明要走过的距离。
+ *
+ * 取 32：HDS 页签栏渐变遮罩的默认渐变长度（页签栏高度 + 32vp）。遮罩总高 = 栏高 + 这个数
+ * （栏高 56 + 32 = 88vp）；比这更高会让底部大片被白纱盖住。
  */
-const ACTION_BAR_BLUR_RAMP: number = 32;
+const ACTION_BAR_MASK_LENGTH: number = 32;
 
 /** 按钮高度（vp）= 栏高 56 减上下各 8 */
 const ACTION_BUTTON_HEIGHT: number = 40;
+
+/**
+ * 按钮下沿到栏底之间额外留出的高度（vp）。
+ *
+ * 按钮在栏里垂直居中时上下各 8vp，看上去离底边偏近；这 16vp 把按钮抬起来一点，
+ * 视觉重心与参考图一致。
+ */
+const ACTION_BUTTON_BOTTOM_EXTRA: number = 16;
 
 /** 按钮宽度：内容区宽度的 60%（构建器根 Row 的左右内缩与内容区同源，所以百分比也同源） */
 const ACTION_BUTTON_WIDTH: Length = '60%';
@@ -107,9 +117,9 @@ export struct BrewDetailView {
   @State backPressed: boolean = false;
 
   /**
-   * 页面滚动容器。必须显式持有：嵌了 `HdsTabs` 之后标题栏模糊不能再靠 HDS 自动识别滚动容器
-   * （官方 FAQ `faqs-arkui-1095` 场景二就是这个现象），要在 `HdsNavDestination` 上
-   * `bindToScrollable([this.scroller])`。只有一页，不需要切页时重新绑定。
+   * 页面滚动容器。显式持有并在 `HdsNavDestination` 上 `bindToScrollable([this.scroller])`：
+   * 嵌了 `HdsTabs` 之后内容不在目的地容器正中间那一层，不绑定标题栏的动态模糊会丢
+   * （官方 FAQ `faqs-arkui-1095` 场景二就是这个现象）。只有一页，不需要切页时重新绑定。
    */
   private scroller: Scroller = new Scroller();
 
@@ -233,18 +243,18 @@ export struct BrewDetailView {
     return ACTION_BAR_HEIGHT + this.globalInfoModel.naviIndicatorHeight;
   }
 
-  /** 背板蒙层高度 = 栏高 + 渐变长度（HDS 的 `maskHeight` 默认值就是这个口径） */
+  /** 遮罩总高 = 栏高 + 遮罩渐变长度 */
   private actionBarMaskHeight(): number {
-    return this.actionBarHeight() + ACTION_BAR_BLUR_RAMP;
+    return this.actionBarHeight() + ACTION_BAR_MASK_LENGTH;
   }
 
   /**
-   * 操作栏的判据行：`mask − height` 必须等于 `ramp`，`height` 必须等于 56 + `navi` ——
+   * 操作栏的判据行：`mask − height` 必须等于 `gradient`，`height` 必须等于 56 + `navi` ——
    * 对不上说明两个高度用了不同的来源。同内容只打一次（断点变化会反复触发渲染）。
    */
   private logActionBar(): void {
     const line: string = `action bar: height=${this.actionBarHeight()} mask=${this.actionBarMaskHeight()}` +
-      ` ramp=${ACTION_BAR_BLUR_RAMP} button=${ACTION_BUTTON_WIDTH} max=${ACTION_BUTTON_MAX_WIDTH}` +
+      ` gradient=${ACTION_BAR_MASK_LENGTH} button=${ACTION_BUTTON_WIDTH} max=${ACTION_BUTTON_MAX_WIDTH}` +
       ` navi=${this.globalInfoModel.naviIndicatorHeight}` +
       ` breakpoint=${WIDTH_BREAKPOINTS[this.globalInfoModel.widthBreakpoint]}`;
     if (loggedActionBars.get(TAG) === line) {
@@ -255,10 +265,11 @@ export struct BrewDetailView {
   }
 
   /**
-   * 底部操作栏：本页唯一的主操作按钮。
+   * 底部主操作栏：`HdsTabs` 页签栏承载的内容 —— 白色渐变遮罩 + 本页唯一的主操作按钮。
    *
-   * 放在页签栏里而不是自己搭一层：栏高、模糊区间与按钮中线只需要一个来源（`barHeight`），
-   * 不会出现「背板 56vp、按钮按另一个数字摆」的错位。
+   * 遮罩的高度、颜色、渐变全部由 HDS 画（见 `build()` 里的 `barBackgroundStyle`），
+   * 所以这个构建器只管按钮的排布：栏高与按钮中线同源，且左右内缩与内容区一致。
+   * 页签栏上方的渐变区由系统绘制、不吃触摸，那里的滚动手势仍归内容区。
    */
   @Builder
   ActionBarBuilder() {
@@ -274,7 +285,8 @@ export struct BrewDetailView {
         // 「已安装」表达的是状态，沿用它在卡片里那套次要配色；可点的两个状态用强调色
         .backgroundColor(this.installActionEnabled() ? $r('sys.color.ohos_id_color_emphasize') :
           $r('sys.color.comp_background_tertiary'))
-        .fontColor(this.installActionEnabled() ? $r('sys.color.font_on_primary') : $r('sys.color.font_tertiary'))
+        .fontColor(this.installActionEnabled() ? $r('sys.color.font_on_primary') :
+          $r('sys.color.font_tertiary'))
         .enabled(this.installActionEnabled())
         .onClick(() => {
           this.onInstallActionClick();
@@ -293,7 +305,8 @@ export struct BrewDetailView {
     .padding({
       left: this.contentLeft(),
       right: this.contentLeft(),
-      bottom: this.globalInfoModel.naviIndicatorHeight,
+      // 底边多留 ACTION_BUTTON_BOTTOM_EXTRA：把按钮往上抬，离窗口下沿远一点
+      bottom: this.globalInfoModel.naviIndicatorHeight + ACTION_BUTTON_BOTTOM_EXTRA,
     })
   }
 
@@ -384,7 +397,7 @@ export struct BrewDetailView {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     // 底部为操作栏留出滚动空间。**只加 ACTION_BAR_HEIGHT**：内层 Column 的 margin.bottom
-    // 里已经有 naviIndicatorHeight，操作栏自己那一段导航条高度由它的 barHeight 与按钮的
+    // 里已经有 naviIndicatorHeight，操作栏自己那一段导航条高度由它的栏高与按钮的
     // padding.bottom 覆盖，这里再加一次会多出一段空白。没有操作栏时是 0，与改动前一致。
     //
     // 底部可以用 contentEndOffset（顶部不行，见内层 margin 的注释）：它只在内容末尾加空白，
@@ -395,29 +408,30 @@ export struct BrewDetailView {
   build() {
     HdsNavDestination() {
       if (this.detailState.loadingModel.loadingStatus === LoadingStatus.SUCCESS) {
-        // 有主操作时用一个只有一页的 HdsTabs 承载：它的页签栏自带「渐变模糊 + 蒙层」，
-        // 正好是需求要的那条背板（HdsNavDestination 的工具栏只有均匀模糊，没有渐变能力）。
-        // `commandReady` 为假时分区整条栏不存在，页面回到改动前的样子。
+        // 底部主操作栏由一个只有一页的 `HdsTabs` 承载：页签栏就是这条栏，
+        // 它的背板（白色渐变遮罩）由 HDS 画。`commandReady` 为假时整条栏不渲染，
+        // 页面与改动前一致。
         if (this.detailState.commandReady) {
           HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
             TabContent() {
               this.ContentBuilder()
             }
-            .tabBar(this.ActionBarBuilder())
+            .tabBar(this.ActionBarBuilder())      // 页签栏内容 = 唯一的主操作按钮
           }
           .width('100%')
           .height('100%')
-          // 单页签：不存在切换，同时挡住左右滑动手势
+          // 只有一个页签：不存在切换，同时挡住左右滑动手势
           .scrollable(false)
           .vertical(false)
-          // 页签栏叠在内容之上 —— 内容压到它下面才会被模糊（三个条件之一）
+          // 页签栏叠在内容之上 —— 内容压到它下面，遮罩才盖得住
           .barOverlap(true)
-          .barHeight(this.actionBarHeight())
-          // 默认的 FOLLOW_SCROLL 会在内容滚过页签栏时画一条分割线，与渐变背板冲突
+          .barHeight(this.actionBarHeight())      // 56vp + naviIndicatorHeight
+          // 默认的 FOLLOW_SCROLL 会在内容滚过页签栏时画一条分割线，与遮罩冲突
           .divider({ mode: DividerMode.NONE })
-          // barOverlap(true) 会把页签栏的默认模糊设成 COMPONENT_THICK；
-          // 渐变模糊要求页签栏自身的模糊为 NONE，这里必须显式关掉
+          // 关掉页签栏自带的 COMPONENT_THICK 模糊：只要那层白色渐变遮罩，不要模糊
           .barBackgroundBlurStyle(BlurStyle.NONE)
+          .blurStrategy(BlurStrategy.DISABLE)
+          // 遮罩：白色渐变，高度 = 栏高 + 渐变长度（HDS 画的那层，不吃触摸）
           .barBackgroundStyle({
             maskColor: $r('app.color.brew_action_bar_mask'),
             maskHeight: this.actionBarMaskHeight(),
