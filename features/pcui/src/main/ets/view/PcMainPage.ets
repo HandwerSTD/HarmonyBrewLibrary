@@ -182,8 +182,7 @@ export struct PcMainPage {
     // 执行 Sheet 的宿主绑在这里：五个页签内容与所有二级页都在这个容器的下方，
     // 从页面按钮或侧边栏入口打开的都是这一个半模态。
     // 材质与宽窄屏的尺寸口径沿用「我的 - 设置」的登录 Sheet 写法。
-    // 关闭登记放在退场动画结束后的 onDisappear：官方文档写明 onWillDisappear 里不允许修改状态变量，
-    // 推迟到动画结束也能让侧边栏入口不在退场动画期间出现。
+    // 关闭登记放在退场动画结束后的 onDisappear：官方文档写明 onWillDisappear 里不允许修改状态变量。
     .bindSheet(this.commandState.sheetShown, this.CommandSheetBuilder(),
       MaterialUtil.getMaterialOptions<SheetOptions>({
         originOption: {

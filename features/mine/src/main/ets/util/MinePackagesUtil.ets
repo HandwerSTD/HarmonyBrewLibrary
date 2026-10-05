@@ -85,6 +85,19 @@ export class MinePackagesUtil {
     return list;
   }
 
+  /**
+   * 按隐藏 chip 过滤：去掉作为依赖安装的包。
+   *
+   * 谓词只看 `installedAsDependency`（解析自 brew 输出里最新 keg 的 `installed_on_request`）：
+   * 不按包名判定，也不为三个集合各写一份 —— 三个集合的补集关系因此不会因过滤而改变。
+   */
+  public static visible(list: BrewInstalledPackage[], hideDependencies: boolean): BrewInstalledPackage[] {
+    if (!hideDependencies) {
+      return list;
+    }
+    return list.filter((pkg: BrewInstalledPackage) => !pkg.installedAsDependency);
+  }
+
   private static byName(list: BrewInstalledPackage[]): BrewInstalledPackage[] {
     const copied: BrewInstalledPackage[] = list.slice();
     // 不用 localeCompare：ArkTS 对它的支持没有保证，普通比较足够且结果稳定

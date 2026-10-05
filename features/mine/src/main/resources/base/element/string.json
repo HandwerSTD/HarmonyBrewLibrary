@@ -105,6 +105,18 @@
       "value": "No packages to show"
     },
     {
+      "name": "mine_hide_dependency",
+      "value": "Hide dependencies"
+    },
+    {
+      "name": "mine_dep_upgrade_notice",
+      "value": "Packages installed as dependencies are hidden. Upgrading also upgrades every outdated package on this device, including those hidden dependencies."
+    },
+    {
+      "name": "mine_dep_upgrade_notice_continue",
+      "value": "Upgrade anyway"
+    },
+    {
       "name": "brew_source_title",
       "value": "Data sources"
     },

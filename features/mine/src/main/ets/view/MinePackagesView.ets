@@ -31,6 +31,7 @@ import {
 } from '@ohos/common';
 import {
   BREW_CHIP_BAR_HEIGHT,
+  BrewChip,
   BrewChipBar,
   BrewCli,
   BrewCommandRunner,
@@ -38,6 +39,7 @@ import {
   BrewCommandState,
   BrewCommandStatus,
   BrewLocalPackageRow,
+  brewChipBarHorizontalInset,
   brewTitleBarStyle,
   brewTitleBarTotalHeight,
 } from '@ohos/brewcommon';
@@ -62,6 +64,7 @@ const ACTION_BUTTON_HEIGHT: number = 32;
  *
  * chips 放在标题栏的 `bottomBuilder` 里（与 Casks 页一致），内容区靠
  * `brewTitleBarTotalHeight()` 手动让位 —— 标题栏是浮层，不会把内容顶下去。
+ * 筛选 chips 在左段横向滚动，隐藏依赖 chip 常驻右端（页面右边缘）。
  */
 @Component
 export struct MinePackagesView {
@@ -167,20 +170,90 @@ export struct MinePackagesView {
       BrewCommandRunner.getInstance().openSheet();
       return;
     }
+    // 隐藏开启时列表里看不到依赖包，而 `brew upgrade` 会把设备上全部过时的包（含这些依赖包）
+    // 一起升级。先在确认框里说明一次，确认过就不再出现。
+    if (this.viewModel.needsDependencyUpgradeNotice()) {
+      this.confirmDependencyUpgrade();
+      return;
+    }
+    this.startUpgradeAll();
+  }
+
+  private confirmDependencyUpgrade(): void {
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.brew_action_upgrade_all'),
+      message: $r('app.string.mine_dep_upgrade_notice'),
+      primaryButton: {
+        value: $r('app.string.brew_source_cancel'),
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: $r('app.string.mine_dep_upgrade_notice_continue'),
+        action: () => {
+          this.viewModel.acknowledgeDependencyUpgradeNotice();
+          this.startUpgradeAll();
+        }
+      }
+    });
+  }
+
+  private startUpgradeAll(): void {
     if (this.viewModel.startUpgradeAll() === BrewCommandStartResult.STARTED) {
       BrewCommandRunner.getInstance().openSheet();
     }
   }
 
+  /**
+   * 隐藏 chip 与筛选 chips 的间隔。取值与 `BrewChipBar` 内部的 chip 间距一致（sm 10 / md·lg 12），
+   * 叠加在 chip 栏自己的右内边距之上。
+   */
+  private hideChipSpace(): Length {
+    return new BreakpointType<Length>({
+      sm: CommonConstants.SPACE_10,
+      md: CommonConstants.SPACE_12,
+      lg: CommonConstants.SPACE_12,
+    }).getValue(this.globalInfoModel.widthBreakpoint);
+  }
+
   @Builder
   ChipBarBuilder() {
-    BrewChipBar({
-      chips: this.viewModel.getChips(),
-      currentIndex: this.packagesState.filterIndex,
-      handleChipClick: (index: number) => {
-        this.viewModel.setFilter(index);
-      },
-    })
+    Row() {
+      BrewChipBar({
+        chips: this.viewModel.getChips(),
+        currentIndex: this.packagesState.filterIndex,
+        handleChipClick: (index: number) => {
+          this.viewModel.setFilter(index);
+        },
+      })
+        .layoutWeight(1)
+
+      // 隐藏 chip 常驻右端。外面包一层 Row 是因为胶囊底色画在 `BrewChip` 内部 Text 自己的框上，
+      // 直接给 chip 加内边距会把底色一起撑大。
+      //
+      // 右内缩与 chip 栏自己的左右内缩同源：标题栏 `bottomBuilder` 的底区是整宽的，
+      // 不补这一档，chip 会贴到窗口右边缘（与筛选 chips 左侧的留白不对称）。
+      Row() {
+        BrewChip({
+          label: $r('app.string.mine_hide_dependency'),
+          selected: this.packagesState.hideDependencies,
+          handleClick: () => {
+            this.viewModel.setHideDependencies(!this.packagesState.hideDependencies);
+          },
+        })
+      }
+      .alignItems(VerticalAlign.Top)
+      .padding({
+        left: this.hideChipSpace(),
+        right: brewChipBarHorizontalInset(this.globalInfoModel),
+        top: $r('sys.float.padding_level8'),
+      })
+    }
+    .width(CommonConstants.FULL_PERCENT)
+    .height(BREW_CHIP_BAR_HEIGHT)
+    // 与 chip 栏内部的内容贴顶对齐：栏内 chips 的下方还有 chip 栏自己的 padding_level5，
+    // 这里不补底部内边距，两边的 chip 才会落在同一条水平线上。
+    .alignItems(VerticalAlign.Top)
   }
 
   /**

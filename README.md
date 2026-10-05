@@ -17,7 +17,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 | **Formulae** | formulae 目录：分类 chips + 列表 + 详情页 |
 | **Casks** | casks 目录，与 formulae 共用同一套组件与详情页 |
 | **Search** | 本地搜索引擎（零依赖纯函数引擎 + 词表打分），离线可搜 |
-| **Me** | 本机已安装 / 可升级包、数据源切换与连通性状态、页面可选区块开关 |
+| **Me** | 本机已安装 / 可升级包（列表页可按 chip 隐藏作为依赖安装的包）、数据源切换与连通性状态、页面可选区块开关 |
 
 > 两个 entry 版本的功能差别只有「本机包」这一块：`pc_acl` 在「我的」页展示本机包三块，并读取设备上的 Homebrew 安装记录；`pc_normal` 不申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`，`PcAbility` 向 `AppStorage` 注入 `StorageKey.BREW_CLI_ENABLED = false`，「我的」页改为展示「激活本机包管理功能」卡片（点击把开源仓库地址 `https://gitcode.com/handwer/HarmonyBrewLibrary` 交给系统浏览器），本机包取数静默返回空集合。其余页签与页面在两个版本上表现一致。
 

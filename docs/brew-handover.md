@@ -329,10 +329,21 @@ Harmonybrew 详情不请求网络。目录正文路径是
 
 顺序：华为账号 / 激活本机包提示卡（`pc_normal`）/ 内容上新&最新公告 / **已安装** / **待更新** / **已更新** / 设置。
 三个包集合口径统一在 `MinePackagesUtil.loadSets()`：
-`installed`（60）/ `outdated`（8）/ `updated`（52 = installed − outdated，按 `installedAt` 倒序）。
+`installed`（85）/ `outdated`（7）/ `updated`（78 = installed − outdated，按 `installedAt` 倒序）。
 三个入口**共用二级页** `MinePackagesView`，靠路由参数 `mode` 区分。
 本机包行（两张卡片的预览行与二级页的行）都能点进包详情页，路由参数由
 `MinePackagesUtil.detailParamsOf(pkg)` 统一给出（`id` 传 0，取数层按 token 派生）。
+
+三个二级页的标题栏末尾各有一个「隐藏依赖」chip（`BrewChip`，筛选 chips 的外观与它同源），
+选中后按 `installedAsDependency` 去掉作为依赖安装的包：`MinePackagesUtil.visible()` 是这条过滤的
+唯一实现，与筛选 chips 串在同一条链上。三个页面共用 `MinePackagePrefs` 的 `mine_hide_dependency`
+一个键（默认显示全部，开关状态重启后保持），「我的」页的已安装数量与两张预览卡不受它影响。
+设备实测：全部 85 个里 74 个是作为依赖装的，待更新的 7 个里有 2 个（cairo / gmp）。
+
+隐藏开启时，待更新页的「更新全部」先弹一次确认框：`brew upgrade` 不看 `installed_on_request`
+（`cmd/upgrade.rb:399`），设备上全部过时的包都会被升级，包含被隐藏的依赖包。
+`brew update` 只更新 Homebrew 自身与各 tap，不安装也不升级任何包；应用的命令行前缀固定带
+`HOMEBREW_NO_AUTO_UPDATE=1`，所以「待更新」列表与「更新全部」看的是同一份本机 tap 状态。
 
 ### 6.4 Discover（`brewdiscover`）
 

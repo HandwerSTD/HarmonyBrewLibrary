@@ -28,6 +28,7 @@ import type { BrewInstalledPackage, BrewInstalledSets } from '@ohos/brewcommon';
 import { PackageListMode } from '../model/MinePackagesModels';
 import { MinePackageSets } from '../model/MinePackagesModels';
 import { MinePackagesUtil } from '../util/MinePackagesUtil';
+import { MinePackagePrefs } from '../util/MinePackagePrefs';
 import { MinePackagesState } from './MinePackagesState';
 
 const TAG: string = '[MinePackagesVM]';
@@ -81,6 +82,9 @@ export class MinePackagesVM {
   public load(mode: PackageListMode): void {
     this.state.mode = mode;
     this.state.filterIndex = FILTER_ALL;
+    // 隐藏 chip 的值三页共用（`MinePackagePrefs`），所以每次进入都从存储读一次，
+    // 在别的页面切过 chip 之后进来看到的就是同一个状态。
+    this.state.hideDependencies = MinePackagePrefs.hideDependency();
     this.state.packages = [];
     this.state.filteredPackages = [];
 
@@ -177,8 +181,17 @@ export class MinePackagesVM {
   private applySets(sets: MinePackageSets): void {
     const list: BrewInstalledPackage[] = MinePackagesUtil.pick(sets, this.state.mode);
     this.state.packages = list;
-    this.state.filteredPackages = MinePackagesUtil.filter(list, this.state.filterIndex);
+    this.state.filteredPackages = this.visibleOf(list);
     this.setStatus(LoadingStatus.SUCCESS);
+  }
+
+  /**
+   * 依赖过滤与 chips 过滤串在一起。两个调用点（整集到达、切 chips）走同一条链，
+   * 否则其中一个会忘掉隐藏 chip。
+   */
+  private visibleOf(list: BrewInstalledPackage[]): BrewInstalledPackage[] {
+    return MinePackagesUtil.filter(
+      MinePackagesUtil.visible(list, this.state.hideDependencies), this.state.filterIndex);
   }
 
   /** `BrewInstalledSets` -> `MinePackageSets`。与 `MinePackagesUtil.loadSets` 的转法一致 */
@@ -206,6 +219,33 @@ export class MinePackagesVM {
       return;
     }
     this.state.filterIndex = index;
-    this.state.filteredPackages = MinePackagesUtil.filter(this.state.packages, index);
+    this.state.filteredPackages = this.visibleOf(this.state.packages);
+  }
+
+  /**
+   * 切换标题栏右侧的隐藏 chip。写存储让另外两个页面下次进入时同步，
+   * 当前页靠重算 `filteredPackages` 立即生效。
+   */
+  public setHideDependencies(value: boolean): void {
+    if (value === this.state.hideDependencies) {
+      return;
+    }
+    this.state.hideDependencies = value;
+    this.state.filteredPackages = this.visibleOf(this.state.packages);
+    MinePackagePrefs.setHideDependency(value);
+  }
+
+  /**
+   * 「更新全部」要不要先弹一次依赖提醒。
+   *
+   * 判据不在 `state` 上而现读存储：这个提醒说的是命令的语义（会一并升级全部过时的包），
+   * 与列表当前渲染什么无关；从存储读也在 chip 状态之外多一道保险。
+   */
+  public needsDependencyUpgradeNotice(): boolean {
+    return MinePackagePrefs.hideDependency() && !MinePackagePrefs.upgradeNoticeAcknowledged();
+  }
+
+  public acknowledgeDependencyUpgradeNotice(): void {
+    MinePackagePrefs.acknowledgeUpgradeNotice();
   }
 }

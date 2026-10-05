@@ -19,7 +19,7 @@ BrewLibrary is a **HarmonyOS PC (2in1)** app for browsing Homebrew packages: it 
 | **Formulae** | Formulae catalog: category chips, list and detail page |
 | **Casks** | Casks catalog, sharing components and the detail page with formulae |
 | **Search** | On-device search engine (dependency-free pure functions + lexicon scoring), works offline |
-| **Me** | Locally installed / outdated packages, data-source switching with connectivity status, optional section toggles |
+| **Me** | Locally installed / outdated packages (list pages can hide packages installed as dependencies via a title-bar chip), data-source switching with connectivity status, optional section toggles |
 
 > The two entry builds differ only in the local-package section: `pc_acl` shows the three local-package blocks on the **Me** page and reads the Homebrew install records on the device; `pc_normal` requests neither `CUSTOM_SANDBOX` nor `READ_WRITE_USER_FILE`, its `PcAbility` injects `StorageKey.BREW_CLI_ENABLED = false` into `AppStorage`, so the **Me** page shows an "Enable local package management" card instead (tapping it hands `https://gitcode.com/handwer/HarmonyBrewLibrary` to the system browser) and local-package queries return an empty set silently. Every other tab behaves the same in both builds.
 

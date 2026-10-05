@@ -105,6 +105,18 @@
       "value": "本机暂无可显示的包"
     },
     {
+      "name": "mine_hide_dependency",
+      "value": "隐藏依赖"
+    },
+    {
+      "name": "mine_dep_upgrade_notice",
+      "value": "已隐藏作为依赖安装的包。更新会一并升级本机全部过时的包，包含这些依赖包。"
+    },
+    {
+      "name": "mine_dep_upgrade_notice_continue",
+      "value": "继续更新"
+    },
+    {
       "name": "brew_source_title",
       "value": "数据源"
     },

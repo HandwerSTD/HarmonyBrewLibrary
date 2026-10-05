@@ -34,4 +34,9 @@ export class MinePackagesState {
   public filteredPackages: BrewInstalledPackage[] = [];
   /** 筛选 chips 选中项：0 全部 / 1 Formulae / 2 Casks */
   public filterIndex: number = 0;
+  /**
+   * 是否隐藏作为依赖安装的包。进入页面时从 `MinePackagePrefs` 读入，点标题栏的 chip 时写回。
+   * 三个列表页共用同一个键，所以三个页面的这个字段总是同一个值。
+   */
+  public hideDependencies: boolean = false;
 }

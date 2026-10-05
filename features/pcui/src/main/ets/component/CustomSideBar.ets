@@ -17,6 +17,7 @@ import {
   BrewCommandRunner,
   BrewCommandState,
   BrewCommandStatus,
+  isBrewCommandEnded,
 } from '@ohos/brewcommon';
 import { TabBarData, TABS_LIST } from '../model/TabBarModel';
 
@@ -28,7 +29,7 @@ export struct CustomSideBar {
   @State symbolEffect: BounceSymbolEffect = new BounceSymbolEffect(EffectScope.LAYER, EffectDirection.UP);
   /**
    * 与 `BrewCommandRunner` 单例里**同一个**命令状态实例（`BrewCommandState` 是 `@Observed`）。
-   * 入口的显示判据读它的一级属性。
+   * 入口的显示判据与图标读它的一级属性。
    */
   @State commandState: BrewCommandState = BrewCommandRunner.getInstance().getState();
   /** Shell 入口的悬停状态 */
@@ -37,15 +38,26 @@ export struct CustomSideBar {
   };
 
   /**
-   * 入口是否展示：Sheet 没开着，且命令正在后台执行、或者终态结果还没在 Sheet 里看过。
-   * 先把三个属性读出来再判断：读它们同时建立了对本组件的观察，
-   * 命令起止、Sheet 开关、结果是否看过这三类变化都会让入口跟着出现或消失。
+   * 入口是否展示：命令执行过一次之后就常显，直到应用退出。
+   * 状态离开 IDLE 就不会再回来，所以只读 `status` 一个一级属性即可；
+   * 读它同时建立了对本组件的观察，命令起止都会让入口跟着出现。
    */
   private shellEntryVisible(): boolean {
+    return this.commandState.status !== BrewCommandStatus.IDLE;
+  }
+
+  /**
+   * 入口图标：终态结果还没看过时是结局（成功对号、失败叉号），其余情况是原来的 code 图标。
+   * 读 `status` 与 `resultViewed` 两个一级属性，命令结束与结果被看过都会让图标跟着切换。
+   * `INTERRUPTED` 与 `TIMEOUT` 归入失败：两者都是命令没有走完就被结束。
+   */
+  private shellEntryIcon(): Resource {
     const status: BrewCommandStatus = this.commandState.status;
-    const sheetShown: boolean = this.commandState.sheetShown;
     const resultViewed: boolean = this.commandState.resultViewed;
-    return !sheetShown && (status === BrewCommandStatus.RUNNING || !resultViewed);
+    if (isBrewCommandEnded(status) && !resultViewed) {
+      return status === BrewCommandStatus.DONE ? $r('sys.symbol.checkmark') : $r('sys.symbol.xmark');
+    }
+    return $r('sys.symbol.code');
   }
 
   @Builder
@@ -83,11 +95,11 @@ export struct CustomSideBar {
     })
   }
 
-  /** 底部 Shell 入口。点击只把执行 Sheet 拉起来，不切页签 */
+  /** 底部 Shell 入口。图标反映最近一条命令的结局，点击只把执行 Sheet 拉起来，不切页签 */
   @Builder
   ShellEntryBuilder() {
     Row() {
-      SymbolGlyph($r('sys.symbol.code'))
+      SymbolGlyph(this.shellEntryIcon())
         .fontSize($r('sys.float.Title_M'))
         .fontColor([$r('sys.color.icon_secondary')])
         .renderingStrategy(SymbolRenderingStrategy.MULTIPLE_OPACITY)
@@ -104,6 +116,9 @@ export struct CustomSideBar {
     .backgroundColor(this.shellFocus ? $r('sys.color.interactive_hover') : Color.Transparent)
     .width('100%')
     .height($r('app.float.side_bar_height'))
+    // 底部避让与侧边栏的左右内缩同值（`Column` 的 padding）。写成 margin 而不写成 padding：
+    // 悬停底色画在这一层的框上，padding 会把底色一起撑到窗口下沿。
+    .margin({ bottom: $r('sys.float.padding_level8') })
     .borderRadius($r('sys.float.corner_radius_level4'))
     .onHover((isHover: boolean) => {
       this.shellFocus = isHover;

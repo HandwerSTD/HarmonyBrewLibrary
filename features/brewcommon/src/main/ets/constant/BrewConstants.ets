@@ -380,6 +380,23 @@ export const CASK_CATEGORY_ORDER: string[] = ['devide', 'browser', 'productivity
 export const BREW_CHIP_BAR_HEIGHT: number = CommonConstants.NAVIGATION_HEIGHT;
 
 /**
+ * chip 栏自己的左右内缩。
+ *
+ * 栏内 chips 的左右留白与栏右侧常驻 chip 的右内缩共用这一个值 —— 各写一份会让同一行里的
+ * 左右留白不一致。
+ *
+ * 为什么需要它：标题栏 `bottomBuilder` 的底区是整宽的，chip 栏自己的左右内缩就是这一行
+ * 唯一的左右留白（隐藏 chip 不补右内缩时会贴到窗口右边缘）。所以两处必须用同一个值。
+ */
+export function brewChipBarHorizontalInset(globalInfo: GlobalInfoModel): Length {
+  return new BreakpointType<Length>({
+    sm: $r('sys.float.padding_level6'),
+    md: $r('sys.float.padding_level12'),
+    lg: $r('sys.float.padding_level16'),
+  }).getValue(globalInfo.widthBreakpoint);
+}
+
+/**
  * 内容区需要为标题栏让出的高度（顶部）—— 公式只在这里定义一次。
  *
  * `hasChipsRow` 表达「标题栏底部有没有挂 chips 行」：chips 挂在标题栏的 `bottomBuilder` 上，

@@ -80,6 +80,7 @@ export {
   BREW_CHIP_BAR_HEIGHT,
   BREW_CATEGORY_PREVIEW_COUNT,
   BREW_SEARCH_LIMIT,
+  brewChipBarHorizontalInset,
   brewContentTopInset,
   brewPageContentLeft,
   brewPageContentRight,
@@ -174,8 +175,11 @@ export {
   brewKindIconColor,
 } from './src/main/ets/constant/BrewIconStyle';
 
-// 通用胶囊 chip 栏（Casks 分类 chips 与「我的」筛选 chips 共用）
+// 通用胶囊 chip 栏（Casks 分类 chips 与「我的」筛选 chips 共用）。
+// 单个 chip 的外观在 BrewChip 里，「我的 - 本机包」标题栏右侧的隐藏 chip 也用同一个组件。
 export { BrewChipBar, BrewChipItem } from './src/main/ets/component/BrewChipBar';
+
+export { BrewChip } from './src/main/ets/component/BrewChip';
 
 // 分类卡的卡头（首页分类卡与两张分类二级页共用一份）
 export { BrewCategoryCardHeader } from './src/main/ets/component/BrewCategoryCardHeader';
