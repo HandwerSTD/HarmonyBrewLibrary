@@ -6,7 +6,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 
 - 设备形态：仅 2in1（PC），最小窗口 1080 × 608
 - 编译目标：HarmonyOS 6.1.0（API 23），hvigor 模型 5.0.0
-- 版本：1.1.0
+- 版本：1.2.0
 - 使用的技术：ArkTS / ArkUI（Stage 模型），两个 entry 模块：`products/pc_acl`（完整版，申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`）与 `products/pc_normal`（普通版，不申请受限权限）
 
 ## 功能
