@@ -155,21 +155,6 @@ export class MinePackagesVM {
     return result;
   }
 
-  /** Sheet 的「中断」：向当前命令的进程组发 SIGINT */
-  public interruptCommand(): void {
-    BrewCommandRunner.getInstance().interrupt();
-  }
-
-  /**
-   * Sheet 的「强制终止」。
-   *
-   * 与「中断」同一个入口：`BrewCommandRunner.interrupt()` 在已经发过一次中断之后会自动升级成
-   * SIGTERM + SIGKILL，而「强制终止」按钮只在宽限期过后才出现，两条路径的时机是同一套。
-   */
-  public forceKillCommand(): void {
-    BrewCommandRunner.getInstance().interrupt();
-  }
-
   /**
    * 快照里就地取一遍列表。快照路径不能等一次命令，所以自己转一次集合，
    * 取列表仍然走 `MinePackagesUtil.pick` —— 与命令路径同一个口径，不会出现两种排序。

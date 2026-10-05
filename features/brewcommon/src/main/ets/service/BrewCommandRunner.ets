@@ -22,6 +22,7 @@ import {
   BrewCommandStartResult,
   BrewCommandState,
   BrewCommandStatus,
+  isBrewCommandEnded,
 } from '../model/BrewCommandModels';
 import { BrewCommandGenerator } from '../util/BrewCommandGenerator';
 import { BrewCli } from './BrewCli';
@@ -124,6 +125,30 @@ export class BrewCommandRunner {
     this.notifyListeners();
   }
 
+  /** 请求展示执行 Sheet。已展示时什么都不做 */
+  public openSheet(): void {
+    if (this.state.sheetShown) {
+      return;
+    }
+    this.state.sheetShown = true;
+  }
+
+  /** 请求关闭执行 Sheet。宿主在 Sheet 退场动画结束后调用 */
+  public closeSheet(): void {
+    if (!this.state.sheetShown) {
+      return;
+    }
+    this.state.sheetShown = false;
+  }
+
+  /** 登记「终态结果已经被看过」。宿主在 Sheet 开始展示时调用；命令还在执行时什么都不做 */
+  public markViewed(): void {
+    if (!isBrewCommandEnded(this.state.status)) {
+      return;
+    }
+    this.state.resultViewed = true;
+  }
+
   public subscribe(listener: () => void): void {
     if (this.listeners.indexOf(listener) < 0) {
       this.listeners.push(listener);
@@ -174,8 +199,6 @@ export class BrewCommandRunner {
   private stdoutTail: string = '';
   private stderrTail: string = '';
   private listeners: (() => void)[] = [];
-  /** 已经弹过结束提示的那条命令的结束时刻；0 表示还没领过 */
-  private claimedEndNoticeAt: number = 0;
 
   /** 重置状态并起轮询。就地改一级属性，页面持有的实例与 `@ObjectLink` 才继续有效 */
   private begin(request: BrewCommandRequest, taskId: number): void {
@@ -195,6 +218,7 @@ export class BrewCommandRunner {
     this.state.interruptSentAt = 0;
     this.state.killSent = false;
     this.state.forceKillReady = false;
+    this.state.resultViewed = false;
     this.pollTimer = setInterval(() => {
       this.poll();
     }, BREW_COMMAND_POLL_MS);
@@ -328,6 +352,9 @@ export class BrewCommandRunner {
       `status=${this.state.status} args=${this.state.args}`);
     // 已安装列表的失效与刷新：写命令已结束，这一次读取拿到的是稳定状态
     BrewInstalledLoader.invalidate();
+    if (this.state.sheetShown) {
+      this.state.resultViewed = true;
+    }
     this.notifyListeners();
   }
 
@@ -364,21 +391,6 @@ export class BrewCommandRunner {
         this.notifyListeners();
       }
     }, BREW_COMMAND_INTERRUPT_GRACE_MS);
-  }
-
-  /**
-   * 领取「命令结束」的提示权。同一次命令结束只让第一个调用的页面弹 Toast。
-   *
-   * 详情页是压在「我的 - 待更新」页上推上来的，两页同时存活、各绑一份 Sheet；
-   * 不做去重时命令结束会让用户看到两条一样的提示。
-   */
-  public claimEndNotice(): boolean {
-    const endedAt: number = this.state.endedAt;
-    if (endedAt <= 0 || endedAt === this.claimedEndNoticeAt) {
-      return false;
-    }
-    this.claimedEndNoticeAt = endedAt;
-    return true;
   }
 
   private notifyListeners(): void {

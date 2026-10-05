@@ -193,21 +193,6 @@ export class BrewDetailViewModel {
     return BrewCommandRunner.getInstance().getState();
   }
 
-  /** Sheet 的「中断」：向当前命令的进程组发 SIGINT */
-  public interruptCommand(): void {
-    BrewCommandRunner.getInstance().interrupt();
-  }
-
-  /**
-   * Sheet 的「强制终止」。
-   *
-   * 与「中断」同一个入口：`BrewCommandRunner.interrupt()` 在已经发过一次中断之后会自动升级成
-   * SIGTERM + SIGKILL，而「强制终止」按钮只在宽限期过后才出现，两条路径的时机是同一套。
-   */
-  public forceKillCommand(): void {
-    BrewCommandRunner.getInstance().interrupt();
-  }
-
   /** 快照里查不到这个包 / 快照本身还没有时分开两种状态 */
   private static installStateOf(token: string): BrewInstallState {
     if (BrewInstalledLoader.snapshot() === null) {

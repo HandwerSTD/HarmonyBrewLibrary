@@ -9,29 +9,24 @@ import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
   CommonConstants,
-  CustomImmersiveStyle,
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
-  MaterialUtil,
   NoNetworkView,
   PageEnum,
   StatePlaceholderKind,
   StatePlaceholderView,
   StatusBarColorType,
   StorageKey,
-  Toast,
 } from '@ohos/common';
 import {
   BrewCommandRunner,
-  BrewCommandSheet,
   BrewCommandStartResult,
   BrewCommandState,
   BrewCommandStatus,
   BrewInstalledLoader,
   BrewKind,
   BrewPackageRow,
-  brewCommandStatusText,
   brewContentTopInset,
   brewTitleBarStyle,
 } from '@ohos/brewcommon';
@@ -77,26 +72,15 @@ export struct BrewDetailView {
   @State backPressed: boolean = false;
 
   private viewModel: BrewDetailViewModel = BrewDetailViewModel.getInstance();
-  /** 执行 Sheet 是否展示。命令状态在 `BrewCommandRunner` 单例里，关掉 Sheet 不影响命令执行 */
-  @State commandSheetShown: boolean = false;
   /**
    * 与 `BrewCommandRunner` 单例里**同一个**命令状态实例（`BrewCommandState` 是 `@Observed`）。
-   * 按钮文案靠它的一级属性变化重渲染；Sheet 用 `@ObjectLink` 接它，输出逐行追加时只更新受影响的行。
+   * 按钮文案靠它的一级属性变化重渲染。
    */
   @State commandState: BrewCommandState = this.viewModel.getCommandState();
-  /** 命令状态回调。存成字段，保证 `subscribe` / `unsubscribe` 拿到的是同一个函数对象 */
-  private commandListener: () => void = () => {
-    this.onCommandStateChanged();
-  };
   /** 快照更新回调。详情页的 state 是页面实例自己的，所以回调也存在这里而不是 VM 里 */
   private snapshotListener: () => void = () => {
     this.viewModel.refreshInstallState(this.detailState);
   };
-  /**
-   * 上一次看到的命令状态。用来分辨「刚刚结束」与「进页面时看到的是上次那条命令的结局」，
-   * 后者不该再弹一次结束提示。
-   */
-  private lastCommandStatus: BrewCommandStatus = BrewCommandStatus.IDLE;
 
   /**
    * 快照订阅放在页面里而不是 VM 里：`BrewDetailState` 是每个页面实例自己的
@@ -104,12 +88,10 @@ export struct BrewDetailView {
    */
   aboutToAppear(): void {
     BrewInstalledLoader.subscribe(this.snapshotListener);
-    BrewCommandRunner.getInstance().subscribe(this.commandListener);
   }
 
   aboutToDisappear(): void {
     BrewInstalledLoader.unsubscribe(this.snapshotListener);
-    BrewCommandRunner.getInstance().unsubscribe(this.commandListener);
   }
 
   handleOnReady(ctx: NavDestinationContext): void {
@@ -196,49 +178,12 @@ export struct BrewDetailView {
     // 「执行中…」时点击只重新打开 Sheet：命令状态在单例里，重新打开能看到完整输出，
     // 也不能因为重复点而把同一条命令再发一次。
     if (this.installRunning()) {
-      this.commandSheetShown = true;
+      BrewCommandRunner.getInstance().openSheet();
       return;
     }
     if (this.viewModel.startInstallOrUpgrade(this.detailState) === BrewCommandStartResult.STARTED) {
-      this.commandSheetShown = true;
+      BrewCommandRunner.getInstance().openSheet();
     }
-  }
-
-  /** 命令结束时补一条提示。Sheet 关着才弹 —— Sheet 里已经有状态行了 */
-  private onCommandStateChanged(): void {
-    const status: BrewCommandStatus = this.commandState.status;
-    if (status === this.lastCommandStatus) {
-      return;
-    }
-    this.lastCommandStatus = status;
-    if (status !== BrewCommandStatus.DONE && status !== BrewCommandStatus.INTERRUPTED &&
-      status !== BrewCommandStatus.TIMEOUT && status !== BrewCommandStatus.FAILED) {
-      return;
-    }
-    if (this.commandSheetShown) {
-      return;
-    }
-    // 本页压在「我的」页上时两页同时存活，结束提示只让先调用的那一页弹（避免弹两次）
-    if (!BrewCommandRunner.getInstance().claimEndNotice()) {
-      return;
-    }
-    Toast.showToast(brewCommandStatusText(this.commandState));
-  }
-
-  @Builder
-  CommandSheetBuilder() {
-    BrewCommandSheet({
-      state: this.commandState,
-      onInterrupt: () => {
-        this.viewModel.interruptCommand();
-      },
-      onForceKill: () => {
-        this.viewModel.forceKillCommand();
-      },
-      onClose: () => {
-        this.commandSheetShown = false;
-      },
-    })
   }
 
   @Builder
@@ -384,29 +329,6 @@ export struct BrewDetailView {
         StatusBarColorType.WHITE : StatusBarColorType.BLACK
     })
     .onReady((ctx: NavDestinationContext) => this.handleOnReady(ctx))
-    // 执行 Sheet。选项写法与 MineView 的登录 Sheet 一致（材质 + 宽窄屏的尺寸口径）。
-    // Sheet 可随时关闭：命令状态在 `BrewCommandRunner` 单例里，关掉不影响命令执行。
-    .bindSheet(this.commandSheetShown, this.CommandSheetBuilder(),
-      MaterialUtil.getMaterialOptions<SheetOptions>({
-        originOption: {
-          showClose: false,
-          preferType: (this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
-            !AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT)) ? SheetType.BOTTOM : SheetType.CENTER,
-          height: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ?
-            ((this.globalInfoModel.deviceHeight - this.globalInfoModel.decorHeight) *
-              CommonConstants.SHEET_HEIGHT_RATIO_XL) : SheetSize.LARGE,
-          width: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ? CommonConstants.SHEET_WIDTH_XL :
-            undefined,
-          onWillDisappear: () => {
-            this.commandSheetShown = false;
-          },
-        },
-        param: {
-          style: CustomImmersiveStyle.ULTRA_THICK,
-          backgroundColor: Color.Transparent,
-        },
-      }) as SheetOptions
-    )
     .onBackPressed(() => {
       // 已在处理中就吞掉重复按下 —— 否则连点会把上一页（列表页）也一起弹掉。
       if (this.backPressed) {

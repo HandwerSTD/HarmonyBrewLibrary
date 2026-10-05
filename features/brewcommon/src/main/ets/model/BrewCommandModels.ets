@@ -83,6 +83,14 @@ export class BrewCommandState {
    * 只靠「距发出多久」在渲染时现算，命令静默（没有新行落地）时界面不会重渲染，按钮就切不过去。
    */
   public forceKillReady: boolean;
+  /** 执行 Sheet 当前是否展示。由全局宿主的 bindSheet 绑定，页面按钮与侧边栏入口通过 runner 请求开关 */
+  public sheetShown: boolean;
+  /**
+   * 当前命令的终态结果是否已经在 Sheet 里展示过。
+   * 只在两个时刻置真：命令结束时 Sheet 正展示着；或者 Sheet 在命令结束之后被打开。
+   * 命令执行中途打开 Sheet 不入账 —— 那时看到的只是过程。
+   */
+  public resultViewed: boolean;
 
   public constructor() {
     this.title = '';
@@ -98,6 +106,8 @@ export class BrewCommandState {
     this.interruptSentAt = 0;
     this.killSent = false;
     this.forceKillReady = false;
+    this.sheetShown = false;
+    this.resultViewed = true;
   }
 }
 
@@ -129,6 +139,12 @@ export function brewCommandStatusText(state: BrewCommandState): ResourceStr {
       $r('app.string.brew_cmd_status_failed_unknown');
   }
   return '';
+}
+
+/** 命令是否已经进入终态：DONE / INTERRUPTED / FAILED / TIMEOUT 为真，IDLE / RUNNING 为假 */
+export function isBrewCommandEnded(status: BrewCommandStatus): boolean {
+  return status === BrewCommandStatus.DONE || status === BrewCommandStatus.INTERRUPTED ||
+    status === BrewCommandStatus.FAILED || status === BrewCommandStatus.TIMEOUT;
 }
 
 /** 一次启动请求。`args` 必须由 `BrewCommandGenerator` 的参数级方法产出 */

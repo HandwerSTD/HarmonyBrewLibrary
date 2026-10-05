@@ -3,11 +3,12 @@
 > 日期：2026-10-04。状态：待评审。评审通过后由 `writing-plans` 产出实施计划。
 > 范围：`features/pcnative` 增加流式执行与中断能力；`features/brewcommon` 增加 brew 命令层与已安装列表快照；
 > `features/mine` 的「我的 - 待更新」页增加「更新全部」按钮；`features/brewdetail` 的包详情页增加「安装 / 升级」按钮；
-> 两个页面共用执行 Sheet（流式显示 stdout 与 stderr、可中断）；同一时刻只执行一条写命令（没有等待队列），只读读取可以与写命令并发执行。
+> 执行 Sheet 由顶层页面统一承载（流式显示 stdout 与 stderr、可中断）；同一时刻只执行一条写命令（没有等待队列），只读读取可以与写命令并发执行。
 > 相关文档：[`2026-10-04-brew-installed-packages-spec.md`](2026-10-04-brew-installed-packages-spec.md)（本机包读取与执行通道）、
 > [`2026-10-04-brew-mine-package-detail-spec.md`](2026-10-04-brew-mine-package-detail-spec.md)（本机包进入详情页）、
 > [`2026-10-04-pc-dual-variant-entry-spec.md`](2026-10-04-pc-dual-variant-entry-spec.md)（`BREW_CLI_ENABLED` 开关）、
 > [`../../brew-api-design.md`](../../brew-api-design.md) §4.3 / §5.3、[`../../brew-handover.md`](../../brew-handover.md)。
+> Sheet 的绑定位置、结束提示归属与侧边栏 Shell 入口见 [`2026-10-04-brew-shell-sidebar-entry-spec.md`](2026-10-04-brew-shell-sidebar-entry-spec.md)。
 
 ---
 
@@ -107,13 +108,19 @@
 
 ### 3.3 执行 Sheet
 
-**绑定位置**：两个页面各自绑定一份，内容组件共用。
+**绑定位置**：只有一份，绑在 `features/pcui` 的顶层页面 `PcMainPage` 的 `HdsNavDestination` 上。
 
 ```ets
-.bindSheet(this.commandSheetShown, this.CommandSheetBuilder(), SheetOptions)
+.bindSheet(this.commandState.sheetShown, this.CommandSheetBuilder(), SheetOptions)
 ```
 
-`SheetOptions` 沿用 `MineView` 里登录 Sheet 的写法：`MaterialUtil.getMaterialOptions<SheetOptions>`（`CustomImmersiveStyle.ULTRA_THICK` + 透明底色），`preferType` 窄屏 `SheetType.BOTTOM` / 宽屏 `SheetType.CENTER`，`height` 宽屏按 `CommonConstants.SHEET_HEIGHT_RATIO_XL`、其余 `SheetSize.LARGE`，`width` 宽屏 `CommonConstants.SHEET_WIDTH_XL`，`showClose: false`（关闭入口在标题栏菜单里），`onWillDisappear` 里把 `commandSheetShown` 置回 `false`。
+绑在顶层容器上的原因：应用从启动到退出的顶层容器只有一个，五个页签内容与所有二级页都在它的内容区里，这一个宿主的浮层因此覆盖全部界面；绑两份会出现两层叠加的半模态。
+
+打开由 `BrewCommandRunner.openSheet()` 请求（页面按钮与侧边栏 Shell 入口都只调它），开关状态是 `BrewCommandState.sheetShown`。
+
+`SheetOptions` 沿用 `MineView` 里登录 Sheet 的写法：`MaterialUtil.getMaterialOptions<SheetOptions>`（`CustomImmersiveStyle.ULTRA_THICK` + 透明底色），`preferType` 窄屏 `SheetType.BOTTOM` / 宽屏 `SheetType.CENTER`，`height` 宽屏按 `CommonConstants.SHEET_HEIGHT_RATIO_XL`、其余 `SheetSize.LARGE`，`width` 宽屏 `CommonConstants.SHEET_WIDTH_XL`，`showClose: false`（关闭入口在标题栏菜单里）。
+
+回调两个：`onWillAppear` 调 `BrewCommandRunner.markViewed()`（登记终态结果已经被看过），`onDisappear` 调 `BrewCommandRunner.closeSheet()`。关闭登记放在 `onDisappear`（退场动画结束后触发）：官方文档写明 `onWillDisappear` 里不允许修改状态变量；把「Sheet 已关闭」的登记推迟到动画结束，侧边栏 Shell 入口就不会在退场动画期间出现，用户不会遇到「点了入口却没有反应」（半模态的退场动画不支持打断）。
 
 **内容**（`BrewCommandSheet`，放在 `features/brewcommon`）。标题栏与「我的 - 设置」同源：`Navigation`（`titleMode(Mini)` + `hideBackButton(true)`）给标题栏，`Navigation.title()` 给标题（这次执行在做什么），`Navigation.menus()` 给两个操作：
 
@@ -122,7 +129,7 @@
 | 标题栏菜单 | trash（`sys.symbol.trash`）结束命令：第一次点击发 SIGINT，宽限期之后再点发 SIGTERM / SIGKILL；命令没在跑、或正处在宽限期内时不可点。xmark（`sys.symbol.xmark`）关闭 Sheet |
 | 内容区 | 一整块等宽文本：第一行是 `$ <命令>`（空一行接输出），后面每行一个 `Span`；黑底（`Color.Black`）、白字（`Color.White`）、字体 `JetBrains Mono NL`、行高 1.5 倍；stderr 行用 `sys.color.warning`；最多保留 1000 行，超出时命令行之后显示「已省略前 N 行」；命令结束之后在文本末尾追加状态行，写法是方括号里的短句：`[运行中]` / `[正在中断…]` / `[已完成 退出码 %d]` / `[已中断]` / `[执行超时]` / `[执行失败 退出码 %d]`（通道没给出退出码时是 `[执行失败]`） |
 
-组件入参：`@ObjectLink state: BrewCommandState`（`@Prop` 会深拷贝整个对象，1000 行日志每 200ms 复制一次不可接受），加上 `onInterrupt` / `onForceKill` / `onClose` 三个回调，由页面接到 `BrewCommandRunner` 与 `commandSheetShown`。
+组件入参：`@ObjectLink state: BrewCommandState`（`@Prop` 会深拷贝整个对象，1000 行日志每 200ms 复制一次不可接受），加上 `onInterrupt` / `onForceKill` / `onClose` 三个回调，由顶层宿主接到 `BrewCommandRunner` 上（中断与强制终止同样都调 `interrupt()`，升级成 SIGTERM / SIGKILL 由命令层按时机处理）。
 
 **自动滚动**：日志文本放在 `Scroll` 里（`Scroller`），新行落地时滚到底；用户上滑离开底部后停止跟随（用 `Scroller.isAtEnd()` 判定），滚回底部后恢复跟随。一批日志只安排一次滚动：一次轮询可能落地上百行，逐行排定时器会把滚动任务堆起来。
 
@@ -132,9 +139,9 @@
 - 行内出现 `\r` 时只保留最后一个 `\r` 之后的内容（brew 的下载进度用 `\r` 重绘同一行，逐条追加会把进度碎片铺满整个日志区）；
 - 剥离 ANSI 转义序列（`ESC [ … 字母`）。
 
-**关闭行为**：Sheet 可随时关闭（下滑、点遮罩、返回键，或标题栏菜单里的 xmark）。关闭不影响命令：任务状态在单例里，输出继续被收进行缓冲；页面按钮显示「执行中…」，点击重新打开 Sheet 并看到完整输出。
+**关闭行为**：Sheet 可随时关闭（下滑、点遮罩、返回键，或标题栏菜单里的 xmark）。关闭不影响命令：任务状态在单例里，输出继续被收进行缓冲；页面按钮显示「执行中…」，点击重新打开 Sheet 并看到完整输出，命令结束后没看过终态结果时侧边栏底部的 Shell 入口一直也在（命令在后台执行、终态结果还没被看过时入口常驻，判据见 [`2026-10-04-brew-shell-sidebar-entry-spec.md`](2026-10-04-brew-shell-sidebar-entry-spec.md)）。
 
-**结束提示**：命令结束时如果 Sheet 没有打开，页面弹一条 Toast，文案与 Sheet 文本末尾的状态行同源（`brewCommandStatusText(state)`，如 `[已完成 退出码 0]`）。两个页面可能同时存活（详情页压在「我的」页上），所以由 `BrewCommandRunner.claimEndNotice()` 决定哪一页弹：同一次命令结束只弹一次。
+**结束提示**：命令结束时如果 Sheet 没有打开，由顶层页面 `PcMainPage` 弹一条 Toast（它订阅 `BrewCommandRunner`，命令进入终态且 Sheet 关着时弹一次），文案与 Sheet 文本末尾的状态行同源（`brewCommandStatusText(state)`，如 `[已完成 退出码 0]`）。顶层宿主从应用启动到退出一直存在，结束提示不依赖哪个页面还活着。
 
 ### 3.4 中断与强制终止
 
@@ -329,8 +336,12 @@ export class BrewCommandRunner {
   public interrupt(): void;
   public subscribe(listener: () => void): void;
   public unsubscribe(listener: () => void): void;
-  /** 领取「命令结束」的提示权。同一次命令结束只让第一个调用的页面弹 */
-  public claimEndNotice(): boolean;
+  /** 请求展示执行 Sheet。已展示时什么都不做 */
+  public openSheet(): void;
+  /** 请求关闭执行 Sheet。宿主在 Sheet 退场动画结束后调用 */
+  public closeSheet(): void;
+  /** 登记「终态结果已经被看过」。宿主在 Sheet 开始展示时调用；命令还在执行时什么都不做 */
+  public markViewed(): void;
 }
 ```
 
@@ -340,10 +351,11 @@ export class BrewCommandRunner {
 2. **不做排队**：被拒绝的请求直接结束，用户看到提示后可以自己再点一次；按钮在忙碌期间保持可点，不进入禁用态。
 3. **轮询周期 `BREW_COMMAND_POLL_MS = 200`**：定时器里调用 `ShellUtils.pollStream(taskId, SHELL_STREAM_POLL_MAX_BYTES)`，把事件按 3.3 的行处理规则转成行，追加进 `lines`（上限 `BREW_COMMAND_LOG_MAX_LINES = 1000`，超出丢弃最旧的行并累加 `omittedLines`）。200ms 的批量正好和界面刷新节奏一致，也避免每一小段输出都触发一次渲染。`pollStream` 返回 `null`（任务已不存在）时按失败收尾，终态 `FAILED`，并打一条 warn。
 4. **状态对象带 `@Observed`，就地改一级属性**：`lines` 每次赋一个新数组（ForEach 的键用 `omittedLines + index`：裁剪之后同一个下标会指向不同内容，直接用下标会让 ArkUI 复用旧节点），`status` / `omittedLines` 等直接赋值。页面用 `@State` 持有同一个实例，Sheet 用 `@ObjectLink` 接收。选 `@Observed` + `@ObjectLink` 的原因：`@Prop` 对对象做深拷贝（官方文档），1000 行日志每 200ms 复制一次不可接受。
-   通知订阅者仍然保留：页面要用它弹结束提示、刷新按钮文案。
+   通知订阅者仍然保留：顶层宿主要用它弹结束提示，页面要用它刷新按钮文案。
 5. **结束处理**（顺序固定）：`releaseStream(taskId)` → 清定时器 → 计算最终状态（`1005` → `INTERRUPTED`，`1003` → `TIMEOUT`，`exitCode === 0` → `DONE`，其余 → `FAILED`）→ `BrewInstalledLoader.invalidate()`（触发一次后台刷新）→ 通知订阅者。
 6. **日志**：`[brew-cmd] start args=…`、`[brew-cmd] busy args=…`、`[brew-cmd] poll out=… err=…`（只在有增量时打）、`[brew-cmd] interrupt sig=int`、`[brew-cmd] kill sig=kill`、`[brew-cmd] exit code=… error=… ms=…`。
 7. **中断后的定时回调**：发送中断时安排一次「宽限期到点」的定时回调，回调里把 `forceKillReady` 置真再通知订阅者。只调通知不够：Sheet 用 `@ObjectLink` 观察一级属性，命令静默（没有新行落地）时不会重渲染，按钮就切不到「强制终止」。
+8. **Sheet 与结果的可见性放在状态对象上**：`BrewCommandState` 增加 `sheetShown`（执行 Sheet 是否展示，宿主的 `bindSheet` 绑定它）与 `resultViewed`（终态结果是否已经在 Sheet 里展示过；命令启动时复位，命令结束时 Sheet 正展示、或命令结束后 Sheet 被打开时置真）。`begin()` 复位 `resultViewed`，`finish()` 在 Sheet 正展示时置真，`openSheet()` / `closeSheet()` 改 `sheetShown`，`markViewed()` 在命令已进终态时置 `resultViewed`。这三个方法只改状态对象的一级属性，观察这些属性的组件自己重渲染。
 
 ### 5.4 启动前的检查
 
@@ -527,16 +539,21 @@ export enum BrewInstallState {
 | `features/brewcommon/src/main/ets/service/BrewInstalledLoader.ets` | 快照（内存 + 磁盘，只存成功读取）、新鲜窗口、订阅、`invalidate`、`installedOf`、`snapshot`；写命令期间的读取不写快照；读取命令改用 `BrewCli` |
 | `features/brewcommon/src/main/ets/constant/BrewConstants.ets` | `BREW_INSTALLED_FRESH_MS`（替换 `BREW_INSTALLED_TTL_MS`）、`BREW_COMMAND_POLL_MS`、`BREW_COMMAND_LOG_MAX_LINES`、`BREW_COMMAND_INTERRUPT_GRACE_MS`、`BREW_COMMAND_TIMEOUT_MS`、快照键名 |
 | `features/brewcommon/src/main/ets/util/BrewCommandGenerator.ets` | `installArgs` / `upgradeArgs` / `upgradeAllArgs` / `isSafeName`；展示方法建立在其上 |
+| `features/brewcommon/src/main/ets/model/BrewCommandModels.ets` | `BrewCommandState` 增加 `sheetShown` / `resultViewed`；新增 `isBrewCommandEnded()` |
 | `features/brewcommon/src/main/ets/model/BrewDetailViewData.ets` | `BrewInfoPageData` 增加 `tap` |
 | `features/brewcommon/src/main/ets/util/BrewDetailNormalizer.ets` | 写入 `tap` |
-| `features/brewcommon/Index.ets` | 导出 `BrewCli`、`BrewCommandRunner`、命令状态类型、Sheet 组件 |
+| `features/brewcommon/Index.ets` | 导出 `BrewCli`、`BrewCommandRunner`、命令状态类型、Sheet 组件、`isBrewCommandEnded` |
 | `features/brewcommon/src/main/resources/{base,en_US,zh_CN}/element/string.json` | §7 的文案 |
-| `features/mine/src/main/ets/view/MinePackagesView.ets` | 底部操作行、Sheet 绑定、订阅命令状态与快照 |
-| `features/mine/src/main/ets/viewmodel/MinePackagesVM.ets` | 快照优先的加载流程、命令启动入口 |
+| `features/mine/src/main/ets/view/MinePackagesView.ets` | 底部操作行、订阅命令状态与快照；交出 Sheet，打开动作改为 `openSheet()` |
+| `features/mine/src/main/ets/viewmodel/MinePackagesVM.ets` | 快照优先的加载流程、命令启动入口；删除 `interruptCommand()` / `forceKillCommand()` |
 | `features/mine/src/main/ets/viewmodel/MinePageVM.ets` | `loadLocalPackages()` 接入快照与订阅 |
 | `features/brewdetail/src/main/ets/component/BrewInfoSectionView.ets` | `BrewInstallCommandCard` 标题行增加按钮 |
-| `features/brewdetail/src/main/ets/view/BrewDetailView.ets` | Sheet 绑定、命令启动、快照订阅 |
-| `features/brewdetail/src/main/ets/viewmodel/BrewDetailViewModel.ets`、`viewmodel/BrewDetailState.ets` | `installState` 的计算与更新 |
+| `features/brewdetail/src/main/ets/view/BrewDetailView.ets` | 命令启动、快照订阅；交出 Sheet，打开动作改为 `openSheet()` |
+| `features/brewdetail/src/main/ets/viewmodel/BrewDetailViewModel.ets`、`viewmodel/BrewDetailState.ets` | `installState` 的计算与更新；`BrewDetailViewModel` 删除 `interruptCommand()` / `forceKillCommand()` |
+| `features/brewcommon/src/main/ets/service/BrewCommandRunner.ets` | `openSheet()` / `closeSheet()` / `markViewed()`；`begin()` 复位 `resultViewed`；`finish()` 在 Sheet 展示时置真；删除 `claimEndNotice()` 与 `claimedEndNoticeAt` |
+| `features/pcui/src/main/ets/view/PcMainPage.ets` | 全局 Sheet 宿主、结束提示订阅 |
+| `features/pcui/src/main/ets/component/CustomSideBar.ets` | 底部 Shell 入口与显示判据 |
+| `features/pcui/src/main/resources/{base,en_US,zh_CN}/element/string.json` | `tab_shell` |
 
 ### 8.3 不动
 
