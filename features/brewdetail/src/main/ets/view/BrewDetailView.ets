@@ -60,10 +60,11 @@ const ACTION_BUTTON_HEIGHT: number = 40;
 const ACTION_BUTTON_WIDTH: Length = '60%';
 
 /**
- * 按钮宽度上限（vp）。窗口很宽时百分比算出来的宽度没有边界（本机 1400vp 窗口下接近 840vp），
- * 上限收在 328vp —— 与 HDS 页签栏 / 迷你栏的最大宽度同值。
+ * 按钮宽度上限（vp）。窗口很宽时百分比算出来的宽度没有边界，上限收在 448vp ——
+ * 按参考图（上方是本页 328vp 的按钮、下方是更长的目标，两张图同一显示比例）估算：
+ * 623px ↔ 328vp，851px ↔ 448vp；同一比例下按钮高度 76px ↔ 40vp，与本页取值吻合。
  */
-const ACTION_BUTTON_MAX_WIDTH: number = 328;
+const ACTION_BUTTON_MAX_WIDTH: number = 448;
 
 /**
  * 操作栏的判据日志去重表（同内容只打一次）。写法与 `BrewTitleBar.logRamp()` 一致 ——
@@ -267,7 +268,7 @@ export struct BrewDetailView {
         .constraintSize({ maxWidth: ACTION_BUTTON_MAX_WIDTH })
         .height(ACTION_BUTTON_HEIGHT)
         .type(ButtonType.ROUNDED_RECTANGLE)
-        // 圆角用系统默认（`ButtonType.ROUNDED_RECTANGLE` + `ControlSize.NORMAL` 默认 20vp），不自己设 borderRadius
+        // 圆角不指定，用系统默认（本机实测渲染出来约 6vp）
         .fontSize($r('sys.float.Body_L'))
         .fontWeight(FontWeight.Medium)
         // 「已安装」表达的是状态，沿用它在卡片里那套次要配色；可点的两个状态用强调色

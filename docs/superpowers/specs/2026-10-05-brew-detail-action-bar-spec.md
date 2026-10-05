@@ -28,7 +28,7 @@
 | # | 判据 | 可观测证据 |
 | --- | --- | --- |
 | G1 | 详情页底边出现一条白色渐变模糊背板：内容压到它下面时被模糊，背板上沿是一条渐变的过渡带 | 真机截图（滚到压住操作栏） |
-| G2 | 强调按钮的宽度 = 内容区宽度的 60%，且不超过 328vp；水平居中 | 真机截图；`[BrewActionBar]` 行 |
+| G2 | 强调按钮的宽度 = 内容区宽度的 60%，且不超过 448vp；水平居中 | 真机截图；`[BrewActionBar]` 行 |
 | G3 | 「安装命令」卡片里不再有按钮，命令文本与「复制」按钮保持原样 | 真机截图 |
 | G4 | 按钮的四种状态（安装 / 升级 / 已安装 / 执行中…）与点击行为跟现在逐字相同 | 真机对照；`[brew-cmd] start args=…` |
 | G5 | 滚到最后时，最后一张卡片完整停在操作栏上方，不被背板盖住 | 真机滚动到底 |
@@ -124,9 +124,9 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 
 | 项 | 取值 | 依据 |
 | --- | --- | --- |
-| 宽度 | 内容区宽度的 60%（`ACTION_BUTTON_WIDTH = '60%'`），上限 328vp（`ACTION_BUTTON_MAX_WIDTH`） | 需求给定；构建器的根 `Row` 左右都用本页的 `contentLeft()`（本页左右同值，与 `Scroll` 内层 Column 的左右内缩同源），按钮的 60% 因此是内容区宽度的 60%。上限收在 328vp：窗口很宽时百分比算出来的宽度没有边界，328vp 与 HDS 页签栏 / 迷你栏的最大宽度同值 |
+| 宽度 | 内容区宽度的 60%（`ACTION_BUTTON_WIDTH = '60%'`），上限 448vp（`ACTION_BUTTON_MAX_WIDTH`） | 需求给定；构建器的根 `Row` 左右都用本页的 `contentLeft()`（本页左右同值，与 `Scroll` 内层 Column 的左右内缩同源），按钮的 60% 因此是内容区宽度的 60%。上限 448vp 由参考图估算：623px ↔ 328vp、851px ↔ 448vp，同一比例下按钮高度 76px ↔ 40vp |
 | 高度 | 40vp（`ACTION_BUTTON_HEIGHT`） | 栏高 56vp 减上下各 8vp |
-| 圆角 | 系统默认（`ButtonType.ROUNDED_RECTANGLE` + `ControlSize.NORMAL`，20vp），不设 `borderRadius` | 需求给定：不用自定义圆角 |
+| 圆角 | 系统默认（`ButtonType.ROUNDED_RECTANGLE`，本机实测渲染约 6vp），不设 `borderRadius` | 需求给定：不用自定义圆角 |
 | 文字 | `$r('sys.float.Body_L')` + `FontWeight.Medium` | 主操作按钮的字号 |
 | 底色与文字色 | 可点时 `$r('sys.color.ohos_id_color_emphasize')` + `$r('sys.color.font_on_primary')`；「已安装」（不可点）时 `$r('sys.color.comp_background_tertiary')` + `$r('sys.color.font_tertiary')` | 强调蓝用项目已有的强调色 token；「已安装」表达的是状态，沿用现在的次要配色 |
 | 底部内边距 | 构建器的根 `Row` 加 `padding.bottom = naviIndicatorHeight` | 有底部导航条时按钮在栏内上移，不压在导航条上 |
@@ -176,7 +176,7 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 操作栏渲染时打一行（每个页面实例一行，取值直接写进格式串，不需要探针）：
 
 ```
-[BrewActionBar], action bar: height=56 mask=88 ramp=32 button=60% max=328 navi=0 breakpoint=lg
+[BrewActionBar], action bar: height=56 mask=88 ramp=32 button=60% max=448 navi=0 breakpoint=lg
 ```
 
 `mask` − `height` 必须等于 `ramp`（32），`height` 必须等于 56 + `navi`；对不上说明两个高度用了不同的来源。
