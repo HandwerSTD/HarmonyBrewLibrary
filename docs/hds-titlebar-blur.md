@@ -324,7 +324,7 @@ Scroll() {
 | Formulae | WaterFlow | 覆写基类 + `BrewTitleBar` | `[0,104]` | 首尾占位 FlowItem | ✅ |
 | Discover（发现） | WaterFlow | 同上 | `[0,104]` | 首尾占位 FlowItem | ✅ |
 | Casks | Scroll | 同上 | `[0,104]` | 内层 Column `margin` | ✅ |
-| 包详情页 | Scroll | `brewTitleBarStyle('detail')` | `[0,104]` | 内层 Column `margin` | ✅ |
+| 包详情页 | `HdsTabs`（只有一页，页签栏 = 底部主操作栏）→ `Scroll` | `brewTitleBarStyle('detail')` + `bindToScrollable([scroller])` | `[0,104]` | 内层 Column `margin`（顶部）+ `Scroll.contentEndOffset`（底部让主操作栏） | ✅ |
 | 榜单二级页 | Scroll | `brewTitleBarStyle('discover-board')` | `[0,104]` | 内层 Column `margin` | ✅ |
 | 我的-本机包 | Scroll | `brewTitleBarStyle('mine-packages')` | `[0,104]` | 内层 Column `margin`（+ chips 让位 112） | ✅ |
 | 我的 `MineView` | Scroll | `brewTitleBarStyle('mine')` | `[0,104]` | 内层 Column `margin` | ✅ |
@@ -332,6 +332,12 @@ Scroll() {
 | 组件详情 / 代码预览 | Scroll / Web | 内联（无区间） | 默认 `[0,8]` | 容器 `padding` | ⚠️ 同上（`getEnableScrollEffect()` 在 sm 档还返回 false） |
 | 文章详情 | Web | 内联（无区间） | 默认 `[0,8]` | —（Web 自滚） | ⚠️ 无渐变 |
 | 内容上新 / 实践详情 | List | 内联 `enableScrollEffect: false` | — | — | ❌ 刻意关闭 |
+
+包详情页的 `Scroll` 自 2026-10-05 起嵌在单页签 `HdsTabs` 的 `TabContent` 里（页签栏就是底部主操作栏）。
+**嵌了 `HdsTabs` 之后，标题栏模糊不再能靠 HDS 自动识别滚动容器，必须显式绑定** ——
+页面持有一个 `Scroller` 交给 `Scroll`，并在 `HdsNavDestination` 上写 `.bindToScrollable([this.scroller])`，
+否则模糊直接丢失（与 §3 场景 H 同一个原因，官方 FAQ `faqs-arkui-1095` 场景二）。
+只有一页，不需要「切页时重新绑」与「存档/恢复滚动位置」那两步。
 
 ---
 

@@ -151,6 +151,7 @@ UI 要求：`deprecated` 显示警示条 + 替代品跳转；`disabled` 显示�
 |---|---|---|---|
 | 1 | Hero：图标 + 名称 + `desc` + tap 来源 + 安装状态徽标 | `name` `desc` `tap` `installed` | 恒显 |
 | 2 | 主操作：`brew install` 命令 + 复制按钮 | `installCommand` | 恒显 |
+| 2 | 主操作按钮在底部操作栏（与上一行同属分区 2，2026-10-05 从卡片标题行移出）：安装 / 升级 / 已安装 | 已安装快照（`BrewInstalledLoader`）+ `installCommand` | brew 能力可用且 token / tap 通过校验（`commandReady`） |
 | 3 | 元信息：版本 / 许可 / 近 30 天安装量 / 分类排名 | `stableVersion`(或 cask `version`) `license` `installs30d` `categoryRank`+`categorySize` | 恒显 |
 | 4 | **提供的命令**（formula）｜ **安装内容**（cask） | `executables` ｜ `artifacts[]` | 非空时 |
 | 5 | 兼容性与要求 | `bottleTags` / `dependsOn.macos` → `macosRequirement` / `requirements` | 非空时 |

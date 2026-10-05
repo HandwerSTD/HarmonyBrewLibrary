@@ -4,7 +4,7 @@
 
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { LengthMetrics } from '@kit.ArkUI';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsTabs, DividerMode } from '@kit.UIDesignKit';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
@@ -12,12 +12,14 @@ import {
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
+  Logger,
   NoNetworkView,
   PageEnum,
   StatePlaceholderKind,
   StatePlaceholderView,
   StatusBarColorType,
   StorageKey,
+  WIDTH_BREAKPOINTS,
 } from '@ohos/common';
 import {
   BrewCommandRunner,
@@ -36,6 +38,38 @@ import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '
 import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
 import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
+
+const TAG: string = '[BrewActionBar]';
+
+/**
+ * 底部操作栏的高度（vp）。与 `CommonConstants.NAVIGATION_HEIGHT` / `TAB_BAR_HEIGHT` 同值：
+ * 与标题栏同高，按钮上下各留 8vp。设备有底部导航条时还要加 `naviIndicatorHeight`（见 `actionBarHeight()`）。
+ */
+const ACTION_BAR_HEIGHT: number = 56;
+
+/**
+ * 操作栏背板的渐变长度（vp）。HDS 的 `maskHeight` 默认就是「页签栏高度 + 32vp」，
+ * 显式写出来是为了让这个数字在代码里可见。
+ */
+const ACTION_BAR_BLUR_RAMP: number = 32;
+
+/** 按钮高度（vp）= 栏高 56 减上下各 8 */
+const ACTION_BUTTON_HEIGHT: number = 40;
+
+/** 按钮宽度：内容区宽度的 60%（构建器根 Row 的左右内缩与内容区同源，所以百分比也同源） */
+const ACTION_BUTTON_WIDTH: Length = '60%';
+
+/**
+ * 按钮宽度上限（vp）。窗口很宽时百分比算出来的宽度没有边界（本机 1400vp 窗口下接近 840vp），
+ * 上限收在 328vp —— 与 HDS 页签栏 / 迷你栏的最大宽度同值。
+ */
+const ACTION_BUTTON_MAX_WIDTH: number = 328;
+
+/**
+ * 操作栏的判据日志去重表（同内容只打一次）。写法与 `BrewTitleBar.logRamp()` 一致 ——
+ * 断点或导航条高度变化会让 build 反复执行，不去重会把日志刷满。
+ */
+const loggedActionBars: Map<string, string> = new Map();
 
 /**
  * 包详情页（formula 与 cask 共用，靠路由参数里的 `kind` 分流）。
@@ -70,6 +104,13 @@ export struct BrewDetailView {
    * 所以放在这里天然是每页独立的。
    */
   @State backPressed: boolean = false;
+
+  /**
+   * 页面滚动容器。必须显式持有：嵌了 `HdsTabs` 之后标题栏模糊不能再靠 HDS 自动识别滚动容器
+   * （官方 FAQ `faqs-arkui-1095` 场景二就是这个现象），要在 `HdsNavDestination` 上
+   * `bindToScrollable([this.scroller])`。只有一页，不需要切页时重新绑定。
+   */
+  private scroller: Scroller = new Scroller();
 
   private viewModel: BrewDetailViewModel = BrewDetailViewModel.getInstance();
   /**
@@ -186,9 +227,78 @@ export struct BrewDetailView {
     }
   }
 
+  /** 操作栏总高。有底部导航条时把它算进来，按钮才不会压在导航条上 */
+  private actionBarHeight(): number {
+    return ACTION_BAR_HEIGHT + this.globalInfoModel.naviIndicatorHeight;
+  }
+
+  /** 背板蒙层高度 = 栏高 + 渐变长度（HDS 的 `maskHeight` 默认值就是这个口径） */
+  private actionBarMaskHeight(): number {
+    return this.actionBarHeight() + ACTION_BAR_BLUR_RAMP;
+  }
+
+  /**
+   * 操作栏的判据行：`mask − height` 必须等于 `ramp`，`height` 必须等于 56 + `navi` ——
+   * 对不上说明两个高度用了不同的来源。同内容只打一次（断点变化会反复触发渲染）。
+   */
+  private logActionBar(): void {
+    const line: string = `action bar: height=${this.actionBarHeight()} mask=${this.actionBarMaskHeight()}` +
+      ` ramp=${ACTION_BAR_BLUR_RAMP} button=${ACTION_BUTTON_WIDTH} max=${ACTION_BUTTON_MAX_WIDTH}` +
+      ` navi=${this.globalInfoModel.naviIndicatorHeight}` +
+      ` breakpoint=${WIDTH_BREAKPOINTS[this.globalInfoModel.widthBreakpoint]}`;
+    if (loggedActionBars.get(TAG) === line) {
+      return;
+    }
+    loggedActionBars.set(TAG, line);
+    Logger.info(TAG, line);
+  }
+
+  /**
+   * 底部操作栏：本页唯一的主操作按钮。
+   *
+   * 放在页签栏里而不是自己搭一层：栏高、模糊区间与按钮中线只需要一个来源（`barHeight`），
+   * 不会出现「背板 56vp、按钮按另一个数字摆」的错位。
+   */
+  @Builder
+  ActionBarBuilder() {
+    Row() {
+      Button(this.installActionLabel())
+        .width(ACTION_BUTTON_WIDTH)
+        .constraintSize({ maxWidth: ACTION_BUTTON_MAX_WIDTH })
+        .height(ACTION_BUTTON_HEIGHT)
+        .type(ButtonType.ROUNDED_RECTANGLE)
+        // 圆角用系统默认（`ButtonType.ROUNDED_RECTANGLE` + `ControlSize.NORMAL` 默认 20vp），不自己设 borderRadius
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(FontWeight.Medium)
+        // 「已安装」表达的是状态，沿用它在卡片里那套次要配色；可点的两个状态用强调色
+        .backgroundColor(this.installActionEnabled() ? $r('sys.color.ohos_id_color_emphasize') :
+          $r('sys.color.comp_background_tertiary'))
+        .fontColor(this.installActionEnabled() ? $r('sys.color.font_on_primary') : $r('sys.color.font_tertiary'))
+        .enabled(this.installActionEnabled())
+        .onClick(() => {
+          this.onInstallActionClick();
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    // 判据日志挂在 onAppear 上：@Builder 里不允许裸语句，而这里是「操作栏渲染了」这一刻
+    // （日志本身按内容去重，反复 appear 不会刷屏）
+    .onAppear(() => {
+      this.logActionBar();
+    })
+    // 左右内缩必须与内容区（`Scroll` 内层 Column 的 padding）同源：按钮宽 60% 才有意义，
+    // 而 60% 是相对**去除内缩后**的内容区宽度。
+    .padding({
+      left: this.contentLeft(),
+      right: this.contentLeft(),
+      bottom: this.globalInfoModel.naviIndicatorHeight,
+    })
+  }
+
   @Builder
   ContentBuilder() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: $r('sys.float.padding_level8') }) {
         // 1 Hero
         BrewDetailHero({ data: this.detailState.data, kind: this.kind })
@@ -198,16 +308,8 @@ export struct BrewDetailView {
           BrewLifecycleBanner({ notice: this.detailState.data.lifecycle })
         }
 
-        // 2 安装命令 + 执行按钮 + 复制
-        BrewInstallCommandCard({
-          command: this.detailState.data.installCommand,
-          showAction: this.detailState.commandReady,
-          actionLabel: this.installActionLabel(),
-          actionEnabled: this.installActionEnabled(),
-          onAction: () => {
-            this.onInstallActionClick();
-          },
-        })
+        // 2 安装命令 + 复制（主操作按钮不在这里，见 ActionBarBuilder）
+        BrewInstallCommandCard({ command: this.detailState.data.installCommand })
 
         // 3 元信息
         BrewDetailMetaBar({ rows: this.detailState.data.meta })
@@ -280,12 +382,50 @@ export struct BrewDetailView {
     .height('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+    // 底部为操作栏留出滚动空间。**只加 ACTION_BAR_HEIGHT**：内层 Column 的 margin.bottom
+    // 里已经有 naviIndicatorHeight，操作栏自己那一段导航条高度由它的 barHeight 与按钮的
+    // padding.bottom 覆盖，这里再加一次会多出一段空白。没有操作栏时是 0，与改动前一致。
+    //
+    // 底部可以用 contentEndOffset（顶部不行，见内层 margin 的注释）：它只在内容末尾加空白，
+    // 不移动滚动坐标系原点，静止时 scroller 自报的偏移量仍是 0。
+    .contentEndOffset(this.detailState.commandReady ? ACTION_BAR_HEIGHT : 0)
   }
 
   build() {
     HdsNavDestination() {
       if (this.detailState.loadingModel.loadingStatus === LoadingStatus.SUCCESS) {
-        this.ContentBuilder()
+        // 有主操作时用一个只有一页的 HdsTabs 承载：它的页签栏自带「渐变模糊 + 蒙层」，
+        // 正好是需求要的那条背板（HdsNavDestination 的工具栏只有均匀模糊，没有渐变能力）。
+        // `commandReady` 为假时分区整条栏不存在，页面回到改动前的样子。
+        if (this.detailState.commandReady) {
+          HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
+            TabContent() {
+              this.ContentBuilder()
+            }
+            .tabBar(this.ActionBarBuilder())
+          }
+          .width('100%')
+          .height('100%')
+          // 单页签：不存在切换，同时挡住左右滑动手势
+          .scrollable(false)
+          .vertical(false)
+          // 页签栏叠在内容之上 —— 内容压到它下面才会被模糊（三个条件之一）
+          .barOverlap(true)
+          .barHeight(this.actionBarHeight())
+          // 默认的 FOLLOW_SCROLL 会在内容滚过页签栏时画一条分割线，与渐变背板冲突
+          .divider({ mode: DividerMode.NONE })
+          // barOverlap(true) 会把页签栏的默认模糊设成 COMPONENT_THICK；
+          // 渐变模糊要求页签栏自身的模糊为 NONE，这里必须显式关掉
+          .barBackgroundBlurStyle(BlurStyle.NONE)
+          .barBackgroundStyle({
+            maskColor: $r('app.color.brew_action_bar_mask'),
+            maskHeight: this.actionBarMaskHeight(),
+          })
+          // 页签栏上的点击会走一次 Tabs 的切换逻辑；单页签下这次切换没有任何可见效果
+          .animationDuration(0)
+        } else {
+          this.ContentBuilder()
+        }
       } else if (this.detailState.loadingModel.loadingStatus === LoadingStatus.FAILED) {
         LoadingFailedView(this.globalInfoModel.widthBreakpoint, () => {
           this.retry();
@@ -321,6 +461,9 @@ export struct BrewDetailView {
         title: { mainTitle: this.title },
       },
     })
+    // 显式绑定滚动容器：内容嵌在 HdsTabs 的 TabContent 里之后，HDS 不再自动识别它，
+    // 不写这一行标题栏的动态模糊会直接丢失（FAQ faqs-arkui-1095 场景二）。
+    .bindToScrollable([this.scroller])
     .systemBarStyle({
       statusBarContentColor: this.systemColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ?
         StatusBarColorType.WHITE : StatusBarColorType.BLACK
