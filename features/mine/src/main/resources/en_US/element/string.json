@@ -45,6 +45,14 @@
       "value": "Install the full version from the open-source repository"
     },
     {
+      "name": "harmonybrew_install_title",
+      "value": "Install Harmonybrew"
+    },
+    {
+      "name": "harmonybrew_install_desc",
+      "value": "Bring Homebrew's powerful package management to HarmonyOS"
+    },
+    {
       "name": "feedback",
       "value": "feedback"
     },

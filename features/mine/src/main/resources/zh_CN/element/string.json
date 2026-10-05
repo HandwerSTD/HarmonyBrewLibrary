@@ -45,6 +45,14 @@
       "value": "去开源仓库安装全量版本"
     },
     {
+      "name": "harmonybrew_install_title",
+      "value": "去安装 Harmonybrew"
+    },
+    {
+      "name": "harmonybrew_install_desc",
+      "value": "将 Homebrew 强大的包管理能力带入 HarmonyOS"
+    },
+    {
       "name": "feedback",
       "value": "问题与建议"
     },

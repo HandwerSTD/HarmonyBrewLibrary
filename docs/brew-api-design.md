@@ -1568,9 +1568,9 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 | 顺序 | 区块 | 数据 | 说明 |
 |---|---|---|---|
 | 1 | 华为账号 | `AccountService` | 原有 `LOGIN_ITEM`，未改动 |
-| 2 | 激活本机包管理提示卡 | `MineConstant.REPO_URL` | 复用原有的 `USER_EXPERIENCE_CARD`；`pc_normal` 展示、`pc_acl` 隐藏，点击把地址交给系统浏览器 |
+| 2 | 本机包提示卡 | `MineConstant.REPO_URL` / `MineConstant.HARMONYBREW_URL` | 复用原有的 `USER_EXPERIENCE_CARD`；`pc_normal` 展示「激活本机包管理功能」，`pc_acl` 且设备上找不到 brew 时展示「去安装 Harmonybrew」，两者互斥，点击各自把地址交给系统浏览器 |
 | 3 | 内容上新 & 最新公告 | `NewContentModel` / `BulletinModel` | 原有 `CARD_ITEM` + 角标，未改动 |
-| 4 | **已安装** | `BrewInstalledLoader` | 新增。**item 行入口**，右侧显示数量（`HmosListItem` 的 `desc` 槽位）。数据来自设备上的 brew 命令（见 §12.1.1） |
+| 4 | **已安装** | `BrewInstalledLoader` | 新增。**item 行入口**，右侧显示数量（`HmosListItem` 的 `desc` 槽位）。数据来自设备上的 brew 命令（见 §12.1.1）。设备上找不到 brew 时第 4-6 块整块隐藏，由第 2 行的安装提示卡承担提示 |
 | 5 | **待更新** | 同上 | 新增。**大卡片**：图标 + 标题 + 数量 + 前 3 条 + 「查看全部」 |
 | 6 | **已更新** | 同上 | 新增。同上 |
 | 7 | 设置 & 反馈 | `MineSettingBuilder` | 原有，未改动 |

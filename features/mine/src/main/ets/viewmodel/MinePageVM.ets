@@ -28,7 +28,7 @@ import {
   UserAccount,
 } from '@ohos/common';
 import { BaseHomeEventParam, BaseHomeEventType, BaseHomeViewModel } from '@ohos/commonbusiness';
-import { BrewInstalledLoader } from '@ohos/brewcommon';
+import { BrewCli, BrewInstalledLoader } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { MineConstant } from '../constant/CommonConstants';
 import { MineSettingBuilder } from '../view/MineSettingView';
@@ -63,16 +63,30 @@ export function isLocalPackagesEnabled(): boolean {
 export function isLocalPackagesPromoVisible(): boolean {
   return !isLocalPackagesEnabled();
 }
+/**
+ * brew 安装提示卡：能力已开启（pc_acl）但设备上找不到可用的 brew 时展示，点击打开 Harmonybrew 站点。
+ *
+ * `brewCliReady` 由 `MinePageVM` 在进入页面取数前刷新一次，不在本判定里现探：
+ * 探测是同步的，而找不到 brew 的结果不进 `BrewCli` 的进程内缓存。
+ */
+export function isHarmonybrewInstallVisible(brewCliReady: boolean): boolean {
+  return isLocalPackagesEnabled() && !brewCliReady;
+}
 /** 问题与建议入口 */
 export const MINE_SHOW_FEEDBACK: boolean = false;
 
 /** 某个可选区块当前是否展示。未登记的 feature 一律当常显。 */
-export function isMineFeatureVisible(feature: MineFeature): boolean {
+export function isMineFeatureVisible(feature: MineFeature, brewCliReady: boolean): boolean {
   if (feature === MineFeature.LOCAL_PACKAGE) {
-    return isLocalPackagesEnabled();
+    // 设备上找不到 brew 时整块隐藏：三张卡片的内容都来自 brew 命令，没有命令就取不到数据，
+    // 这一状态由「去安装 Harmonybrew」卡片承担提示
+    return isLocalPackagesEnabled() && brewCliReady;
   }
   if (feature === MineFeature.LOCAL_PACKAGES_PROMO) {
     return isLocalPackagesPromoVisible();
+  }
+  if (feature === MineFeature.HARMONYBREW_INSTALL) {
+    return isHarmonybrewInstallVisible(brewCliReady);
   }
   if (feature === MineFeature.FEEDBACK) {
     return MINE_SHOW_FEEDBACK;
@@ -88,7 +102,16 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     type: BuilderEnum.USER_EXPERIENCE_CARD,
     feature: MineFeature.LOCAL_PACKAGES_PROMO,
     onclick: () => {
-      MinePageVM.getInstance().openRepoUrl();
+      MinePageVM.getInstance().openUrl(MineConstant.REPO_URL);
+    },
+  };
+  public harmonybrewInstallItem: MineItem = {
+    textContent: $r('app.string.harmonybrew_install_title'),
+    subTextContent: $r('app.string.harmonybrew_install_desc'),
+    type: BuilderEnum.USER_EXPERIENCE_CARD,
+    feature: MineFeature.HARMONYBREW_INSTALL,
+    onclick: () => {
+      MinePageVM.getInstance().openUrl(MineConstant.HARMONYBREW_URL);
     },
   };
   public listGroupData: ListGroup[] = [
@@ -103,7 +126,7 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     },
     {
       id: 1,
-      group: [this.localPackagesPromoItem],
+      group: [this.localPackagesPromoItem, this.harmonybrewInstallItem],
     },
     {
       id: 2,
@@ -184,6 +207,14 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     }
     this.applyLocalSets(snapshot.sets.installed, snapshot.sets.outdated, snapshot.sets.updated);
   };
+  /**
+   * 设备上有没有可用的 brew（能力开关打开、执行通道可用、候选路径里至少一个可执行）。
+   *
+   * 只在进入「我的」页取数前刷新：判定要走一次同步探测，而找不到 brew 的结果不进
+   * `BrewCli` 的进程内缓存，放进渲染路径会让每次重建列表都重探一遍。
+   * 初始取 true：pc_acl 首帧不会先闪一下安装提示卡。
+   */
+  private brewCliReady: boolean = true;
 
   private constructor() {
     super(new MinePageState());
@@ -234,7 +265,7 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     const visibleGroups: ListGroup[] = [];
     this.listGroupData.forEach((group: ListGroup) => {
       const visibleItems: MineItem[] = group.group.filter((item: MineItem) =>
-      item.feature === undefined || isMineFeatureVisible(item.feature));
+      item.feature === undefined || isMineFeatureVisible(item.feature, this.brewCliReady));
       if (visibleItems.length === 0) {
         return;
       }
@@ -244,6 +275,20 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
       visibleGroups.push(visibleGroup);
     });
     return visibleGroups;
+  }
+
+  /**
+   * 刷新「设备上有没有可用的 brew」，供 brew 安装提示卡的显隐使用。
+   *
+   * 状态没变时不重建列表：`buildVisibleListGroups` 会为每个条目重新构造对象。
+   */
+  private refreshBrewCliReady(): void {
+    const ready: boolean = BrewCli.isReady();
+    if (ready === this.brewCliReady) {
+      return;
+    }
+    this.brewCliReady = ready;
+    this.state.listItemData = this.buildVisibleListGroups();
   }
 
   private updateAccountData(): void {
@@ -275,6 +320,7 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
    * 本机包只是其中三块，不该因为它们读不到就让整个「我的」页变成错误页。
    */
   private loadLocalPackages(): void {
+    this.refreshBrewCliReady();
     BrewInstalledLoader.subscribe(this.snapshotListener);
     const snapshot = BrewInstalledLoader.snapshot();
     if (snapshot !== null) {
@@ -370,18 +416,18 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     })
   }
 
-  /** 打开开源仓库地址。宿主上下文取不到时只记日志，不弹错误提示 */
-  private openRepoUrl(): void {
+  /** 打开外部地址。宿主上下文取不到时只记日志，不弹错误提示 */
+  private openUrl(url: string): void {
     const uiContext = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
     const hostContext = uiContext?.getHostContext();
     if (!hostContext) {
-      Logger.error(TAG, `open repo url failed, cause uiContext or context is undefined.`);
+      Logger.error(TAG, `open url failed, cause uiContext or context is undefined. url=${url}`);
       return;
     }
     const want: Want = {
       action: 'ohos.want.action.viewData',
       entities: ['entity.system.browsable'],
-      uri: MineConstant.REPO_URL,
+      uri: url,
     };
     ProcessUtil.startAbility(hostContext as common.UIAbilityContext, want);
   }

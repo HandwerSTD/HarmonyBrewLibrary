@@ -17,6 +17,8 @@ export class MineConstant {
   public static readonly BUTTON_CLICK_THROTTLE: number = 1000;
   /** 开源仓库地址。本机包提示卡点击后打开这个地址 */
   public static readonly REPO_URL: string = 'https://gitcode.com/handwer/HarmonyBrewLibrary';
+  /** Harmonybrew 站点地址。设备上找不到 brew 时的安装提示卡点击后打开这个地址 */
+  public static readonly HARMONYBREW_URL: string = 'https://harmonybrew.atomgit.com';
   /**
    * 备案号（`app.string.copyright1`）是否在「关于」页展示。
    * 上架审核前先隐藏：点击跳转 beian.miit.gov.cn 的入口随之一起关掉。

@@ -89,10 +89,12 @@ export enum PackageCardType {
  * 新增可下线区块时：这里加一项、VM 里加一条判定。
  */
 export enum MineFeature {
-  /** 本机包：已安装入口 + 待更新 / 已更新预览卡片 */
+  /** 本机包：已安装入口 + 待更新 / 已更新预览卡片（设备上找不到 brew 时整块隐藏） */
   LOCAL_PACKAGE = 'LocalPackage',
   /** 本机包提示卡：本机包管理能力未开启时指到开源仓库的完整版本 */
   LOCAL_PACKAGES_PROMO = 'LocalPackagesPromo',
+  /** brew 安装提示卡：能力已开启但设备上找不到可用的 brew 时指到 Harmonybrew 站点 */
+  HARMONYBREW_INSTALL = 'HarmonybrewInstall',
   /** 问题与建议入口 */
   FEEDBACK = 'Feedback'
 }
