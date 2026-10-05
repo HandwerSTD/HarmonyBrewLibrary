@@ -37,8 +37,12 @@
       "value": "user experience"
     },
     {
-      "name": "user_experience_tips",
-      "value": "Let sample_in_HarmonyOS provide you with a better experience."
+      "name": "local_packages_promo_title",
+      "value": "Enable local package management"
+    },
+    {
+      "name": "local_packages_promo_desc",
+      "value": "Install the full version from the open-source repository"
     },
     {
       "name": "feedback",

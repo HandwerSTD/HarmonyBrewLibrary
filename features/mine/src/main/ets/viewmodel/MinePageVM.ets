@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+import type { common, Want } from '@kit.AbilityKit';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import {
   AccountService,
@@ -21,6 +22,7 @@ import {
   ObservedArray,
   PageContext,
   PageEnum,
+  ProcessUtil,
   StorageKey,
   Toast,
   UserAccount,
@@ -28,6 +30,7 @@ import {
 import { BaseHomeEventParam, BaseHomeEventType, BaseHomeViewModel } from '@ohos/commonbusiness';
 import { BrewInstalledLoader } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
+import { MineConstant } from '../constant/CommonConstants';
 import { MineSettingBuilder } from '../view/MineSettingView';
 import { MinePackagesUtil } from '../util/MinePackagesUtil';
 import type { MinePackageSets } from '../model/MinePackagesModels';
@@ -35,7 +38,6 @@ import { PackageListMode } from '../model/MinePackagesModels';
 import type { MinePackagesParams } from '../model/MinePackagesModels';
 import type { MineItem } from './MinePageState';
 import { BuilderEnum, ListGroup, MineFeature, MinePageState, PackageCardType } from './MinePageState';
-import { QuestionnaireViewBuilder } from '../view/QuestionnaireView';
 
 const TAG: string = '[MinePageVM]';
 
@@ -44,7 +46,7 @@ const TAG: string = '[MinePageVM]';
  *
  * 关掉只影响「是否出现在页面上」，条目定义、取数、子页面路由全部原样保留，
  * 需要展示时把对应开关置为 true 就能整块恢复。
- * 之所以不做成删代码/注释，是因为这几块都是**阶段性下线**，后面还要按用户体验结论重新设计再上。
+ * 之所以不做成删代码/注释，是因为「问题与建议」是**阶段性下线**，后面还要按用户体验结论重新设计再上。
  */
 /**
  * 本机包：已安装入口（含数量）+ 待更新 / 已更新预览卡片。
@@ -54,8 +56,13 @@ const TAG: string = '[MinePageVM]';
 export function isLocalPackagesEnabled(): boolean {
   return AppStorage.get<boolean>(StorageKey.BREW_CLI_ENABLED) ?? false;
 }
-/** 用户体验调研卡片 */
-export const MINE_SHOW_USER_EXPERIENCE: boolean = false;
+/**
+ * 激活本机包管理提示卡：本机包管理能力未开启时（pc_normal）展示，点击打开开源仓库地址；
+ * pc_acl 已经能用本机包，这张卡不出现。
+ */
+export function isLocalPackagesPromoVisible(): boolean {
+  return !isLocalPackagesEnabled();
+}
 /** 问题与建议入口 */
 export const MINE_SHOW_FEEDBACK: boolean = false;
 
@@ -64,8 +71,8 @@ export function isMineFeatureVisible(feature: MineFeature): boolean {
   if (feature === MineFeature.LOCAL_PACKAGE) {
     return isLocalPackagesEnabled();
   }
-  if (feature === MineFeature.USER_EXPERIENCE) {
-    return MINE_SHOW_USER_EXPERIENCE;
+  if (feature === MineFeature.LOCAL_PACKAGES_PROMO) {
+    return isLocalPackagesPromoVisible();
   }
   if (feature === MineFeature.FEEDBACK) {
     return MINE_SHOW_FEEDBACK;
@@ -75,13 +82,14 @@ export function isMineFeatureVisible(feature: MineFeature): boolean {
 
 export class MinePageVM extends BaseHomeViewModel<MinePageState> {
   private static instance: MinePageVM;
-  public userExperienceMineItem: MineItem = {
-    textContent: $r('app.string.user_experience'),
-    subTextContent: $r('app.string.user_experience_tips'),
-    symbolSrc: $r('app.media.userExperience'),
+  public localPackagesPromoItem: MineItem = {
+    textContent: $r('app.string.local_packages_promo_title'),
+    subTextContent: $r('app.string.local_packages_promo_desc'),
     type: BuilderEnum.USER_EXPERIENCE_CARD,
-    feature: MineFeature.USER_EXPERIENCE,
-    builder: wrapBuilder(QuestionnaireViewBuilder),
+    feature: MineFeature.LOCAL_PACKAGES_PROMO,
+    onclick: () => {
+      MinePageVM.getInstance().openRepoUrl();
+    },
   };
   public listGroupData: ListGroup[] = [
     {
@@ -95,7 +103,7 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     },
     {
       id: 1,
-      group: [this.userExperienceMineItem],
+      group: [this.localPackagesPromoItem],
     },
     {
       id: 2,
@@ -360,6 +368,22 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
     pageContext.openPage({
       routerName: PageEnum.MINE_SETTING_VIEW,
     })
+  }
+
+  /** 打开开源仓库地址。宿主上下文取不到时只记日志，不弹错误提示 */
+  private openRepoUrl(): void {
+    const uiContext = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
+    const hostContext = uiContext?.getHostContext();
+    if (!hostContext) {
+      Logger.error(TAG, `open repo url failed, cause uiContext or context is undefined.`);
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      entities: ['entity.system.browsable'],
+      uri: MineConstant.REPO_URL,
+    };
+    ProcessUtil.startAbility(hostContext as common.UIAbilityContext, want);
   }
 }
 

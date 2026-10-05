@@ -85,14 +85,14 @@ export enum PackageCardType {
 }
 
 /**
- * 「我的」页可选区块的归属标记，与 MinePageVM 里的 MINE_SHOW_* 开关一一对应。
- * 新增可下线区块时：这里加一项、VM 里加一个开关常量。
+ * 「我的」页可选区块的归属标记，与 MinePageVM 里的 `isMineFeatureVisible` 判定一一对应。
+ * 新增可下线区块时：这里加一项、VM 里加一条判定。
  */
 export enum MineFeature {
   /** 本机包：已安装入口 + 待更新 / 已更新预览卡片 */
   LOCAL_PACKAGE = 'LocalPackage',
-  /** 用户体验调研卡片 */
-  USER_EXPERIENCE = 'UserExperience',
+  /** 本机包提示卡：本机包管理能力未开启时指到开源仓库的完整版本 */
+  LOCAL_PACKAGES_PROMO = 'LocalPackagesPromo',
   /** 问题与建议入口 */
   FEEDBACK = 'Feedback'
 }

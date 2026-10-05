@@ -37,8 +37,12 @@
       "value": "用户体验调研"
     },
     {
-      "name": "user_experience_tips",
-      "value": "让HMOS代码工坊为你提供更好的体验"
+      "name": "local_packages_promo_title",
+      "value": "激活本机包管理功能"
+    },
+    {
+      "name": "local_packages_promo_desc",
+      "value": "去开源仓库安装全量版本"
     },
     {
       "name": "feedback",

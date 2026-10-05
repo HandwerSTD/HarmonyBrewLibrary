@@ -327,7 +327,7 @@ Harmonybrew 详情不请求网络。目录正文路径是
 
 ### 6.3 Mine（`features/mine`，就地改造）
 
-顺序：华为账号 / 用户体验调研 / 内容上新&最新公告 / **已安装** / **待更新** / **已更新** / 设置。
+顺序：华为账号 / 激活本机包提示卡（`pc_normal`）/ 内容上新&最新公告 / **已安装** / **待更新** / **已更新** / 设置。
 三个包集合口径统一在 `MinePackagesUtil.loadSets()`：
 `installed`（60）/ `outdated`（8）/ `updated`（52 = installed − outdated，按 `installedAt` 倒序）。
 三个入口**共用二级页** `MinePackagesView`，靠路由参数 `mode` 区分。

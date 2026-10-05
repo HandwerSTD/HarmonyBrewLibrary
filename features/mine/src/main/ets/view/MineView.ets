@@ -202,15 +202,8 @@ export struct MineView {
                 UserExperienceCardItem({
                   textContent: item.textContent,
                   subTextContent: item.subTextContent,
-                  onclick: () => {
-                    this.bindSheetItem = item;
-                    this.bindSheetShow = true;
-                  },
-                }) {
-                  if (item.builder) {
-                    item.builder.builder()
-                  }
-                }
+                  onclick: item.onclick,
+                })
               } else {
                 Column() {
                   Divider()

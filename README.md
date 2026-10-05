@@ -19,7 +19,7 @@ BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器
 | **Search** | 本地搜索引擎（零依赖纯函数引擎 + 词表打分），离线可搜 |
 | **Me** | 本机已安装 / 可升级包、数据源切换与连通性状态、页面可选区块开关 |
 
-> 两个 entry 版本的功能差别只有「本机包」这一块：`pc_acl` 在「我的」页展示本机包三块，并读取设备上的 Homebrew 安装记录；`pc_normal` 不申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`，`PcAbility` 向 `AppStorage` 注入 `StorageKey.BREW_CLI_ENABLED = false`，「我的」页不展示本机包入口，本机包取数静默返回空集合。其余页签与页面在两个版本上表现一致。
+> 两个 entry 版本的功能差别只有「本机包」这一块：`pc_acl` 在「我的」页展示本机包三块，并读取设备上的 Homebrew 安装记录；`pc_normal` 不申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`，`PcAbility` 向 `AppStorage` 注入 `StorageKey.BREW_CLI_ENABLED = false`，「我的」页改为展示「激活本机包管理功能」卡片（点击把开源仓库地址 `https://gitcode.com/handwer/HarmonyBrewLibrary` 交给系统浏览器），本机包取数静默返回空集合。其余页签与页面在两个版本上表现一致。
 
 ## 数据来源
 
@@ -68,7 +68,7 @@ keys/                     本机签名材料（已 gitignore，不入库）
 devecocli build --product default    # 产出 pc_acl（完整版 HAP）
 devecocli build --product pc_normal  # 产出 pc_normal（普通版 HAP）
 devecocli build --modules pc_acl     # 只编 pc_acl entry 模块
-devecocli run                        # 编译 + 安装 + 启动（需已连接设备）
+devecocli run --module pc_normal     # 编译 + 安装 + 启动（需已连接设备；两个 entry 模块需显式指定）
 ```
 
 工程级 `build-profile.json5` 里有两个 product：`default` 对应模块 `pc_acl`，`pc_normal` 对应模块 `pc_normal`。
