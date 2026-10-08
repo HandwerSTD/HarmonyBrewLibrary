@@ -1587,15 +1587,17 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 - 执行能力来自 `features/pcnative`（通用 native 能力模块，`ShellUtils` + NAPI）；
 - brew 可执行文件的发现顺序：`HOMEBREW_BREW_FILE` → 固定候选路径
   （`SHELL_BREW_PATH_CANDIDATES`，与执行通道同层，两层共用一份）；
-- 结果在进程内缓存 60 秒（`BREW_INSTALLED_TTL_MS`），不落盘；
+- 结果在进程内缓存（快照新鲜窗口 `BREW_INSTALLED_FRESH_MS`，10 分钟）并写一份盘上快照；
 - 失败分六类（`BrewInstalledFailure`：找不到 brew / 执行能力不可用 / 超时 / 非零退出 /
-  输出解析失败 / 形状不符），分类名进日志，页面走失败态。
+  输出解析失败 / 形状不符），分类名进日志，页面走失败态；
+- 命令输出里的 `formulae` 与 `casks` 两个数组都进模型：本机包列表同时包含已安装的 formula 与
+  cask，筛选 chips 的「Casks」与「更新全部 - Casks」都有数据。
 
 原先读内置 mock（`brew-local-*.json`）的 `BrewLocalModel` 已随 2026-10 的快照下线一并删除，
 `MinePackagesUtil.loadSets()` 从「返回空集」改为转调 `BrewInstalledLoader.loadSets()`；
 `pick` / `filter` / `byName` 与全部 UI 结构未变。
 `BrewInstalledPackage` 模型的每个字段到命令输出的映射见
-`docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md` §6。
+`docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md` §6（formula 与 cask 两张表）。
 
 本机包行（「待更新」「已更新」两张卡片的预览行与「本机包」二级页的行）都可以点进包详情页。
 路由参数由 `MinePackagesUtil.detailParamsOf(pkg)` 统一给出：`token` 取 `name`，`id` 传 0
@@ -1610,14 +1612,14 @@ export const TABS_LIST = LEGACY_TABS_ENABLED ? [...MARKET_TABS, ...LEGACY_TABS] 
 
 | 集合 | 口径 | 数量 |
 |---|---|---|
-| `installed` | 全部已安装（Formulae + Casks），按名称 | 60 |
-| `outdated` | 有新版本可升级，按名称 | 8 |
-| `updated` | `installed` 里**不属于 `outdated`** 的，按 `installedAt` 倒序 | 52 |
+| `installed` | 全部已安装（formulae 与 casks 混在一起），按名称 | 设备实际值 |
+| `outdated` | 有新版本可升级，按名称 | 设备实际值 |
+| `updated` | `installed` 里**不属于 `outdated`** 的，按 `installedAt` 倒序 | 补集 |
 
-`updated` 取补集而不是「全部已安装按 `installedAt` 倒序」，是这次实现里唯一偏离原始选择的地方：
-后者与 `installed` 是同一批 60 个包，两张卡片会列出完全相同的包（只是顺序不同），一眼就能看出重复。
-取补集后 8 + 52 = 60，不重不漏，同时保留「最近更新的排前面」的语义。若这不是想要的口径，改
-`MinePackagesUtil.loadSets()` 一处即可。
+`updated` 取补集而不是「全部已安装按 `installedAt` 倒序」：后者与 `installed` 是同一批包，
+两张卡片会列出完全相同的包（只是顺序不同），一眼就能看出重复。取补集后三个集合不重不漏，
+同时保留「最近更新的排前面」的语义。`outdated` 与 `updated` 都由 `installed` 派生，
+盘上快照只存 `installed` 一份。
 
 ### 12.3 「大卡片」为什么不需要新的渲染架构
 

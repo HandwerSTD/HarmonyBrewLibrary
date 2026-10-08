@@ -35,9 +35,18 @@ export interface BrewFormulaDoc {
   outdated?: boolean;
 }
 
-/** cask 条目。本机不支持 cask，声明它只为在解析时明确丢弃 */
+/** cask 条目。字段名与 `cask/cask.rb` 的 `Cask#to_h` 投影一一对应 */
 export interface BrewCaskDoc {
   token: string;
+  full_token?: string;
+  /** tap 里的当前版本。已安装版本在 `installed` */
+  version?: string;
+  /** 已安装版本 */
+  installed?: string;
+  /** 安装时刻，Unix 秒（`Cask#install_time` 取自 `.metadata/<version>/<时间戳>` 目录名） */
+  installed_time?: number;
+  outdated?: boolean;
+  auto_updates?: boolean;
 }
 
 /** 命令输出整体 */

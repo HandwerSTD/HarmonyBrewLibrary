@@ -47,6 +47,9 @@
 `installedAsDependency` 是现成字段，来源是 `brew info --json=v2 --installed` 输出里最新 keg 的 `installed_on_request`
 （见 2026-10-04 本机包读取 spec §6）。本轮不新增字段、不改解析。
 
+cask 条目不受这条过滤影响：cask 的 JSON 投影里没有 `installed_on_request`，解析层把它归为主动安装
+（`installedAsDependency = false`），所以隐藏依赖包时 cask 一律保留。
+
 2026-10-05 真机读数（`brew info --json=v2 --installed`）：
 
 | 集合 | 全部 | 主动安装 | 作为依赖安装 |
@@ -54,6 +57,9 @@
 | 已安装 | 85 | 11 | 74 |
 | 待更新 | 7 | 5（fd / maven / pandoc / python@3.14 / ripgrep） | 2（cairo / gmp） |
 | 已更新 | 78 | 6（bash / bzip2 / git / llvm-gcc-compat / node / tomcat@9） | 72 |
+
+上面这份数不含 cask（当时解析层丢弃 cask 条目）：加上 cask 之后三个集合的条数与该日期的
+值不再相等，集合的口径本身没有变化。
 
 过滤规则只有一条：保留 `!installedAsDependency` 的包。不按包名判定，不为三个集合各写一份。
 

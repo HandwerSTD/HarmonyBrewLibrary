@@ -5,6 +5,7 @@
 import { Logger, PreferenceManager } from '@ohos/common';
 import { SHELL_ERR_TIMEOUT, ShellUtils } from '@ohos/pcnative';
 import type { ShellResult } from '@ohos/pcnative';
+import { BrewKind } from '../model/BrewModels';
 import type { BrewInstalledPackage } from '../model/BrewModels';
 import {
   BREW_INSTALLED_FRESH_MS,
@@ -38,7 +39,7 @@ export enum BrewInstalledFailure {
 
 /** 三个集合。口径与 `MinePackageSets` 一致，构造在 `buildSets()` 里一次做完 */
 export class BrewInstalledSets {
-  /** 全部已安装，按名称排序 */
+  /** 全部已安装（formula 与 cask 混在一起），按名称排序 */
   public installed: BrewInstalledPackage[] = [];
   /** 有新版本可升级，按名称排序 */
   public outdated: BrewInstalledPackage[] = [];
@@ -95,6 +96,8 @@ interface BrewInstalledSnapshotDoc {
  *
  * 取数方式是一条命令：`<brew> info --json=v2 --installed`，命令行的拼装在 `BrewCli`。
  * 命令与输出形状的依据见 `docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md` §2。
+ * 这一条命令同时返回已安装的 formula 与 cask（`cmd/info.rb` 的 `print_json` 在 `--installed`
+ * 下产出 `{"formulae": [...], "casks": [...]}`），两个数组都进模型与三个集合。
  *
  * 快照：内存一份 + 盘上一份（`brew_installed_snapshot` 键），新鲜窗口 10 分钟。
  * 冷启动先用盘上快照立刻显示，再按窗口决定要不要执行命令 —— 每次 brew 调用都要付
@@ -273,6 +276,7 @@ export class BrewInstalledLoader {
     outcome.sets = BrewInstalledLoader.buildSets(packages);
     Logger.info(TAG, `load ok installed=${outcome.sets.installed.length} ` +
       `outdated=${outcome.sets.outdated.length} updated=${outcome.sets.updated.length} ` +
+      `formula=${countKind(packages, BrewKind.FORMULA)} cask=${countKind(packages, BrewKind.CASK)} ` +
       `ms=${outcome.tookMs} brew=${brewPath}`);
     return outcome;
   }
@@ -400,7 +404,12 @@ export class BrewInstalledLoader {
     }
   }
 
-  /** 三个集合。`updated` 取补集，避免两张卡片列同一批包（与 `MinePackageSets` 的口径一致） */
+  /**
+   * 三个集合。`updated` 取补集，避免两张卡片列同一批包（与 `MinePackageSets` 的口径一致）。
+   *
+   * formula 与 cask 混在同一个集合里：用户看到的是「这台机器上装了什么」，两者由筛选 chips
+   * 与行组件的 `kind` 区分。
+   */
   private static buildSets(packages: BrewInstalledPackage[]): BrewInstalledSets {
     const sets: BrewInstalledSets = new BrewInstalledSets();
     const installed: BrewInstalledPackage[] = packages.slice();
@@ -435,4 +444,15 @@ function compareName(left: string, right: string): number {
 function firstChars(raw: string, limit: number): string {
   const oneLine: string = raw.replace(/\r?\n/g, '\\n');
   return oneLine.length > limit ? oneLine.substring(0, limit) : oneLine;
+}
+
+/** 按类型计数，只用于 `load ok` 一行的日志明细 */
+function countKind(packages: BrewInstalledPackage[], kind: string): number {
+  let count: number = 0;
+  for (const one of packages) {
+    if (one.kind === kind) {
+      count++;
+    }
+  }
+  return count;
 }

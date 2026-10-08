@@ -266,7 +266,7 @@ export interface BrewCaskDetail extends BrewLifecycleInfo {
 /** 详情页统一视图类型（避免 UI 层分别处理两种包） */
 export type BrewPackageDetail = BrewFormulaDetail | BrewCaskDetail;
 
-// ---------------------------------------------------------------- 本机状态（Mine，纯 Mock）
+// ---------------------------------------------------------------- 本机状态（Mine）
 
 export interface BrewInstalledPackage {
   name: string;

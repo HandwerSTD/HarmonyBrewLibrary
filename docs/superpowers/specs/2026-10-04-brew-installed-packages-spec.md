@@ -1,9 +1,9 @@
 # brew 本机包读取方案
 
-> 日期：2026-10-04。状态：待实施。
+> 日期：2026-10-04（2026-10-06 补全 cask）。状态：已实施。
 > 范围：新增通用 native 能力模块 `features/pcnative`（含执行通道探针）；在 `features/brewcommon`
 > 增加本机包读取层；`features/mine` 的 UI 与状态机已经接好，本次只改数据来源。
-> 本机不支持 cask，方案与验证都以 formula 为对象。
+> 一条命令同时返回已安装的 formula 与 cask，两者的字段映射见 §6。
 
 ---
 
@@ -20,7 +20,7 @@ mock 下线提交里转成了空态保壳：`MinePackagesUtil.loadSets()` 恒返
 │   ├── bin/brew                   zsh 脚本，brew 命令入口
 │   └── Library/Homebrew/          命令实现 + vendor/portable-ruby-arm64-ohos
 ├── Cellar/<name>/<version>/       85 个 formula，141 个已安装版本目录
-├── Caskroom/                      空，本机不支持 cask
+├── Caskroom/<token>/<version>/    已安装的 cask（数量随用户的安装情况变）
 ├── bin/                           符号链接到 Cellar 各包的 bin
 ├── opt/ include/ lib/ share/ etc/ sbin/ var/
 ```
@@ -50,6 +50,9 @@ UI 侧现状（已经写好、只等数据）：
    `runtime_dependencies` / `installed_on_request`。
 3. formula 条目顶层还带 `outdated` / `pinned` / `linked_keg` / `versions.stable`，
    所以**不需要**再跑一条 `brew outdated`，待更新集合直接从这一份结果派生。
+4. `cask/cask.rb:555` 的 `Cask#to_h` 给出 cask 条目的字段（`token` / `full_token` / `tap` /
+   `version` / `installed` / `installed_time` / `outdated` / `auto_updates`），同样带 `outdated`。
+   注意它不产出 `installed_on_request`（那个只在 `Cask::Tab` 的 receipt 文件里）。
 
 `brew list --json` 不使用：`list.rb:95` 要求必须配 `--versions`、不接受具名参数，只由 fast Bash
 路径提供并依赖 `jq`，信息还比 `info --json=v2` 少。
@@ -277,8 +280,12 @@ features/brewcommon/src/main/ets/util/BrewInstalledParser.ets      解析成 Bre
 
 ## 6. 字段映射
 
-`BrewInstalledPackage`（`BrewModels.ets:271`）的每个字段都有来源。来源是 `formulae[i]` 与它的
-`installed[j]`（取 `installed` 数组里版本最新的那个 keg）。
+`BrewInstalledPackage`（`BrewModels.ets:271`）的每个字段都有来源。命令输出里的 `formulae`
+与 `casks` 两个数组都进模型，解析分别在 `BrewInstalledParser.formulaOf` / `caskOf`。
+
+### 6.1 formula
+
+来源是 `formulae[i]` 与它的 `installed[j]`（取 `installed` 数组里版本最新的那个 keg）。
 
 | 模型字段 | 来源 | 说明 |
 | --- | --- | --- |
@@ -297,12 +304,31 @@ features/brewcommon/src/main/ets/util/BrewInstalledParser.ets      解析成 Bre
 `installedAt` 的回落：`time` 缺失或不在 `[10^9, 4×10^9)` 区间时，取
 `Cellar/<name>/<version>/` 目录的修改时间。
 
-cask 条目全部丢弃：本机不支持 cask，`casks` 数组即使非空也不进模型。
+### 6.2 cask
 
-### 6.1 三个集合
+来源是 `casks[i]`，字段名与 `Library/Homebrew/cask/cask.rb` 的 `Cask#to_h` 投影一一对应。
+
+| 模型字段 | 来源 | 说明 |
+| --- | --- | --- |
+| `name` | `casks[i].token` | 与 formula 的 `name` 同一口径（不带 tap 前缀），筛选项与详情页路由因此共用 |
+| `fullName` | `casks[i].full_token` | 缺失时回退 `token` |
+| `version` | `casks[i].installed` | 已安装版本。**cask 的顶层 `version` 是 tap 里的当前版本**，不是已安装版本，两者在待更新时不同 |
+| `latestVersion` | `casks[i].version` | 行组件的 `brew_version_delta` 靠它显示「已装 → 可升级」，口径与 formula 的 `versions.stable` 一致 |
+| `installedOnRequest` | 固定 `true` | `Cask#to_h` 不产出 `installed_on_request`（它只在 `Cask::Tab` 的 receipt 文件里）。cask 的依赖关系由 `depends_on` 表达，投影里读不到「作为依赖装上」 |
+| `installedAsDependency` | 固定 `false` | 因此「隐藏依赖包」chip 不会把 cask 藏起来 |
+| `outdated` | `casks[i].outdated` | |
+| `kind` | 固定 `'cask'` | `BrewKind.CASK` |
+| `installedAt` | `casks[i].installed_time` | Unix 秒，取自 `Caskroom/<token>/.metadata/<version>/<时间戳>/` 的目录名（`Cask#install_time`） |
+| `pouredFromBottle` | 固定 `true` | cask 的产物一律是从 `url` 下载好的构件，没有从源码构建的形式。全仓库无 UI 消费点 |
+| `autoUpdates` | `casks[i].auto_updates` | 投影里有这个字段（`auto_updates true` 的应用会自己更新自己，`brew upgrade` 默认跳过） |
+
+没有 token、或没有已安装版本的 cask 条目返回 `null`，跳过而不计入失败。
+`installed_time` 缺失或不在 `[10^9, 4×10^9)` 区间时同样取 0（「不知道什么时候装的」）。
+
+### 6.3 三个集合
 
 ```
-installed = 全部条目，按 name 排序
+installed = 全部条目（formula + cask），按 name 排序
 outdated  = installed 里 outdated 为真，按 name 排序
 updated   = installed - outdated，按 installedAt 倒序
 ```
@@ -349,11 +375,14 @@ updated   = installed - outdated，按 installedAt 倒序
 ## 8. 上机验证顺序
 
 1. 构建：`devecocli build`，`ERROR` 计数为 0。
-2. 执行通道探针：打开 `SHELL_VERIFY`，九条用例全绿（§4.1、§4.3）。
-3. brew 自检：打开 `BREW_INSTALLED_VERIFY`，六条判据全绿（§5.6）。
-4. 「我的 - 本机包」二级页三个筛选下的条目数与顺序符合 §6.1；待更新集合与设备上
-   `brew outdated` 的输出一致。
-5. 失败路径：把 brew 路径候选全部改成不存在的路径，页面走失败态且日志分类为 `BREW_NOT_FOUND`。
+2. 「我的 - 本机包」二级页三个筛选下的条目数与顺序符合 §6.3；待更新集合与设备上
+   `brew outdated --cask` 的输出一致（不带 `--cask` 时看不到 cask 侧的过时包）。
+3. cask 侧：二级页切到「Casks」筛选时有条目，行展示已装版本，点行能进 cask 详情页。
+4. 失败路径：把 brew 路径候选全部改成不存在的路径，页面走失败态且日志分类为 `BREW_NOT_FOUND`。
+
+取数与失败判据全在日志里：成功看 `[BrewInstalled] load ok` 一行（`installed` / `outdated` /
+`updated` / `formula` / `cask` / `ms` 六个计数），失败看 `[BrewInstalled] load failed reason=…`
+（分类名取 §5.5 的六种）。
 
 ---
 
@@ -363,5 +392,6 @@ updated   = installed - outdated，按 installedAt 倒序
 | --- | --- |
 | 执行通道的可用范围 | `shell_hook.cpp` 调用的能力由设备侧提供。C6（执行绝对路径的二进制）与 C7（读沙箱外文件）能否成立由第 2 步验证；不成立则按 §4.2 换路径 |
 | 命令耗时 | 首次调用要拉起 vendored Ruby，实测耗时未知；30 秒超时是上限，实际值在第 3 步记录 |
-| `time` 的语义 | 已用 receipt 与文件修改时间交叉验证为 Unix 秒；异常值按 §6 的区间判定回落目录修改时间 |
-| cask | 本机不支持，不实现、不验证 |
+| `time` / `installed_time` 的语义 | 已用 receipt 与文件修改时间交叉验证为 Unix 秒；异常值按 §6.3 的区间判定取 0（不显示时间） |
+| cask 的「主动安装 / 作为依赖」 | `Cask#to_h` 不产出 `installed_on_request`，投影里读不到这个状态，一律按主动安装处理（§6.2）。若上游日后把它加进投影，改 `caskOf` 一处 |
+| cask 的 `installed_time` | 取自 `.metadata/<version>/<时间戳>/` 目录名，由 `Cask#install_time` 用 `Time.strptime` 解析；目录名格式变了就取不到，按 0 处理 |

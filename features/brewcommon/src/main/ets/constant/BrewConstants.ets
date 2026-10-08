@@ -195,10 +195,14 @@ export const BREW_INSTALLED_FRESH_MS: number = 10 * 60 * 1000;
 export const BREW_INSTALLED_SNAPSHOT_KEY: string = 'brew_installed_snapshot';
 
 /**
- * 快照的形状版本。**结构一变就 +1**，读盘时版本对不上整份按「没有快照」处理。
+ * 快照的形状版本。**结构或口径一变就 +1**，读盘时版本对不上整份按「没有快照」处理。
+ *
  * 盘上只存 `installed` 一个集合，`outdated` 与 `updated` 读时派生。
+ *
+ * 由 1 升到 2（2026-10-06）：版本 1 的盘上快照只有 formula（解析器当时丢弃 cask 条目），
+ * 沿用会让升级后的首次启动先显示一份缺 cask 的列表，等下一次读取才补上。
  */
-export const BREW_INSTALLED_SNAPSHOT_VERSION: number = 1;
+export const BREW_INSTALLED_SNAPSHOT_VERSION: number = 2;
 
 /**
  * 本机包命令的超时。
