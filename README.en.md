@@ -6,7 +6,7 @@ BrewLibrary is a **HarmonyOS PC (2in1)** app for browsing Homebrew packages: it 
 
 - Device type: 2in1 (PC) only, minimum window 1080 × 608
 - Compile target: HarmonyOS 6.1.0 (API 23), hvigor model 5.0.0
-- Version: 1.2.0
+- Version: 1.3.0
 - Stack: ArkTS / ArkUI (Stage model), two entry modules: `products/pc_acl` (full build, requests `CUSTOM_SANDBOX` and `READ_WRITE_USER_FILE`) and `products/pc_normal` (no restricted permissions)
 
 > 中文说明见 [README.md](README.md)。
