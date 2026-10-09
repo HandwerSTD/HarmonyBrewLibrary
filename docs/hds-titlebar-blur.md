@@ -156,7 +156,8 @@ this.state.sections.splice(0, this.state.sections.length(),
   - 前三个用 `brewTitleBarStyle('detail' | 'discover-board' | 'mine-packages')`
   - Casks 页走"覆写基类 + 只补区间"
 - 区间：`[0, 104]`
-- 让位：内层 `Column` 的 `margin`；容器 `padding` 全部去掉
+- 让位：内层 `Column` 的 `margin`；容器 `padding` 全部去掉（底部可能还有一段
+  `Scroll.contentEndOffset`，那是悬浮操作栏占的高度）
 
 ```typescript
 Scroll() {
@@ -326,7 +327,7 @@ Scroll() {
 | Casks | Scroll | 同上 | `[0,104]` | 内层 Column `margin` | ✅ |
 | 包详情页 | `HdsTabs`（只有一页，页签栏 = 底部主操作栏）→ `Scroll` | `brewTitleBarStyle('detail')` + `bindToScrollable([scroller])` | `[0,104]` | 内层 Column `margin`（顶部）+ `Scroll.contentEndOffset`（底部让主操作栏） | ✅ |
 | 榜单二级页 | Scroll | `brewTitleBarStyle('discover-board')` | `[0,104]` | 内层 Column `margin` | ✅ |
-| 我的-本机包 | Scroll | `brewTitleBarStyle('mine-packages')` | `[0,104]` | 内层 Column `margin`（+ chips 让位 112） | ✅ |
+| 我的-本机包 | 待更新模式有操作栏时 `HdsTabs`（单页签，页签栏 = 悬浮「更新全部」）→ `Scroll`；其余模式直接 `Scroll` | `brewTitleBarStyle('mine-packages')` + `bindToScrollable([scroller])` | `[0,104]` | 内层 Column `margin`（+ chips 让位 112）+ `Scroll.contentEndOffset`（底部让主操作栏） | ✅ |
 | 我的 `MineView` | Scroll | `brewTitleBarStyle('mine')` | `[0,104]` | 内层 Column `margin` | ✅ |
 | 公告 `BulletinView` | List | 内联（无区间） | 默认 `[0,8]` | 外层 Stack `padding` | ⚠️ 无渐变 + 内容被裁剪 |
 | 组件详情 / 代码预览 | Scroll / Web | 内联（无区间） | 默认 `[0,8]` | 容器 `padding` | ⚠️ 同上（`getEnableScrollEffect()` 在 sm 档还返回 false） |
@@ -334,9 +335,12 @@ Scroll() {
 | 内容上新 / 实践详情 | List | 内联 `enableScrollEffect: false` | — | — | ❌ 刻意关闭 |
 
 包详情页自 2026-10-05 起在 `HdsTabs` 的 `TabContent` 里放内容，页签栏就是底部主操作栏
-（白色渐变遮罩 + 唯一的主操作按钮，模糊已关）。**嵌了 `HdsTabs` 之后，标题栏模糊不再能靠 HDS
-自动识别滚动容器，必须显式绑定** —— 页面持有一个 `Scroller` 交给 `Scroll`，并在
-`HdsNavDestination` 上写 `.bindToScrollable([this.scroller])`，否则模糊直接丢失
+（白色渐变遮罩 + 唯一的主操作按钮，模糊已关）。「我的 - 本机包」页的「更新全部」自 2026-10-08 起
+改成同样的形态：同一个 `HdsTabs` 结构、同一份取值（`BrewActionBar`）、同一个遮罩颜色，
+只是那条栏只在待更新模式且当前筛选下有包时出现（没有栏时页面结构与改动前一致）。
+**嵌了 `HdsTabs` 之后，标题栏模糊不再能靠 HDS 自动识别滚动容器，必须显式绑定** ——
+两个页面各自持有一个 `Scroller` 交给 `Scroll`，并在 `HdsNavDestination` 上写
+`.bindToScrollable([this.scroller])`，否则模糊直接丢失
 （与 §3 场景 H 同一个原因，官方 FAQ `faqs-arkui-1095` 场景二）。
 只有一页，不需要「切页时重新绑」与「存档/恢复滚动位置」那两步。
 

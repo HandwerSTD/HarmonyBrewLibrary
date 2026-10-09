@@ -17,6 +17,7 @@ import type { BusinessError } from '@kit.BasicServicesKit';
 import { LoadingModel, LoadingStatus, Logger, Toast } from '@ohos/common';
 import {
   BrewChipItem,
+  BrewCli,
   BrewCommandGenerator,
   BrewCommandRequest,
   BrewCommandRunner,
@@ -82,6 +83,9 @@ export class MinePackagesVM {
   public load(mode: PackageListMode): void {
     this.state.mode = mode;
     this.state.filterIndex = FILTER_ALL;
+    // 有没有可用的 brew 每次进页重算：`BrewCli.brewPath()` 有进程内缓存，第二次起是纯读内存。
+    // 刷新按钮与 brew 可用性同源，能力关闭或找不到 brew 时它不渲染。
+    this.state.brewReady = BrewCli.isReady();
     // 隐藏 chip 的值三页共用（`MinePackagePrefs`），所以每次进入都从存储读一次，
     // 在别的页面切过 chip 之后进来看到的就是同一个状态。
     this.state.hideDependencies = MinePackagePrefs.hideDependency();
@@ -124,6 +128,34 @@ export class MinePackagesVM {
 
   public unsubscribeSnapshot(): void {
     BrewInstalledLoader.unsubscribe(this.snapshotListener);
+  }
+
+  /**
+   * 顶部刷新按钮：跳过新鲜窗口，立即重跑一次本机包读取，并按当前模式与筛选重算列表。
+   *
+   * 成功时不重置 chips 与隐藏 chip（`load()` 会重置，这里不能调它），只把新的集合填回状态。
+   * 失败时保留列表里已有的数据：用户点的是一次刷新，不该把已经看到的列表清空 ——
+   * 失败以 Toast 告知，真机上也能从 `[MinePackagesVM] refresh failed` 那一行看到原因。
+   * brew 能力关闭时直接返回：此时 `loadSets` 会返回空集合，刷一下会把列表刷成空。
+   */
+  public refresh(): void {
+    if (this.state.refreshing || !BrewCli.isEnabled()) {
+      return;
+    }
+    this.state.refreshing = true;
+    Logger.info(TAG, `refresh start, mode=${this.state.mode}`);
+    MinePackagesUtil.loadSets(true)
+      .then((sets) => {
+        this.applySets(sets);
+        Logger.info(TAG, `refresh success, mode=${this.state.mode} count=${this.state.packages.length}`);
+        this.state.refreshing = false;
+      })
+      .catch((error: BusinessError) => {
+        // 与整页加载不同：这里不把页面改成失败态，旧列表继续用
+        Logger.error(TAG, `refresh failed. reason=${error.message} code=${error.code}`);
+        Toast.showToast($r('app.string.mine_refresh_failed'));
+        this.state.refreshing = false;
+      });
   }
 
   /** 本次「更新全部」要发出的参数，跟随筛选 chips（0 全部 / 1 Formulae / 2 Casks） */

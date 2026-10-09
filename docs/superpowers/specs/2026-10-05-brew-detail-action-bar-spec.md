@@ -95,6 +95,10 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 
 页签栏上方的渐变区是 HDS 自己画的，不吃触摸，所以那里仍然可以滚动内容。
 
+**同一套结构与取值在「我的 - 待更新」页的「更新全部」上复用**（2026-10-08）：两个页面各自
+写一份 `HdsTabs` 配置，但栏高、遮罩高度、按钮尺寸与遮罩颜色都来自 `BrewActionBar` 与
+`features/brewcommon` 的 `brew_action_bar_mask`，一侧改了另一侧跟着变。
+
 `HdsTabs` 嵌进 `HdsNavDestination` 之后，标题栏的动态模糊不能再靠 HDS 自动识别滚动容器（FAQ `faqs-arkui-1095` 场景二正是这个问题），
 必须显式绑定：页面新增一个 `Scroller` 交给 `Scroll`，并在 `HdsNavDestination` 上写 `.bindToScrollable([this.scroller])`。
 只有一页，那篇 FAQ 里的 `onWillHide` 存档与 `onAnimationStart` 恢复滚动位置都不需要。
@@ -118,9 +122,9 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 
 | 项 | 取值 | 依据 |
 | --- | --- | --- |
-| 栏高 | 56vp（`ACTION_BAR_HEIGHT`），设备有底部导航条时再加 `naviIndicatorHeight` | 与 `CommonConstants.NAVIGATION_HEIGHT` / `TAB_BAR_HEIGHT` 同值，和标题栏同高；按钮上下各留 8vp |
-| 遮罩颜色 | `$r('app.color.brew_action_bar_mask')`：浅色 `#CCFFFFFF`、深色 `#CC000000` | 去掉模糊后由遮罩自己压住底下的内容，取值与 HDS 页签栏默认蒙层（浅色 `#CCFFFFFF`、深色 `#CC000000`）同值 |
-| 遮罩渐变长度 | 32vp（`ACTION_BAR_MASK_LENGTH`），`maskHeight` = 栏高 + 32 | HDS 页签栏渐变遮罩的默认渐变长度（页签栏高度 + 32vp）。遮罩总高 = 栏高 56 + 32 = 88vp；比这更高会让底部大片被白纱盖住 |
+| 栏高 | 56vp（`BREW_ACTION_BAR_HEIGHT`），设备有底部导航条时再加 `naviIndicatorHeight` | 与 `CommonConstants.NAVIGATION_HEIGHT` / `TAB_BAR_HEIGHT` 同值，和标题栏同高；按钮上下各留 8vp |
+| 遮罩颜色 | `$r('app.color.brew_action_bar_mask')`：浅色 `#CCFFFFFF`、深色 `#CC000000` | 去掉模糊后由遮罩自己压住底下的内容，取值与 HDS 页签栏默认蒙层（浅色 `#CCFFFFFF`、深色 `#CC000000`）同值。颜色定义在 `features/brewcommon`，与「我的 - 待更新」页共用 |
+| 遮罩渐变长度 | 32vp（`BREW_ACTION_BAR_MASK_GRADIENT`），`maskHeight` = 栏高 + 32 | HDS 页签栏渐变遮罩的默认渐变长度（页签栏高度 + 32vp）。遮罩总高 = 栏高 56 + 32 = 88vp；比这更高会让底部大片被白纱盖住 |
 | 栏的水平范围 | 满宽（页签栏宽度） | 页签栏本身满宽 |
 | 模糊 | 关（`barBackgroundBlurStyle(BlurStyle.NONE)` + `blurStrategy(BlurStrategy.DISABLE)`） | 需求给定：只保留白色渐变遮罩 |
 
@@ -128,13 +132,13 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 
 | 项 | 取值 | 依据 |
 | --- | --- | --- |
-| 宽度 | 内容区宽度的 60%（`ACTION_BUTTON_WIDTH = '60%'`），上限 448vp（`ACTION_BUTTON_MAX_WIDTH`） | 需求给定；构建器的根 `Row` 左右都用本页的 `contentLeft()`（本页左右同值，与 `Scroll` 内层 Column 的左右内缩同源），按钮的 60% 因此是内容区宽度的 60%。上限 448vp 由参考图估算：623px ↔ 328vp、851px ↔ 448vp，同一比例下按钮高度 76px ↔ 40vp |
-| 高度 | 40vp（`ACTION_BUTTON_HEIGHT`） | 栏高 56vp 减上下各 8vp |
-| 下沿到栏底 | 额外 16vp（`ACTION_BUTTON_BOTTOM_EXTRA`） | 需求给定：按钮垂直居中时离底边偏近，额外留 16vp 把按钮抬起来 |
+| 宽度 | 内容区宽度的 60%（`BREW_ACTION_BUTTON_WIDTH = '60%'`），上限 448vp（`BREW_ACTION_BUTTON_MAX_WIDTH`） | 需求给定；构建器的根 `Row` 左右都用本页的 `contentLeft()`（本页左右同值，与 `Scroll` 内层 Column 的左右内缩同源），按钮的 60% 因此是内容区宽度的 60%。上限 448vp 由参考图估算：623px ↔ 328vp、851px ↔ 448vp，同一比例下按钮高度 76px ↔ 40vp |
+| 高度 | 40vp（`BREW_ACTION_BUTTON_HEIGHT`） | 栏高 56vp 减上下各 8vp |
+| 下沿到栏底 | 额外 16vp（`BREW_ACTION_BUTTON_BOTTOM_EXTRA`） | 需求给定：按钮垂直居中时离底边偏近，额外留 16vp 把按钮抬起来 |
 | 圆角 | 系统默认（`ButtonType.ROUNDED_RECTANGLE`，本机实测渲染约 6vp），不设 `borderRadius` | 需求给定：不用自定义圆角 |
 | 文字 | `$r('sys.float.Body_L')` + `FontWeight.Medium` | 主操作按钮的字号 |
 | 底色与文字色 | 可点时 `$r('sys.color.ohos_id_color_emphasize')` + `$r('sys.color.font_on_primary')`；「已安装」（不可点）时 `$r('sys.color.comp_background_tertiary')` + `$r('sys.color.font_tertiary')` | 强调蓝用项目已有的强调色 token；「已安装」表达的是状态，沿用现在的次要配色 |
-| 底部内边距 | 栏高那一行加 `padding.bottom = naviIndicatorHeight + ACTION_BUTTON_BOTTOM_EXTRA` | 有底部导航条时按钮在栏内上移，不压在导航条上；再额外抬高 16vp |
+| 底部内边距 | 栏高那一行加 `padding.bottom = naviIndicatorHeight + BREW_ACTION_BUTTON_BOTTOM_EXTRA` | 有底部导航条时按钮在栏内上移，不压在导航条上；再额外抬高 16vp |
 
 按钮状态（文案与可点性沿用 `2026-10-04-brew-command-execution-spec.md` §3.2，逐字不变）：
 
@@ -154,7 +158,7 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 `Scroll` 再补上操作栏占的那一段：
 
 ```ets
-.contentEndOffset(this.detailState.commandReady ? ACTION_BAR_HEIGHT : 0)
+.contentEndOffset(this.detailState.commandReady ? BREW_ACTION_BAR_HEIGHT : 0)
 ```
 
 两段之和即内容末尾与窗口底边的距离：有操作栏时是 24 + 56（操作栏上沿到最后一张卡片 24vp），
@@ -169,7 +173,9 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 | --- | --- |
 | `features/brewdetail/src/main/ets/component/BrewInfoSectionView.ets` | `BrewInstallCommandCard` 去掉按钮：入参只剩 `command`，标题行的 `Row` + `Blank()` + `Button` 收成一个 `Text` |
 | `features/brewdetail/src/main/ets/view/BrewDetailView.ets` | 新增 `scroller`、`ActionBarBuilder()`（按钮）、`actionBarHeight()` / `actionBarMaskHeight()`；成功态按 `commandReady` 分成「`HdsTabs` 包一层 `ContentBuilder()`」与「直接放 `ContentBuilder()`」两条；`HdsNavDestination` 上补 `bindToScrollable`；新增判据日志 |
-| `features/brewdetail/src/main/resources/base/element/color.json` + `dark/element/color.json` | 新增 `brew_action_bar_mask`（浅色 `#33FFFFFF`、深色 `#33000000`） |
+| `features/brewcommon/src/main/ets/constant/BrewActionBar.ets`（新增） | 操作栏取值、两个高度函数、判据日志 —— 与「我的 - 待更新」页共用一份 |
+| `features/brewcommon/src/main/resources/base/element/color.json` + `dark/element/color.json` | 承接 `brew_action_bar_mask`（浅色 `#CCFFFFFF`、深色 `#CC000000`） |
+| `features/brewdetail/src/main/resources/base/element/color.json` + `dark/element/color.json` | 删除（颜色已收到 `features/brewcommon`） |
 | `docs/superpowers/specs/2026-10-04-brew-command-execution-spec.md` §3.2 | 「位置」一段改成底部操作栏（文案表与点击行为不动） |
 | `docs/brew-api-design.md` §5.3 分区 2 | 「主操作：命令 + 复制」与「主操作按钮在底部操作栏」分开写 |
 | `docs/hds-titlebar-blur.md` §6 | 包详情页那一行的让位说明补上底部操作栏 |
@@ -181,7 +187,7 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 操作栏渲染时打一行（每个页面实例一行，取值直接写进格式串，不需要探针）：
 
 ```
-[BrewActionBar], action bar: height=56 mask=88 gradient=32 button=60% max=448 navi=0 breakpoint=lg
+[BrewActionBar], action bar: page=detail height=56 mask=88 gradient=32 button=60% max=448 navi=0 breakpoint=lg
 ```
 
 `mask` − `height` 必须等于 `gradient`（32），`height` 必须等于 56 + `navi`；对不上说明两个高度用了不同的来源。
@@ -212,6 +218,8 @@ devecocli build --product pc_normal
 ## 8. 范围外
 
 - 按钮的文案、可点性、命令参数与执行 Sheet 的行为。
-- 「我的 - 本机包」页的「更新全部」按钮（它在内容区底部的一行里，不是悬浮层）。
 - 标题栏的模糊区间与顶部让位量。
 - 详情页失败态与「未找到」态的布局。
+
+「我的 - 待更新」页的「更新全部」于 2026-10-08 改成同一条悬浮操作栏，取值与遮罩颜色都取自
+`BrewActionBar`；那个页面的改动（操作栏、顶部刷新按钮、强制刷新）见 `docs/brew-handover.md` §6.3。

@@ -351,6 +351,14 @@
     {
       "name": "brew_source_edit_url_confirm",
       "value": "Changing the address clears this source's local cache."
+    },
+    {
+      "name": "mine_refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "mine_refresh_failed",
+      "value": "Could not read local packages"
     }
   ]
 }

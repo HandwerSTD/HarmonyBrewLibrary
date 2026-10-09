@@ -234,6 +234,8 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
       if (isLocalPackagesEnabled()) {
         this.loadLocalPackages();
       }
+    } else if (eventType === MineEventType.REFRESH_LOCAL_PACKAGES) {
+      this.refreshLocalPackages();
     } else if (eventType === MineEventType.INIT_DATA) {
       this.assignData();
     } else if (eventType === MineEventType.LOGIN) {
@@ -284,6 +286,9 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
    */
   private refreshBrewCliReady(): void {
     const ready: boolean = BrewCli.isReady();
+    // 刷新按钮的显隐依据，与下面「要不要重建列表」是两件事：能力开关会在会话中变化
+    // （设备上装了 brew 之后 `isReady()` 会变成真），而列表只有在真的重建时才会跟着换。
+    this.state.localPackagesReady = isLocalPackagesEnabled() && ready;
     if (ready === this.brewCliReady) {
       return;
     }
@@ -339,6 +344,32 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
         this.state.updatedPackages = [];
         this.state.packagesLoading = false;
         Logger.error(TAG, `loadLocalPackages failed. ${error.code} ${error.message}`);
+      });
+  }
+
+  /**
+   * 顶部刷新按钮：跳过新鲜窗口，立即重跑一次本机包读取，并把结果填回三块内容。
+   *
+   * 失败时保留页面上已有的数量与两张卡片：用户点的是一次刷新，不该把已经看到的内容清空。
+   * 失败以 Toast 告知；原因进日志。能力关闭时直接返回 —— 那种环境下 `loadSets` 返回空集合，
+   * 刷一下会把三块内容刷成空。
+   */
+  private refreshLocalPackages(): void {
+    if (this.state.packagesRefreshing || !isLocalPackagesEnabled()) {
+      return;
+    }
+    this.state.packagesRefreshing = true;
+    Logger.info(TAG, 'refreshLocalPackages start');
+    MinePackagesUtil.loadSets(true)
+      .then((sets: MinePackageSets) => {
+        this.applyLocalSets(sets.installed, sets.outdated, sets.updated);
+        Logger.info(TAG, `refreshLocalPackages success, installed=${sets.installed.length}`);
+        this.state.packagesRefreshing = false;
+      })
+      .catch((error: BusinessError) => {
+        Logger.error(TAG, `refreshLocalPackages failed. ${error.code} ${error.message}`);
+        Toast.showToast($r('app.string.mine_refresh_failed'));
+        this.state.packagesRefreshing = false;
       });
   }
 
@@ -436,6 +467,7 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
 export enum MineEventType {
   INIT_DATA = 'initData',
   LOAD_LOCAL_PACKAGES = 'loadLocalPackages',
+  REFRESH_LOCAL_PACKAGES = 'refreshLocalPackages',
   LOGIN = 'login',
   LOGOUT = 'logout',
   UPDATE_ACCOUNT_DATA = 'updateAccountData',

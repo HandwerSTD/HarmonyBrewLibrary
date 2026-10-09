@@ -33,6 +33,20 @@ export class MinePageState extends BaseHomeState {
    * 不区分「还没读到」与「真的一个都没有」会把空态文案先闪一下。
    */
   public packagesLoading: boolean = false;
+  /**
+   * 顶部刷新按钮是否正在刷新。
+   *
+   * 与 `packagesLoading` 分开：刷新时三块内容里已经有数据，把它换成占位是多余的一次闪屏。
+   * 刷新期间按钮置灰，重复点不会发出第二条命令。
+   */
+  public packagesRefreshing: boolean = false;
+  /**
+   * 本机包区块是否已经可用（能力开关打开、且设备上找得到 brew）。
+   *
+   * 顶部刷新按钮的显隐与「本机包三块内容」的显隐同源：没有 brew 或不支持本机包时不发
+   * `brew info`，刷新按钮也不该出现 —— 它在那种环境里什么都刷不出来。
+   */
+  public localPackagesReady: boolean = false;
   public isLogin: boolean = false;
   public isShowAccountInfo: boolean = false;
   public nickName: string = '';

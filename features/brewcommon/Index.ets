@@ -145,6 +145,20 @@ export {
 
 export { BrewFormat } from './src/main/ets/util/BrewFormat';
 
+// 底部悬浮操作栏的取值（栏高 / 遮罩渐变长度 / 按钮尺寸）与判据日志。
+// 包详情页与「我的 - 待更新」页共用 —— 两条栏长得一样只由这一处保证。
+export {
+  BREW_ACTION_BAR_HEIGHT,
+  BREW_ACTION_BAR_MASK_GRADIENT,
+  BREW_ACTION_BUTTON_BOTTOM_EXTRA,
+  BREW_ACTION_BUTTON_HEIGHT,
+  BREW_ACTION_BUTTON_MAX_WIDTH,
+  BREW_ACTION_BUTTON_WIDTH,
+  brewActionBarHeight,
+  brewActionBarMaskHeight,
+  brewLogActionBar,
+} from './src/main/ets/constant/BrewActionBar';
+
 // 冷启动各数据类型的加载打点（`[load] kind=… reason=… ms=… at=…`）。
 // 格式与 reason 词表的读法都在该文件头部；改格式只改这一处。
 export { BrewLoadLog } from './src/main/ets/util/BrewLoadLog';

@@ -30,13 +30,15 @@ export class MinePackagesUtil {
    * 数据来自设备上的 brew 命令（`brew info --json=v2 --installed`），
    * 由 `BrewInstalledLoader` 负责执行、解析与进程内缓存。
    *
+   * `force` 为真时跳过新鲜窗口，立即重跑一次命令 —— 页面上的刷新按钮用它。
+   *
    * 读取失败会抛异常，失败分类在 `error.message` 里；调用方转成页面的失败态。
    * 「我的」页的 `loadLocalPackages` 只记日志不改成错误态（本机包只是整页的一部分），
    * 二级页 `MinePackagesVM` 则把它当作整页失败。
    */
-  public static async loadSets(): Promise<MinePackageSets> {
+  public static async loadSets(force: boolean = false): Promise<MinePackageSets> {
     const sets: MinePackageSets = new MinePackageSets();
-    const loaded: BrewInstalledSets = await BrewInstalledLoader.loadSets();
+    const loaded: BrewInstalledSets = await BrewInstalledLoader.loadSets(force);
     sets.installed = loaded.installed;
     sets.outdated = loaded.outdated;
     sets.updated = loaded.updated;

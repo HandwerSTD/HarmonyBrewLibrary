@@ -15,7 +15,7 @@
 
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { LengthMetrics } from '@kit.ArkUI';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { BlurStrategy, DividerMode, HdsNavDestination, HdsTabs } from '@kit.UIDesignKit';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
 import {
   BreakpointType,
@@ -28,18 +28,26 @@ import {
   PageEnum,
   StatusBarColorType,
   StorageKey,
+  WIDTH_BREAKPOINTS,
 } from '@ohos/common';
 import {
+  BREW_ACTION_BAR_HEIGHT,
+  BREW_ACTION_BUTTON_BOTTOM_EXTRA,
+  BREW_ACTION_BUTTON_HEIGHT,
+  BREW_ACTION_BUTTON_MAX_WIDTH,
+  BREW_ACTION_BUTTON_WIDTH,
   BREW_CHIP_BAR_HEIGHT,
   BrewChip,
   BrewChipBar,
-  BrewCli,
   BrewCommandRunner,
   BrewCommandStartResult,
   BrewCommandState,
   BrewCommandStatus,
   BrewLocalPackageRow,
+  brewActionBarHeight,
+  brewActionBarMaskHeight,
   brewChipBarHorizontalInset,
+  brewLogActionBar,
   brewTitleBarStyle,
   brewTitleBarTotalHeight,
 } from '@ohos/brewcommon';
@@ -51,12 +59,6 @@ import { MinePackagesState } from '../viewmodel/MinePackagesState';
 import { MinePackagesVM } from '../viewmodel/MinePackagesVM';
 
 /**
- * 「更新全部」按钮高度。与「我的」页及其它二级页的操作按钮同高
- * （与 `BrewSourceSettingView.CapsuleButton` 取同一值）。
- */
-const ACTION_BUTTON_HEIGHT: number = 32;
-
-/**
  * 「我的 - 本机包」列表页。
  *
  * 三个入口共用一个页面（已安装 / 待更新 / 已更新），差别只有 `mode`：
@@ -65,6 +67,9 @@ const ACTION_BUTTON_HEIGHT: number = 32;
  * chips 放在标题栏的 `bottomBuilder` 里（与 Casks 页一致），内容区靠
  * `brewTitleBarTotalHeight()` 手动让位 —— 标题栏是浮层，不会把内容顶下去。
  * 筛选 chips 在左段横向滚动，隐藏依赖 chip 常驻右端（页面右边缘）。
+ *
+ * 待更新模式下的「更新全部」是一条悬浮操作栏（与包详情页同一套取值与同一个遮罩），
+ * 由单页签 `HdsTabs` 的页签栏承载。
  */
 @Component
 export struct MinePackagesView {
@@ -89,6 +94,11 @@ export struct MinePackagesView {
   @State commandState: BrewCommandState = this.viewModel.getCommandState();
   /** 页面栈。不是 @State —— 只用于出栈，不参与渲染。来源与详情页相同。 */
   private pathStack?: NavPathStack;
+  /**
+   * 内容滚动容器。操作栏把内容嵌进 `HdsTabs` 的 `TabContent` 之后，标题栏模糊不再能靠
+   * HDS 自动识别滚动容器，必须显式把它交给 `bindToScrollable`（与详情页同一个原因）。
+   */
+  private scroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     // 快照更新 -> 重取列表。命令状态与执行 Sheet 由全局宿主负责，本页只订阅快照。
@@ -135,16 +145,34 @@ export struct MinePackagesView {
     }).getValue(this.globalInfoModel.widthBreakpoint);
   }
 
-  /** 胶囊圆角：侧边栏（2in1）用固定圆角，其余用胶囊 —— 与数据源设置页的胶囊按钮同一规则 */
-  private capsuleRadius(): Length {
-    return AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT) ?
-      $r('sys.float.corner_radius_level4') : '50%';
-  }
-
-  /** 「更新全部」是否渲染。待更新页 + 当前筛选下确实有包 + 设备上 brew 可用 */
+  /**
+   * 「更新全部」是否渲染。待更新页 + 当前筛选下确实有包 + 设备上 brew 可用。
+   *
+   * 最后的可用性与刷新按钮同源（`packagesState.brewReady`）：两条入口都只在真的能跑
+   * `brew upgrade` 时出现，不存在「栏渲染了但命令发不出去」。
+   */
   private showUpgradeAll(): boolean {
     return this.packagesState.mode === PackageListMode.OUTDATED &&
-      this.packagesState.filteredPackages.length > 0 && BrewCli.isEnabled();
+      this.packagesState.filteredPackages.length > 0 && this.packagesState.brewReady;
+  }
+
+  /** 操作栏总高。有底部导航条时把它算进来，按钮才不会压在导航条上 */
+  private actionBarHeight(): number {
+    return brewActionBarHeight(this.globalInfoModel.naviIndicatorHeight);
+  }
+
+  /** 遮罩总高 = 栏高 + 遮罩渐变长度 */
+  private actionBarMaskHeight(): number {
+    return brewActionBarMaskHeight(this.globalInfoModel.naviIndicatorHeight);
+  }
+
+  /**
+   * 操作栏的判据行：`mask − height` 必须等于 `gradient`，`height` 必须等于 56 + `navi`，
+   * 且本页与详情页的取值逐字相同。同内容只打一次（断点变化会反复触发渲染）。
+   */
+  private logActionBar(): void {
+    brewLogActionBar('mine-packages', this.globalInfoModel.naviIndicatorHeight,
+      WIDTH_BREAKPOINTS[this.globalInfoModel.widthBreakpoint]);
   }
 
   /**
@@ -259,105 +287,153 @@ export struct MinePackagesView {
   /**
    * 列表底部的让位高度。
    *
-   * 有底部操作行时由操作行承担底部内边距（导航条 + SPACE_12），列表只留一段呼吸；
-   * 没有操作行（已安装 / 已更新两个模式）时保持现状的 `naviIndicatorHeight + SPACE_24`
-   * —— 与「榜单查看全部」二级页、包详情页同一个口径，2in1 上导航条高度为 0，不预留就贴到窗口下沿。
+   * 固定为 `naviIndicatorHeight + SPACE_24` —— 与「榜单查看全部」二级页、包详情页同一个口径，
+   * 2in1 上导航条高度为 0，不预留就贴到窗口下沿。悬浮操作栏占的那一段由
+   * `Scroll.contentEndOffset` 补（它只在内容末尾加空白，不移动滚动坐标系原点）。
    */
   private listBottomInset(): Length {
-    if (this.showUpgradeAll()) {
-      return CommonConstants.SPACE_16;
-    }
     return this.globalInfoModel.naviIndicatorHeight + CommonConstants.SPACE_24;
+  }
+
+  /**
+   * 底部主操作栏：`HdsTabs` 页签栏承载的内容 —— 白色渐变遮罩 + 本页唯一的主操作按钮。
+   *
+   * 与包详情页同一套取值（`BrewActionBar`）、同一个遮罩颜色，两个页面的栏长得一样。
+   * 遮罩的高度与颜色由 HDS 画（见 `build()` 里的 `barBackgroundStyle`），本构建器只管按钮排布。
+   */
+  @Builder
+  ActionBarBuilder() {
+    Row() {
+      Button(this.upgradeAllRunning() ? $r('app.string.brew_action_running') :
+        $r('app.string.brew_action_upgrade_all'))
+        .width(BREW_ACTION_BUTTON_WIDTH)
+        .constraintSize({ maxWidth: BREW_ACTION_BUTTON_MAX_WIDTH })
+        .height(BREW_ACTION_BUTTON_HEIGHT)
+        .type(ButtonType.ROUNDED_RECTANGLE)
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(FontWeight.Medium)
+        .backgroundColor($r('sys.color.ohos_id_color_emphasize'))
+        .fontColor($r('sys.color.font_on_primary'))
+        .onClick(() => {
+          this.onUpgradeAllClick();
+        })
+    }
+    .width(CommonConstants.FULL_PERCENT)
+    .height(CommonConstants.FULL_PERCENT)
+    .justifyContent(FlexAlign.Center)
+    // 判据日志挂在 onAppear 上：@Builder 里不允许裸语句，而这里是「操作栏渲染了」这一刻
+    // （日志本身按内容去重，反复 appear 不会刷屏）
+    .onAppear(() => {
+      this.logActionBar();
+    })
+    // 左右内缩必须与内容区（`Scroll` 内层 Column 的 padding）同源：按钮宽 60% 才有意义，
+    // 而 60% 是相对**去除内缩后**的内容区宽度。
+    .padding({
+      left: this.contentInset(),
+      right: this.contentInset(),
+      bottom: this.globalInfoModel.naviIndicatorHeight + BREW_ACTION_BUTTON_BOTTOM_EXTRA,
+    })
   }
 
   @Builder
   ContentBuilder() {
-    Column() {
-      Scroll() {
-        // 外层这层 Column 只负责**让位与内缩**（写成内容上的 margin / padding），
-        // 里面的卡片保留自己的宽度、圆角与底色。与「我的」页 MineView 完全同款。
-        Column() {
-          if (this.packagesState.filteredPackages.length > 0) {
-            Column() {
-              ForEach(this.packagesState.filteredPackages, (pkg: BrewInstalledPackage) => {
-                BrewLocalPackageRow({ installedPackage: pkg })
-                  .onClick(() => {
-                    this.openDetail(pkg);
-                  })
-              }, (pkg: BrewInstalledPackage) => pkg.fullName)
-            }
-            .width(CommonConstants.FULL_PERCENT)
-            .backgroundColor($r('sys.color.comp_background_primary'))
-            .borderRadius($r('sys.float.corner_radius_level8'))
-            .clip(true)
-          } else {
-            Text($r('app.string.mine_packages_empty'))
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_tertiary'))
-              .width(CommonConstants.FULL_PERCENT)
-              .textAlign(TextAlign.Center)
-              .padding({ top: $r('sys.float.padding_level16') })
+    Scroll(this.scroller) {
+      // 外层这层 Column 只负责**让位与内缩**（写成内容上的 margin / padding），
+      // 里面的卡片保留自己的宽度、圆角与底色。与「我的」页 MineView 完全同款。
+      Column() {
+        if (this.packagesState.filteredPackages.length > 0) {
+          Column() {
+            ForEach(this.packagesState.filteredPackages, (pkg: BrewInstalledPackage) => {
+              BrewLocalPackageRow({ installedPackage: pkg })
+                .onClick(() => {
+                  this.openDetail(pkg);
+                })
+            }, (pkg: BrewInstalledPackage) => pkg.fullName)
           }
-        }
-        .width(CommonConstants.FULL_PERCENT)
-        // 顶部让位：状态栏 + 标题行 + chips 行。**写成内层内容的 margin**（原因与包详情页一致）：
-        //   - 容器 `padding` 会把内容**裁剪**在 padding 区域之外 —— 内容永远滚不到标题栏下面，
-        //     而标题栏模糊正是靠「内容透上来」才有效果，结果就是模糊“形同虚设”（实测确认）；
-        //   - `contentStartOffset` 会把滚动坐标系整体左移 C（静止时自报偏移量 −C，本页是 −112），
-        //     而 HDS 的 blurEffectiveStartOffset 只接受 [0, +∞)（负数按 0 处理），永远够不到原点
-        //     → 内容已在标题栏下钻了 C 还没开始模糊 = 空行程；
-        //   - `margin` 写在**内层内容**上是安全的（占位跟着内容一起滚走）。
-        //     （之前“margin 必然底部溢出”的结论是把它写在 Scroll **容器**上得出的，两者不同。）
-        .margin({
-          top: brewTitleBarTotalHeight(this.globalInfoModel.statusBarHeight),
-          bottom: this.listBottomInset(),
-        })
-        .padding({
-          left: this.contentInset(),
-          right: this.contentInset(),
-        })
-      }
-      .layoutWeight(1)
-      .width(CommonConstants.FULL_PERCENT)
-      .align(Alignment.Top)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-
-      // 底部操作行。固定在页面底部而不是放在内容顶部：它的操作对象是整张列表，
-      // 列表可能很长，放在顶部会随列表滚走。
-      if (this.showUpgradeAll()) {
-        Row() {
-          Blank()
-          Button(this.upgradeAllRunning() ? $r('app.string.brew_action_running') :
-            $r('app.string.brew_action_upgrade_all'))
-            .height(ACTION_BUTTON_HEIGHT)
+          .width(CommonConstants.FULL_PERCENT)
+          .backgroundColor($r('sys.color.comp_background_primary'))
+          .borderRadius($r('sys.float.corner_radius_level8'))
+          .clip(true)
+        } else {
+          Text($r('app.string.mine_packages_empty'))
             .fontSize($r('sys.float.Body_M'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .backgroundColor($r('sys.color.comp_background_tertiary'))
-            .borderRadius(this.capsuleRadius())
-            .padding({ left: $r('sys.float.padding_level6'), right: $r('sys.float.padding_level6') })
-            .onClick(() => {
-              this.onUpgradeAllClick();
-            })
+            .fontColor($r('sys.color.font_tertiary'))
+            .width(CommonConstants.FULL_PERCENT)
+            .textAlign(TextAlign.Center)
+            .padding({ top: $r('sys.float.padding_level16') })
         }
-        .width(CommonConstants.FULL_PERCENT)
-        .alignItems(VerticalAlign.Center)
-        .padding({
-          left: this.contentInset(),
-          right: this.contentInset(),
-          bottom: this.globalInfoModel.naviIndicatorHeight + CommonConstants.SPACE_12,
-        })
       }
+      .width(CommonConstants.FULL_PERCENT)
+      // 顶部让位：状态栏 + 标题行 + chips 行。**写成内层内容的 margin**（原因与包详情页一致）：
+      //   - 容器 `padding` 会把内容**裁剪**在 padding 区域之外 —— 内容永远滚不到标题栏下面，
+      //     而标题栏模糊正是靠「内容透上来」才有效果，结果就是模糊“形同虚设”（实测确认）；
+      //   - `contentStartOffset` 会把滚动坐标系整体左移 C（静止时自报偏移量 −C，本页是 −112），
+      //     而 HDS 的 blurEffectiveStartOffset 只接受 [0, +∞)（负数按 0 处理），永远够不到原点
+      //     → 内容已在标题栏下钻了 C 还没开始模糊 = 空行程；
+      //   - `margin` 写在**内层内容**上是安全的（占位跟着内容一起滚走）。
+      //     （之前“margin 必然底部溢出”的结论是把它写在 Scroll **容器**上得出的，两者不同。）
+      .margin({
+        top: brewTitleBarTotalHeight(this.globalInfoModel.statusBarHeight),
+        bottom: this.listBottomInset(),
+      })
+      .padding({
+        left: this.contentInset(),
+        right: this.contentInset(),
+      })
     }
     .width(CommonConstants.FULL_PERCENT)
     .height(CommonConstants.FULL_PERCENT)
+    .align(Alignment.Top)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+    // 底部为悬浮操作栏留出滚动空间。**只加 BREW_ACTION_BAR_HEIGHT**：内层 Column 的
+    // margin.bottom 里已经有 naviIndicatorHeight，操作栏自己那一段导航条高度由栏高与按钮的
+    // padding.bottom 覆盖，这里再加一次会多出一段空白。没有操作栏时是 0，与改动前一致。
+    .contentEndOffset(this.showUpgradeAll() ? BREW_ACTION_BAR_HEIGHT : 0)
+  }
+
+  /**
+   * 成功态的内容：有悬浮操作栏时用单页签 `HdsTabs` 把它承载起来（页签栏就是那条栏，
+   * 背板即白色渐变遮罩），否则直接放内容 —— 与包详情页同一个结构。
+   */
+  @Builder
+  SuccessBuilder() {
+    if (this.showUpgradeAll()) {
+      HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
+        TabContent() {
+          this.ContentBuilder()
+        }
+        .tabBar(this.ActionBarBuilder())      // 页签栏内容 = 唯一的主操作按钮
+      }
+      .width(CommonConstants.FULL_PERCENT)
+      .height(CommonConstants.FULL_PERCENT)
+      // 只有一个页签：不存在切换，同时挡住左右滑动手势
+      .scrollable(false)
+      .vertical(false)
+      // 页签栏叠在内容之上 —— 内容压到它下面，遮罩才盖得住
+      .barOverlap(true)
+      .barHeight(this.actionBarHeight())      // 56vp + naviIndicatorHeight
+      // 默认的 FOLLOW_SCROLL 会在内容滚过页签栏时画一条分割线，与遮罩冲突
+      .divider({ mode: DividerMode.NONE })
+      // 关掉页签栏自带的 COMPONENT_THICK 模糊：只要那层白色渐变遮罩，不要模糊
+      .barBackgroundBlurStyle(BlurStyle.NONE)
+      .blurStrategy(BlurStrategy.DISABLE)
+      // 遮罩：白色渐变，高度 = 栏高 + 渐变长度（HDS 画的那层，不吃触摸）
+      .barBackgroundStyle({
+        maskColor: $r('app.color.brew_action_bar_mask'),
+        maskHeight: this.actionBarMaskHeight(),
+      })
+      // 页签栏上的点击会走一次 Tabs 的切换逻辑；单页签下这次切换没有任何可见效果
+      .animationDuration(0)
+    } else {
+      this.ContentBuilder()
+    }
   }
 
   build() {
     HdsNavDestination() {
       if (this.packagesState.loadingModel.loadingStatus === LoadingStatus.SUCCESS) {
-        this.ContentBuilder()
+        this.SuccessBuilder()
       } else if (this.packagesState.loadingModel.loadingStatus === LoadingStatus.LOADING) {
         // 读取本机包要拉起 brew（首次约 2–3 秒）。延迟出现：缓存命中时不会闪一下
         DelayedLoadingView({ breakpoint: this.globalInfoModel.widthBreakpoint })
@@ -383,6 +459,20 @@ export struct MinePackagesView {
       style: this.titleBarStyle,
       content: {
         title: { mainTitle: this.titleOf(this.packagesState.mode) },
+        // 刷新按钮与 brew 可用性同源：能力关闭或设备上找不到 brew 时不渲染那一步
+        // （pc_normal 与「去安装 Harmonybrew」两种情形），刷新期间置灰。
+        menu: this.packagesState.brewReady ? {
+          value: [{
+            content: {
+              icon: $r('sys.symbol.arrow_clockwise'),
+              label: $r('app.string.mine_refresh'),
+              isEnabled: !this.packagesState.refreshing,
+              action: () => {
+                this.viewModel.refresh();
+              },
+            }
+          }]
+        } : undefined,
         bottomBuilder: {
           builder: () => {
             this.ChipBarBuilder();
@@ -391,6 +481,9 @@ export struct MinePackagesView {
         },
       },
     })
+    // 显式绑定滚动容器：内容嵌进单页签 `HdsTabs` 的 `TabContent` 之后，HDS 不再自动识别它，
+    // 不写这一行标题栏的动态模糊会直接丢失（FAQ faqs-arkui-1095 场景二）。
+    .bindToScrollable([this.scroller])
     .systemBarStyle({
       statusBarContentColor: this.systemColorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK ?
         StatusBarColorType.WHITE : StatusBarColorType.BLACK

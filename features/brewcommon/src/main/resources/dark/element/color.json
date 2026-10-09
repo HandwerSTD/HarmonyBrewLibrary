@@ -3,6 +3,10 @@
     {
       "name": "brew_icon_box_background",
       "value": "#2E3033"
+    },
+    {
+      "name": "brew_action_bar_mask",
+      "value": "#CC000000"
     }
   ]
 }

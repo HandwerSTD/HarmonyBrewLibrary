@@ -11,6 +11,10 @@
     {
       "name": "brew_icon_box_background",
       "value": "#F1F3F5"
+    },
+    {
+      "name": "brew_action_bar_mask",
+      "value": "#CCFFFFFF"
     }
   ]
 }

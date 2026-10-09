@@ -12,7 +12,6 @@ import {
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
-  Logger,
   NoNetworkView,
   PageEnum,
   StatePlaceholderKind,
@@ -22,6 +21,11 @@ import {
   WIDTH_BREAKPOINTS,
 } from '@ohos/common';
 import {
+  BREW_ACTION_BUTTON_MAX_WIDTH,
+  BREW_ACTION_BUTTON_WIDTH,
+  BREW_ACTION_BUTTON_BOTTOM_EXTRA,
+  BREW_ACTION_BUTTON_HEIGHT,
+  BREW_ACTION_BAR_HEIGHT,
   BrewCommandRunner,
   BrewCommandStartResult,
   BrewCommandState,
@@ -29,7 +33,10 @@ import {
   BrewInstalledLoader,
   BrewKind,
   BrewPackageRow,
+  brewActionBarHeight,
+  brewActionBarMaskHeight,
   brewContentTopInset,
+  brewLogActionBar,
   brewTitleBarStyle,
 } from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } from '@ohos/brewcommon';
@@ -39,55 +46,15 @@ import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
 import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
 
-const TAG: string = '[BrewActionBar]';
-
-/**
- * 底部操作栏的高度（vp）。与 `CommonConstants.NAVIGATION_HEIGHT` / `TAB_BAR_HEIGHT` 同值：
- * 与标题栏同高，按钮上下各留 8vp。设备有底部导航条时还要加 `naviIndicatorHeight`（见 `actionBarHeight()`）。
- */
-const ACTION_BAR_HEIGHT: number = 56;
-
-/**
- * 遮罩的渐变长度（vp）—— 从底部实色渐变到顶部全透明要走过的距离。
- *
- * 取 32：HDS 页签栏渐变遮罩的默认渐变长度（页签栏高度 + 32vp）。遮罩总高 = 栏高 + 这个数
- * （栏高 56 + 32 = 88vp）；比这更高会让底部大片被白纱盖住。
- */
-const ACTION_BAR_MASK_LENGTH: number = 32;
-
-/** 按钮高度（vp）= 栏高 56 减上下各 8 */
-const ACTION_BUTTON_HEIGHT: number = 40;
-
-/**
- * 按钮下沿到栏底之间额外留出的高度（vp）。
- *
- * 按钮在栏里垂直居中时上下各 8vp，看上去离底边偏近；这 16vp 把按钮抬起来一点，
- * 视觉重心与参考图一致。
- */
-const ACTION_BUTTON_BOTTOM_EXTRA: number = 16;
-
-/** 按钮宽度：内容区宽度的 60%（构建器根 Row 的左右内缩与内容区同源，所以百分比也同源） */
-const ACTION_BUTTON_WIDTH: Length = '60%';
-
-/**
- * 按钮宽度上限（vp）。窗口很宽时百分比算出来的宽度没有边界，上限收在 448vp ——
- * 按参考图（上方是本页 328vp 的按钮、下方是更长的目标，两张图同一显示比例）估算：
- * 623px ↔ 328vp，851px ↔ 448vp；同一比例下按钮高度 76px ↔ 40vp，与本页取值吻合。
- */
-const ACTION_BUTTON_MAX_WIDTH: number = 448;
-
-/**
- * 操作栏的判据日志去重表（同内容只打一次）。写法与 `BrewTitleBar.logRamp()` 一致 ——
- * 断点或导航条高度变化会让 build 反复执行，不去重会把日志刷满。
- */
-const loggedActionBars: Map<string, string> = new Map();
-
 /**
  * 包详情页（formula 与 cask 共用，靠路由参数里的 `kind` 分流）。
  *
  * 分区顺序与实现清单见 docs/brew-api-design.md §5.3。
  * 两种包的字段差异全部在 `BrewDetailNormalizer` 里摊平成 `BrewInfoSection[]`，
  * 因此这里只有一处 `kind` 分支（决定点击同类包时回传的 kind），渲染代码是同一份。
+ *
+ * 底部操作栏的取值（栏高 / 遮罩渐变长度 / 按钮尺寸）与「我的 - 待更新」页共用
+ * `@ohos/brewcommon` 的 `BrewActionBar` —— 两个页面的栏长得一样只由那一处保证。
  */
 @Component({ freezeWhenInactive: true })
 export struct BrewDetailView {
@@ -240,12 +207,12 @@ export struct BrewDetailView {
 
   /** 操作栏总高。有底部导航条时把它算进来，按钮才不会压在导航条上 */
   private actionBarHeight(): number {
-    return ACTION_BAR_HEIGHT + this.globalInfoModel.naviIndicatorHeight;
+    return brewActionBarHeight(this.globalInfoModel.naviIndicatorHeight);
   }
 
   /** 遮罩总高 = 栏高 + 遮罩渐变长度 */
   private actionBarMaskHeight(): number {
-    return this.actionBarHeight() + ACTION_BAR_MASK_LENGTH;
+    return brewActionBarMaskHeight(this.globalInfoModel.naviIndicatorHeight);
   }
 
   /**
@@ -253,15 +220,8 @@ export struct BrewDetailView {
    * 对不上说明两个高度用了不同的来源。同内容只打一次（断点变化会反复触发渲染）。
    */
   private logActionBar(): void {
-    const line: string = `action bar: height=${this.actionBarHeight()} mask=${this.actionBarMaskHeight()}` +
-      ` gradient=${ACTION_BAR_MASK_LENGTH} button=${ACTION_BUTTON_WIDTH} max=${ACTION_BUTTON_MAX_WIDTH}` +
-      ` navi=${this.globalInfoModel.naviIndicatorHeight}` +
-      ` breakpoint=${WIDTH_BREAKPOINTS[this.globalInfoModel.widthBreakpoint]}`;
-    if (loggedActionBars.get(TAG) === line) {
-      return;
-    }
-    loggedActionBars.set(TAG, line);
-    Logger.info(TAG, line);
+    brewLogActionBar('detail', this.globalInfoModel.naviIndicatorHeight,
+      WIDTH_BREAKPOINTS[this.globalInfoModel.widthBreakpoint]);
   }
 
   /**
@@ -275,9 +235,9 @@ export struct BrewDetailView {
   ActionBarBuilder() {
     Row() {
       Button(this.installActionLabel())
-        .width(ACTION_BUTTON_WIDTH)
-        .constraintSize({ maxWidth: ACTION_BUTTON_MAX_WIDTH })
-        .height(ACTION_BUTTON_HEIGHT)
+        .width(BREW_ACTION_BUTTON_WIDTH)
+        .constraintSize({ maxWidth: BREW_ACTION_BUTTON_MAX_WIDTH })
+        .height(BREW_ACTION_BUTTON_HEIGHT)
         .type(ButtonType.ROUNDED_RECTANGLE)
         // 圆角不指定，用系统默认（本机实测渲染出来约 6vp）
         .fontSize($r('sys.float.Body_L'))
@@ -305,8 +265,8 @@ export struct BrewDetailView {
     .padding({
       left: this.contentLeft(),
       right: this.contentLeft(),
-      // 底边多留 ACTION_BUTTON_BOTTOM_EXTRA：把按钮往上抬，离窗口下沿远一点
-      bottom: this.globalInfoModel.naviIndicatorHeight + ACTION_BUTTON_BOTTOM_EXTRA,
+      // 底边多留 BREW_ACTION_BUTTON_BOTTOM_EXTRA：把按钮往上抬，离窗口下沿远一点
+      bottom: this.globalInfoModel.naviIndicatorHeight + BREW_ACTION_BUTTON_BOTTOM_EXTRA,
     })
   }
 
@@ -396,13 +356,13 @@ export struct BrewDetailView {
     .height('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-    // 底部为操作栏留出滚动空间。**只加 ACTION_BAR_HEIGHT**：内层 Column 的 margin.bottom
+    // 底部为操作栏留出滚动空间。**只加 BREW_ACTION_BAR_HEIGHT**：内层 Column 的 margin.bottom
     // 里已经有 naviIndicatorHeight，操作栏自己那一段导航条高度由它的栏高与按钮的
     // padding.bottom 覆盖，这里再加一次会多出一段空白。没有操作栏时是 0，与改动前一致。
     //
     // 底部可以用 contentEndOffset（顶部不行，见内层 margin 的注释）：它只在内容末尾加空白，
     // 不移动滚动坐标系原点，静止时 scroller 自报的偏移量仍是 0。
-    .contentEndOffset(this.detailState.commandReady ? ACTION_BAR_HEIGHT : 0)
+    .contentEndOffset(this.detailState.commandReady ? BREW_ACTION_BAR_HEIGHT : 0)
   }
 
   build() {

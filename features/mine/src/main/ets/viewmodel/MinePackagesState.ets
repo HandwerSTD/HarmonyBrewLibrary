@@ -39,4 +39,19 @@ export class MinePackagesState {
    * 三个列表页共用同一个键，所以三个页面的这个字段总是同一个值。
    */
   public hideDependencies: boolean = false;
+  /**
+   * 设备上有没有可用的 brew（能力开关打开、执行通道可用、至少一个候选路径可执行）。
+   *
+   * 顶部刷新按钮的显隐依据：设备上找不到 brew 时这个页面只能看到失败态与重试按钮，
+   * 刷新按钮在那种环境里什么都刷不出来。进页取数时顺带算一次（那一次探测与取数自己
+   * 走的是同一个 `brewPath()` 缓存），不在渲染路径里现算。
+   */
+  public brewReady: boolean = false;
+  /**
+   * 顶部刷新按钮是否正在刷新。
+   *
+   * 与 `loadingModel` 分开：刷新时列表里已经有数据了，把它换成加载态是多余的一次闪屏。
+   * 刷新期间按钮置灰，重复点不会发出第二条命令。
+   */
+  public refreshing: boolean = false;
 }

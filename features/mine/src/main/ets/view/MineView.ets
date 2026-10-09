@@ -318,6 +318,20 @@ export struct MineView {
       style: this.titleBarStyle,
       content: {
         title: { mainTitle: $r('app.string.mine_title') },
+        // 刷新按钮与「本机包」三块内容同源：能力开关关闭或设备上找不到 brew 时不渲染
+        // （那里没有可刷的东西），刷新期间置灰。
+        menu: this.minePageState.localPackagesReady ? {
+          value: [{
+            content: {
+              icon: $r('sys.symbol.arrow_clockwise'),
+              label: $r('app.string.mine_refresh'),
+              isEnabled: !this.minePageState.packagesRefreshing,
+              action: () => {
+                this.viewModel.sendEvent<null>({ type: MineEventType.REFRESH_LOCAL_PACKAGES, param: null });
+              },
+            }
+          }]
+        } : undefined,
       }
     })
     .width(CommonConstants.FULL_PERCENT)

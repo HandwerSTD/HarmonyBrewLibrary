@@ -343,8 +343,17 @@ Harmonybrew 详情不请求网络。目录正文路径是
 
 隐藏开启时，待更新页的「更新全部」先弹一次确认框：`brew upgrade` 不看 `installed_on_request`
 （`cmd/upgrade.rb:399`），设备上全部过时的包都会被升级，包含被隐藏的依赖包。
+「更新全部」是一条底部悬浮操作栏（单页签 `HdsTabs` 的页签栏承载，白色渐变遮罩 + 强调色长条按钮），
+取值与包详情页的安装操作栏共用 `BrewActionBar`；不满足「待更新 + 当前筛选下有包 + brew 可用」时
+整条栏不渲染，页面与改动前一致。
 `brew update` 只更新 Homebrew 自身与各 tap，不安装也不升级任何包；应用的命令行前缀固定带
 `HOMEBREW_NO_AUTO_UPDATE=1`，所以「待更新」列表与「更新全部」看的是同一份本机 tap 状态。
+
+「我的」页与「本机包」二级页的标题栏各有一个刷新按钮（`sys.symbol.arrow_clockwise`）：点击后
+按 `BrewInstalledLoader.loadSets(force = true)` 跳过十分钟新鲜窗口、立即重跑一次
+`brew info --json=v2 --installed`，刷新期间按钮置灰。成功按当前 chips 与隐藏 chip 重算列表
+（不重置筛选），失败保留页面上已有数据并弹一条「读不到本机包」。两个页面的按钮都在
+本机包能力不可用时（`pc_normal`，或设备上找不到 brew）不渲染。
 
 ### 6.4 Discover（`brewdiscover`）
 

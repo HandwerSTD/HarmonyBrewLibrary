@@ -351,6 +351,14 @@
     {
       "name": "brew_source_edit_url_confirm",
       "value": "修改地址会清空该源的本地缓存。"
+    },
+    {
+      "name": "mine_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "mine_refresh_failed",
+      "value": "读不到本机包"
     }
   ]
 }
