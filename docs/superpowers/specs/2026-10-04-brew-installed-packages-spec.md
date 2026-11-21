@@ -183,7 +183,7 @@ C6 与 C7 是这套方案成立的前提：C6 不成立则 brew 起不来，C7 �
 | 缺失 | 影响 | 回落 |
 | --- | --- | --- |
 | C3（stderr 不分离） | brew 的 stderr 会混进 stdout | 解析前先定位第一个 `{` 再截取到最后一个 `}`，然后解析 |
-| C4（环境变量不继承） | `HOMEBREW_PREFIX` 等设置无效 | 把变量内联进命令行：`HOMEBREW_NO_AUTO_UPDATE=1 <brew> info ...` |
+| C4（环境变量不继承） | `HOMEBREW_PREFIX` 等设置无效 | 把变量内联进命令行：`HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1 <brew> info ...` |
 | C5（无输出上限） | 极端情况下内存增长 | brew 的输出量已知量级（几十到几百 KB），不构成风险 |
 | C6 或 C7 不成立 | brew 起不来或读不到 `Cellar` | 方案不成立，改用直接读安装记录文件的路径 |
 
@@ -234,6 +234,7 @@ features/brewcommon/src/main/ets/util/BrewInstalledParser.ets      解析成 Bre
 | --- | --- | --- |
 | `HOMEBREW_PREFIX` | 探测到的 prefix | 跳过脚本里的路径推导 |
 | `HOMEBREW_NO_AUTO_UPDATE` | `1` | 本机包查询是只读操作，不触发自更新 |
+| `HOMEBREW_FORCE_API_AUTO_UPDATE` | `1` | 与上一项成对设置；少了它 API 元数据缓存永不过期，服务端重打 bottle 后会一直去下已删除的旧文件名（404） |
 | `HOMEBREW_NO_ANALYTICS` | `1` | 不发送统计 |
 | `HOMEBREW_NO_ENV_HINTS` | `1` | 不输出环境提示 |
 | `NONINTERACTIVE` | `1` | 保证不会卡在交互提示 |

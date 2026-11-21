@@ -233,6 +233,14 @@
       "value": "地址过长"
     },
     {
+      "name": "brew_source_err_url_builtin_exists",
+      "value": "这个地址已经是内置的 Harmonybrew 源，不需要再添加"
+    },
+    {
+      "name": "brew_source_err_url_builtin_unsupported",
+      "value": "这个版本不支持 Harmonybrew 源"
+    },
+    {
       "name": "brew_source_err_save_failed",
       "value": "保存失败"
     },

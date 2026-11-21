@@ -2,9 +2,13 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
-import { Logger, PreferenceManager } from '@ohos/common';
+import { Logger, PreferenceManager, StorageKey } from '@ohos/common';
 import {
+  BREW_DIALECT_HARMONYBREW,
   BREW_DIALECT_UPSTREAM,
+  BREW_HARMONYBREW_BASE_URL,
+  BREW_HARMONYBREW_DEFAULT_TAG,
+  BREW_HARMONYBREW_SOURCE_ID,
   BREW_OFFICIAL_BASE_URL,
   BREW_OFFICIAL_SOURCE_ID,
   BREW_SOURCE_HEALTH_KEY,
@@ -41,6 +45,32 @@ export class BrewSourceStore {
   private static registry: BrewSourceRegistry | undefined = undefined;
   private static session: BrewSource | undefined = undefined;
   private static health: Record<string, BrewSourceHealthRecord> | undefined = undefined;
+
+  /**
+   * 内置 Harmonybrew 源在本产品上是否启用。
+   *
+   * 由 entry 的 UIAbility 在 `onCreate` 写入 `StorageKey.BREW_HARMONYBREW_SOURCE_ENABLED`：
+   * pc_acl 注入 true、pc_normal 注入 false；未注入时按 false 处理。
+   *
+   * 注册表里它**恒存在**（两个产品形状一致），这里只决定它是否可选可用、是否上屏。
+   * `normalizeRegistry` 与设置页都读这一个入口，不走两套判定。
+   */
+  public static harmonybrewBuiltinEnabled(): boolean {
+    return AppStorage.get<boolean>(StorageKey.BREW_HARMONYBREW_SOURCE_ENABLED) ?? false;
+  }
+
+  /** 该地址是否属于内置源（内置源的地址不能另立一个自定义源指向它） */
+  public static isReservedBuiltinUrl(baseUrl: string): boolean {
+    return BrewSourceUrl.normalize(baseUrl) === BREW_HARMONYBREW_BASE_URL;
+  }
+
+  /** 本产品是否展示这一条源。目前只有内置 Harmonybrew 源是有条件的 */
+  public static isVisible(id: string): boolean {
+    if (id !== BREW_HARMONYBREW_SOURCE_ID) {
+      return true;
+    }
+    return BrewSourceStore.harmonybrewBuiltinEnabled();
+  }
 
   // ------------------------------------------------------------ 读
 
@@ -117,6 +147,11 @@ export class BrewSourceStore {
       Logger.error(TAG, `setActiveId rejected, unknown id=${id}`);
       return false;
     }
+    // 不可用的内置源不能被写成 active：用户看不到它，也没有退回去的入口
+    if (!BrewSourceStore.isVisible(id)) {
+      Logger.error(TAG, `setActiveId rejected, source not available on this product, id=${id}`);
+      return false;
+    }
     registry.activeId = id;
     BrewSourceStore.persistRegistry(registry);
     Logger.info(TAG, `activeId written, id=${id} (生效需重启；本会话仍用 ${BrewSourceStore.sessionActive().id})`);
@@ -131,6 +166,12 @@ export class BrewSourceStore {
     }
     if (name.trim().length === 0 || name.trim().length > BREW_SOURCE_MAX_NAME_LEN) {
       Logger.error(TAG, `addSource rejected, bad name length=${name.trim().length}`);
+      return undefined;
+    }
+    // 内置源的地址不能再作为自定义源加一遍：同一个地址会出现两条卡片，
+    // 而它们各自持有独立缓存，用户看到的是「同一份数据两个进度」。
+    if (BrewSourceStore.isReservedBuiltinUrl(check.normalized)) {
+      Logger.error(TAG, `addSource rejected, reserved builtin url=${check.normalized}`);
       return undefined;
     }
     const registry: BrewSourceRegistry = BrewSourceStore.ensureRegistry();
@@ -155,7 +196,7 @@ export class BrewSourceStore {
       return result;
     }
     if (source.builtin) {
-      // 官方源只允许改名，不允许改 URL
+      // 内置源只允许改名，不允许改 URL（官方源与内置 Harmonybrew 源同此规则）
       source.name = trimmedName;
       BrewSourceStore.persistRegistry(registry);
       result.ok = true;
@@ -163,6 +204,12 @@ export class BrewSourceStore {
     }
     const check: BrewSourceUrlCheck = BrewSourceUrl.check(baseUrl);
     if (!check.ok) {
+      return result;
+    }
+    // 与 `addSource` 同一条拒绝：否则「先加一个无关地址、再改成本内置地址」
+    // 就能绕开新增时的限制。
+    if (BrewSourceStore.isReservedBuiltinUrl(check.normalized)) {
+      Logger.error(TAG, `updateSource rejected, reserved builtin url=${check.normalized}, id=${id}`);
       return result;
     }
     source.name = trimmedName;
@@ -365,6 +412,17 @@ export class BrewSourceStore {
       BREW_DIALECT_UPSTREAM);
   }
 
+  /**
+   * 内置 Harmonybrew 源的初值。
+   *
+   * `tag` 给默认值是因为它必须有值才能取数（`HarmonybrewAdapter` 拿它拼目录路径），
+   * 而探测会在第一次「测试连接 / 激活」时把响应里的真实 tag 写回来。
+   */
+  private static newBuiltinHarmonybrew(): BrewSource {
+    return new BrewSource(BREW_HARMONYBREW_SOURCE_ID, 'Harmonybrew', BREW_HARMONYBREW_BASE_URL, true, 0,
+      BREW_DIALECT_HARMONYBREW, BREW_HARMONYBREW_DEFAULT_TAG);
+  }
+
   private static newId(): string {
     const rand: number = Math.floor(Math.random() * 1000000);
     return `src_${Date.now()}_${rand}`;
@@ -424,20 +482,30 @@ export class BrewSourceStore {
     if (storedOfficial !== normalized.sources[0]) {
       return true;
     }
+    const storedHarmonybrew: BrewSource | undefined =
+      BrewSourceStore.findInList(stored.sources, BREW_HARMONYBREW_SOURCE_ID);
+    if (storedHarmonybrew === undefined || storedHarmonybrew.builtin !== true ||
+      storedHarmonybrew.baseUrl !== BREW_HARMONYBREW_BASE_URL ||
+      storedHarmonybrew !== normalized.sources[1]) {
+      return true;
+    }
     return stored.activeId !== normalized.activeId;
   }
 
   /**
    * 不变量（每条越界都自愈 + 打日志）：
    *   1. 恒存在且仅存在一条 official，`builtin=true`、`baseUrl` 为官方地址；
-   *   2. official 恒为 `sources[0]`；
-   *   3. `activeId` 必须命中；不命中回落 official；
-   *   4. 同时只有一条 active（由 `activeId` 单值天然保证）。
+   *   2. 恒存在且仅存在一条内置 Harmonybrew 源（id `harmonybrew`、`builtin=true`、`baseUrl` 固定），
+   *      它的**可用与展示**由 `harmonybrewBuiltinEnabled()` 决定；
+   *   3. official 恒为 `sources[0]`、内置 Harmonybrew 源恒为 `sources[1]`；
+   *   4. `activeId` 必须命中；不命中回落 official，命中内置 Harmonybrew 源但本产品未启用它也回落 official；
+   *   5. 同时只有一条 active（由 `activeId` 单值天然保证）。
    */
   private static normalizeRegistry(stored: BrewSourceRegistry | null): BrewSourceRegistry {
     const sources: BrewSource[] = stored !== null && stored.sources !== undefined ? stored.sources : [];
     const cleaned: BrewSource[] = sources.filter((one: BrewSource) =>
-      one !== undefined && one !== null && one.id !== BREW_OFFICIAL_SOURCE_ID && one.id !== undefined);
+      one !== undefined && one !== null && one.id !== BREW_OFFICIAL_SOURCE_ID &&
+        one.id !== BREW_HARMONYBREW_SOURCE_ID && one.id !== undefined);
     let official: BrewSource | undefined = BrewSourceStore.findInList(sources, BREW_OFFICIAL_SOURCE_ID);
     if (official === undefined) {
       Logger.warn(TAG, 'official missing, recreated');
@@ -448,7 +516,25 @@ export class BrewSourceStore {
     }
     official.dialect = BREW_DIALECT_UPSTREAM;
     official.tag = '';
-    const next: BrewSource[] = [official];
+    // 内置 Harmonybrew 源同理：baseUrl 与 dialect 恒定（地址本身决定了方言），
+    // 只有 `tag` 与显示名保留盘上的值 —— 前者由探测写回，后者允许用户改名。
+    let harmonybrew: BrewSource | undefined =
+      BrewSourceStore.findInList(sources, BREW_HARMONYBREW_SOURCE_ID);
+    if (harmonybrew === undefined) {
+      Logger.warn(TAG, 'builtin harmonybrew missing, recreated');
+      harmonybrew = BrewSourceStore.newBuiltinHarmonybrew();
+    } else {
+      harmonybrew.builtin = true;
+      harmonybrew.baseUrl = BREW_HARMONYBREW_BASE_URL;
+      harmonybrew.dialect = BREW_DIALECT_HARMONYBREW;
+      if (harmonybrew.tag === undefined || harmonybrew.tag.length === 0) {
+        harmonybrew.tag = BREW_HARMONYBREW_DEFAULT_TAG;
+      }
+      if (harmonybrew.name === undefined || harmonybrew.name.trim().length === 0) {
+        harmonybrew.name = 'Harmonybrew';
+      }
+    }
+    const next: BrewSource[] = [official, harmonybrew];
     cleaned.forEach((one: BrewSource) => {
       if (one.dialect === undefined || one.dialect.length === 0) {
         one.dialect = BREW_DIALECT_UPSTREAM;
@@ -461,6 +547,10 @@ export class BrewSourceStore {
     let activeId: string = stored !== null && stored.activeId !== undefined ? stored.activeId : '';
     if (BrewSourceStore.findInList(next, activeId) === undefined) {
       Logger.warn(TAG, `activeId=${activeId} not found, fallback to official`);
+      activeId = BREW_OFFICIAL_SOURCE_ID;
+    } else if (activeId === BREW_HARMONYBREW_SOURCE_ID && !BrewSourceStore.harmonybrewBuiltinEnabled()) {
+      // 本产品不提供这个源，把它当 active 等于把 App 切到一个用户看不到、也退不回来的源上
+      Logger.warn(TAG, 'activeId=harmonybrew but builtin harmonybrew disabled, fallback to official');
       activeId = BREW_OFFICIAL_SOURCE_ID;
     }
     return new BrewSourceRegistry(next, activeId);

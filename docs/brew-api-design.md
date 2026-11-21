@@ -151,7 +151,7 @@ UI 要求：`deprecated` 显示警示条 + 替代品跳转；`disabled` 显示�
 |---|---|---|---|
 | 1 | Hero：图标 + 名称 + `desc` + tap 来源 + 安装状态徽标 | `name` `desc` `tap` `installed` | 恒显 |
 | 2 | 主操作：`brew install` 命令 + 复制按钮 | `installCommand` | 恒显 |
-| 2 | 主操作按钮在底部操作栏（与上一行同属分区 2，2026-10-05 从卡片标题行移出）：安装 / 升级 / 已安装 | 已安装快照（`BrewInstalledLoader`）+ `installCommand` | brew 能力可用且 token / tap 通过校验（`commandReady`） |
+| 2 | 主操作按钮在底部操作栏（与上一行同属分区 2，2026-10-05 从卡片标题行移出）：安装 / 升级 / 已安装 | 已安装快照（`BrewInstalledLoader`）+ `installCommand` | brew 能力可用、当前源方言为 harmonybrew，且 token / tap 通过校验（`commandReady`） |
 | 3 | 元信息：版本 / 许可 / 近 30 天安装量 / 分类排名 | `stableVersion`(或 cask `version`) `license` `installs30d` `categoryRank`+`categorySize` | 恒显 |
 | 4 | **提供的命令**（formula）｜ **安装内容**（cask） | `executables` ｜ `artifacts[]` | 非空时 |
 | 5 | 兼容性与要求 | `bottleTags` / `dependsOn.macos` → `macosRequirement` / `requirements` | 非空时 |
@@ -457,7 +457,7 @@ hydrate done, 119/119 (failed 0), 5ms | session hit=0 renewed=716 notModified=0 
 
 | 概念 | 实现 | 说明 |
 |---|---|---|
-| 源注册表 | 主 store 的 `brew_sources`（`BrewSourceStore`） | 官方源恒在第 0 项、`builtin`、不可删、baseUrl 固定 |
+| 源注册表 | 主 store 的 `brew_sources`（`BrewSourceStore`） | 官方源恒在第 0 项、`builtin`、不可删、baseUrl 固定；内置 Harmonybrew 源恒在第 1 项、同为 `builtin`、**默认不启用** |
 | 每源缓存 | 独立 store `brew_src_<id>`（GSKV，`BrewSourcePrefs`） | 六条缓存键名不变，隔离由 store 承担 |
 | 会话冻结 | `BrewSourceStore.sessionActive()` | 写 `activeId` 对当前进程零影响 → **切换必须重启** |
 | 激活 | `BrewSourceProbe` 单端点探测 → 确认弹窗 → `setActiveId` → `BrewSourceRestart` | 探测失败**硬阻断**；重启三级兜底 |
@@ -494,6 +494,21 @@ Harmonybrew 分支 `https://harmonybrew.atomgit.com/api` 不是 formulae.brew.sh
 按 bottle tag 分区的 JWS 目录，没有 per-token 端点、cask 或 analytics。应用在 transport 边界用
 `BrewSourceAdapter` 分派方言，并把它归一化成既有的 `LiveFormulaDoc`；缓存、TTL、在途去重和
 世代号守卫仍走原链路。`BrewSource.dialect` 为 `upstream`（内置源及存量源）或 `harmonybrew`。
+
+#### 内置源的构成与展示条件
+
+注册表恒含两条 `builtin` 源：`official`（`sources[0]`，upstream 方言）与 `harmonybrew`（`sources[1]`，
+harmonybrew 方言、tag 初值 `arm64_ohos`）。后者**默认不启用** —— `activeId` 初值恒为 `official`，
+用户要在「数据源」页里显式激活它并重启，取数才会走它。
+
+它的**可用与展示由产品决定**：`BrewSourceStore.harmonybrewBuiltinEnabled()` 读 `AppStorage` 的
+`StorageKey.BREW_HARMONYBREW_SOURCE_ENABLED`，由 entry 的 `PcAbility.onCreate` 注入（pc_acl 为 true、
+pc_normal 为 false，未注入按 false 处理）。关掉时它不出现在源列表里、不能被 `setActiveId` 选中，
+`normalizeRegistry` 也会把盘上指向它的 `activeId` 回落成 `official`。
+
+判据在**地址**而不是名字：同一个地址不允许再作为自定义源添加一遍
+（`BrewSourceStore.isReservedBuiltinUrl`）。允许多加一份会让同一份数据出现两条卡片、两个取数进度，
+而用户看不出区别。
 
 #### 端点与实测形状
 

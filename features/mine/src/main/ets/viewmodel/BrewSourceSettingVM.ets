@@ -162,6 +162,10 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
     const sessionId: string = BrewSourceStore.sessionActive().id;
     const rows: BrewSourceRow[] = [];
     BrewSourceStore.listSources().forEach((one: BrewSource) => {
+      // 本产品不提供的内置源不列出来（注册表里它仍然存在，但没有可用的入口）
+      if (!BrewSourceStore.isVisible(one.id)) {
+        return;
+      }
       const row: BrewSourceRow = new BrewSourceRow(one);
       const record: BrewSourceHealthRecord = BrewSourceStore.healthOf(one.id);
       // 两个正交维度分别取值（见 `BrewSourceReach` / `BrewSourceHealth` 的类注释）：
@@ -239,6 +243,14 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
     const check: BrewSourceUrlCheck = BrewSourceUrl.check(event.url);
     if (!check.ok) {
       this.state.errorText = 'url-' + check.reason;
+      return false;
+    }
+    // 内置源的地址不能作为自定义源再配一遍：同一个地址会出现两条卡片，
+    // 而各自的缓存与取数进度看不出区别。本产品未提供它时提示「不支持此源」
+    //（那个地址能正常应答，说「已存在」会把用户引到错误的排查方向）。
+    if (BrewSourceStore.isReservedBuiltinUrl(check.normalized)) {
+      this.state.errorText = BrewSourceStore.harmonybrewBuiltinEnabled() ?
+        'url-builtin-exists' : 'url-builtin-unsupported';
       return false;
     }
     if (event.id.length === 0) {
@@ -366,7 +378,8 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
    * 保存表单的校验失败原因码 → 可读文案。
    *
    * 分支必须与 `save()` 写入 `state.errorText` 的码**一一对应**：
-   * `name-empty` / `save-failed`，以及 `url-*`（后缀来自 `BrewSourceUrl.validate()` 的 reason 码：
+   * `name-empty` / `save-failed` / `url-builtin-exists` / `url-builtin-unsupported`，
+   * 以及 `url-*`（后缀来自 `BrewSourceUrl.validate()` 的 reason 码：
    * `empty` / `too-long` / `scheme` / `query` / `fragment` / `host`）。
    *
    * 为什么要逐码分支而不是一句「输入不合法」：spec §8.1 要求「错误提示指向具体哪一条不满足」——
@@ -398,6 +411,12 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
     }
     if (code === 'url-too-long') {
       return $r('app.string.brew_source_err_url_too_long');
+    }
+    if (code === 'url-builtin-exists') {
+      return $r('app.string.brew_source_err_url_builtin_exists');
+    }
+    if (code === 'url-builtin-unsupported') {
+      return $r('app.string.brew_source_err_url_builtin_unsupported');
     }
     if (code === 'save-failed') {
       return $r('app.string.brew_source_err_save_failed');

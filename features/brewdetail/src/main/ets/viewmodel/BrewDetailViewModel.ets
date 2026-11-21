@@ -17,6 +17,8 @@ import {
   BrewFormulaModel,
   BrewInstalledLoader,
   BrewKind,
+  BrewSourceStore,
+  BREW_DIALECT_HARMONYBREW,
 } from '@ohos/brewcommon';
 import type {
   BrewCaskDetail,
@@ -126,13 +128,19 @@ export class BrewDetailViewModel {
     state.installState = BrewDetailViewModel.installStateOf(state.params.token);
     const token: string = state.params.token;
     const tap: string = state.data.tap;
-    // 包名与 tap 都要能进命令行才渲染按钮。tap 为空串时通不过校验，按钮不出现。
-    const safe: boolean = BrewCommandGenerator.isSafeName(token) && BrewCommandGenerator.isSafeName(tap);
+    // 能装到本机上的只有 Harmonybrew 方言的包：设备上跑的是 Harmonybrew，上游源下发的是 macOS 的
+    // formula / cask 清单，照它的数据执行 install 只会失败。
+    const dialect: string = BrewSourceStore.sessionActive().dialect;
+    const commandable: boolean = dialect === BREW_DIALECT_HARMONYBREW;
+    // `tap` 只在非空时才校验：Harmonybrew 方言刻意不设 tap（设了命令会变成
+    // `brew install harmonybrew/core/wget`），空串是「无需前缀」，不是非法值。
+    const safe: boolean = commandable && BrewCommandGenerator.isSafeName(token) &&
+      (tap.length === 0 || BrewCommandGenerator.isSafeName(tap));
     if (safe) {
-      state.unsafeNameWarned = false;
-    } else if (!state.unsafeNameWarned) {
-      state.unsafeNameWarned = true;
-      Logger.warn(TAG, `action button hidden, unsafe package name. token=${token} tap=${tap}`);
+      state.commandHiddenWarned = false;
+    } else if (!state.commandHiddenWarned) {
+      state.commandHiddenWarned = true;
+      Logger.warn(TAG, `action button hidden. token=${token} tap=${tap} dialect=${dialect}`);
     }
     // 能力开关关（pc_normal）时整块按钮不渲染
     state.commandReady = safe && BrewCli.isEnabled();

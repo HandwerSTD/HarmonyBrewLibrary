@@ -347,7 +347,8 @@ Harmonybrew 详情不请求网络。目录正文路径是
 取值与包详情页的安装操作栏共用 `BrewActionBar`；不满足「待更新 + 当前筛选下有包 + brew 可用」时
 整条栏不渲染，页面与改动前一致。
 `brew update` 只更新 Homebrew 自身与各 tap，不安装也不升级任何包；应用的命令行前缀固定带
-`HOMEBREW_NO_AUTO_UPDATE=1`，所以「待更新」列表与「更新全部」看的是同一份本机 tap 状态。
+`HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1`，所以「待更新」列表与「更新全部」看的是同一份本机 tap 状态
+（前者关掉 `brew update`，后者只放开 API 元数据刷新，见 §7.3「安装/升级报 curl 404」）。
 
 「我的」页与「本机包」二级页的标题栏各有一个刷新按钮（`sys.symbol.arrow_clockwise`）：点击后
 按 `BrewInstalledLoader.loadSets(force = true)` 跳过十分钟新鲜窗口、立即重跑一次
@@ -428,6 +429,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 | 榜单名次自己会变 | `brew-discover-algo.md` §7 | **有意为之**：“谁上榜”是快照，“多少”是现网；不要把它当 bug 修回快照值 |
 | 同一个 URL 请求了好几次 | §9.13 | 缓存只在响应回来后才写入 → 必须再做一层**在途去重**（`inFlight` map）；页面加载被触发两次、页签并发批次有交集各占一半 |
 | 过期后要不要重下 / 怎么判断“变没变” | §7.7 | **主动 probe**：1 次 HEAD（`If-Modified-Since`）代表整批；CDN 的 **ETag 跨节点不一致**（实测命中仅 1/5）→ IMS 优先、ETag 兜底 |
+| 应用内安装/升级报 `curl: (22) ... 404`，系统终端里同样的包装得上 | `brew-command-execution-spec.md` §5.1 | `HOMEBREW_NO_AUTO_UPDATE=1` 让 API 元数据缓存永不过期，一直按旧记录去下服务端已重打删除的旧 bottle 文件名；必须配对 `HOMEBREW_FORCE_API_AUTO_UPDATE=1` |
 
 ### 7.4 流程类
 
@@ -459,7 +461,9 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 以下不阻塞当前适配，但上线前应由产品/服务端明确，不能在实现任务里顺手决定：
 
 1. **Cask 与 Discover 的产品取舍**：Harmonybrew 的 casks 与 analytics 都为空；当前保证不崩、显示“不提供”，是否隐藏整个 Discover 入口待产品决定。
-2. **是否翻默认源**：本轮保留内置 upstream 为默认源。若要改变，还要处理 builtin/baseUrl 不变量、AtomGit 第三方域名的可用性与合规风险，以及是否保留上游兜底。
+2. **是否翻默认源**：内置 upstream 恒为默认源。Harmonybrew 已作为**内置源**存在（`Sources[1]`、
+   `builtin`、不可删），但**默认不启用**，且只在 pc_acl 上展示（它依赖设备上的 brew）。
+   若要把它改成默认源，还要处理 AtomGit 第三方域名的可用性与合规风险，以及是否保留上游兜底。
 3. **服务端是否补上游形状端点**：若对方发布 `formula.json`、`formula/<token>.json` 等端点，可整体下线本方言适配；建议同步向 Harmonybrew 提议。
 4. **未转义 `packages.<tag>.json` 是否恢复发布**：即便恢复也不能依赖它；当前实测旧文件陈旧 86 天。
 5. **bottle tag 的长期来源**：当前由探测响应写回。若服务端同时发布多个 tag，需改为按设备 ABI 选择。

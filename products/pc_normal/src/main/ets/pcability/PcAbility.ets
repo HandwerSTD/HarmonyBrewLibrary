@@ -14,6 +14,8 @@ export default class PcAbility extends UIAbility {
     // 侧边栏布局由 entry 注入；本版本不声明受限权限，本机包能力开关置为 false
     AppStorage.setOrCreate<boolean>(StorageKey.IS_SIDEBAR_LAYOUT, true);
     AppStorage.setOrCreate<boolean>(StorageKey.BREW_CLI_ENABLED, false);
+    // 内置 Harmonybrew 源依赖设备上的 brew，本版本没有该能力
+    AppStorage.setOrCreate<boolean>(StorageKey.BREW_HARMONYBREW_SOURCE_ENABLED, false);
     // 执行通道启动自检。`SHELL_STREAM_VERIFY` 默认关闭，此时这里不会起任何子进程
     ShellStreamProbe.run();
     this.baseAbilityHelper.doOnCreate(this.context, want, launchParam);

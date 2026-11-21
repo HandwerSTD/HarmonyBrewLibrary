@@ -105,7 +105,11 @@
 **渲染条件**：
 
 - `BrewCli.isEnabled()` 为假（pc_normal）时整块按钮不渲染；
-- `BrewCommandGenerator.isSafeName(token)` 与 `isSafeName(tap)` 任一不通过时不渲染按钮，并打一条 warn 日志（数据源里的包名不该进命令行）。
+- 当前源方言不是 `harmonybrew` 时不渲染：设备上装的是 Harmonybrew，上游源下发的是 macOS 的
+  formula / cask 清单，照它执行 `install` 只会失败；
+- `BrewCommandGenerator.isSafeName(token)` 不通过时（或 `tap` 非空而它不通过时）不渲染按钮，
+  并打一条 warn 日志（数据源里的包名不该进命令行）。`tap` 为空串不算不通过 ——
+  Harmonybrew 方言刻意不设 tap。
 
 **执行中的表现**：`BrewCommandRunner.isRunningArgs(本包本次将要发出的参数)` 为真时按钮文案改为「执行中…」，点击打开 Sheet；其它命令正在执行时按钮保持「安装」/「升级」，点击弹「已有命令在执行」。
 
@@ -247,9 +251,11 @@ export class BrewCli {
 }
 ```
 
-环境前缀与现状完全相同（`HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1`，加 `HOMEBREW_PREFIX`）。
+环境前缀与现状相同（`HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1`，加 `HOMEBREW_PREFIX`）。
 
 `HOMEBREW_NO_AUTO_UPDATE=1` 保留的理由：页面上的「待更新」是按设备本地 tap 状态算出来的（`brew info --json=v2 --installed` 的 `outdated` 字段），升级命令用同一份状态才能做到「页面说升哪些就升哪些」；`brew update` 是另一件事（要联网、要 git、可能几分钟），不在本功能范围内。数据源里有、设备 tap 里没有的包会安装失败，brew 的原始错误会显示在 Sheet 里。
+
+`HOMEBREW_FORCE_API_AUTO_UPDATE=1` 与它成对出现，不能省。brew 7.x 的 `Library/Homebrew/api.rb:189-197` 里，`HOMEBREW_NO_AUTO_UPDATE` 会把 API 元数据的 `stale_seconds` 直接置为 `nil` → `skip_download?` 恒真 → 缓存**永不过期**。服务端重打 bottle 会删掉旧文件名（jq 的 `…bottle.tar.gz` 换成 `…bottle.1.tar.gz` 之后旧 URL 返回 404），应用却仍按缓存里的旧记录去下那个已不存在的地址，报 `curl: (22) The requested URL returned error: 404`。加上这一项只放开元数据刷新，**不会**执行 `brew update`；刷新窗口仍是 brew 自己的默认值（`HOMEBREW_API_AUTO_UPDATE_SECS` 默认 450 秒，非 auto-update 命令走 7 天）。实测冷缓存刷新约 +4 秒 / 4.2MB，就在安装或升级开始时，可接受。
 
 `BrewInstalledLoader` 的读取命令改用 `BrewCli.commandLine('info --json=v2 --installed')`，删除重复的环境拼装。
 
@@ -606,6 +612,8 @@ devecocli log --device 127.0.0.1:42021 --keyword pcnative --tail 200
 | 关掉 Sheet 再点按钮 | Sheet 重新打开，之前的输出还在 | —— |
 | 待更新页 | 升级成功的包从列表消失 | `[BrewInstalled] load ok installed=… outdated=…` |
 | 打开一个未安装包的详情页 | 按钮显示「安装」 | `[BrewInstalled] snapshot pref age=…` |
+| 源设为 Harmonybrew 后打开任一包详情页 | 底部出现操作栏，按钮可点 | `[BrewDetailVM] action button hidden` 不出现 |
+| 源设为 Official（上游）后打开任一包详情页 | 无底部操作栏；内容里仍有 `brew install` 命令与复制按钮 | `[BrewDetailVM] action button hidden. token=… tap=homebrew/core dialect=upstream` |
 | 打开一个已安装且最新的包的详情页 | 按钮显示「已安装」且点不动 | —— |
 | 冷启动直接进「我的」 | 数量立刻显示，不出现转圈 | `[BrewInstalled] snapshot pref age=…` |
 | 连点两次「更新全部」 | 第二次时按钮已显示「执行中…」，点击只打开 Sheet，不重复执行 | —— |

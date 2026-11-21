@@ -20,7 +20,21 @@ export const BREW_DIALECT_UPSTREAM: string = 'upstream';
 /** Harmonybrew 单文件 JWS 目录方言 */
 export const BREW_DIALECT_HARMONYBREW: string = 'harmonybrew';
 
-/** 探测 Harmonybrew 时先尝试的 bottle tag；探测成功后会使用响应里的真实 tag */
+/**
+ * 内置 Harmonybrew 源的稳定 id。与官方源一样恒存在、不可删、baseUrl 固定，但**默认不启用**
+ * （`activeId` 初始为官方源），且只在能执行 brew 的产品（pc_acl）上展示。
+ */
+export const BREW_HARMONYBREW_SOURCE_ID: string = 'harmonybrew';
+
+/**
+ * 内置 Harmonybrew 源的 API 基地址。
+ *
+ * ⚠ 它**不是**官方源的镜像：站点根下只有逐日下载统计，`/api` 下只有一份按 bottle tag 分区的
+ * JWS 目录，没有 per-token 端点、cask 与 analytics（见 docs/brew-api-design.md §7.5.2）。
+ */
+export const BREW_HARMONYBREW_BASE_URL: string = 'https://harmonybrew.atomgit.com/api';
+
+/** 探测 Harmonybrew 时先尝试的 bottle tag；探测成功后会使用响应里的真实 tag。也是内置 Harmonybrew 源的初始 tag */
 export const BREW_HARMONYBREW_DEFAULT_TAG: string = 'arm64_ohos';
 
 /**

@@ -25,6 +25,14 @@ const TAG: string = '[BrewCli]';
  * `HOMEBREW_NO_AUTO_UPDATE=1` 保留的理由：页面上的「待更新」是按设备本地 tap 状态算出来的
  * （`brew info --json=v2 --installed` 的 `outdated` 字段），升级命令用同一份状态才能做到
  * 「页面说升哪些就升哪些」；`brew update` 要联网、要 git、可能几分钟，不在本功能范围内。
+ *
+ * `HOMEBREW_FORCE_API_AUTO_UPDATE=1` 必须与它成对出现：brew 7.x 的 `api.rb:189-197` 里
+ * `HOMEBREW_NO_AUTO_UPDATE` 会把 API 元数据的 `stale_seconds` 直接置为 nil，
+ * 缓存因此**永不过期**。服务端重打 bottle 时会删掉旧文件名（jq 的
+ * `…bottle.tar.gz` 换成 `…bottle.1.tar.gz` 之后旧 URL 404），应用却一直按缓存里的旧记录
+ * 去下那个已不存在的地址，于是 `curl: (22) 404`。这一项只放开元数据刷新，不执行 `brew update`，
+ * 刷新窗口仍走 brew 自己的默认值：安装/升级 450 秒（`HOMEBREW_API_AUTO_UPDATE_SECS`），
+ * 其余命令 7 天。
  */
 export class BrewCli {
   /**
@@ -109,8 +117,8 @@ export class BrewCli {
       return '';
     }
     const prefix: string = BrewCli.prefix();
-    const env: string = 'HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 ' +
-      'HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1';
+    const env: string = 'HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1 ' +
+      'HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1';
     const prefixEnv: string = prefix.length > 0 ? ` HOMEBREW_PREFIX="${prefix}"` : '';
     return `${env}${prefixEnv} "${brewPath}" ${args}`;
   }

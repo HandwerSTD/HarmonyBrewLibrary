@@ -149,8 +149,9 @@ HdsTabs({ barPosition: BarPosition.End, index: 0 }) {
 | 已安装且已是最新 | 已安装 | 次要底 | 否 | —— |
 | 本包命令正在执行 | 执行中… | 强调蓝 | 是 | 重新打开执行 Sheet |
 
-渲染条件不变：`commandReady`（`BrewCli.isEnabled()` 且 `token` / `tap` 都通过 `BrewCommandGenerator.isSafeName`）为假时
-整条操作栏不出现，页面回到现在的样子。
+渲染条件：`commandReady`（`BrewCli.isEnabled()`、当前源方言为 `harmonybrew`、`token` 通过 `BrewCommandGenerator.isSafeName`，且 `tap` 非空时也通过）为假时
+整条操作栏不出现，页面回到现在的样子。上游方言的源不展示这条栏：它的包是 macOS 的 formula / cask，
+本机的 Harmonybrew 装不了。
 
 ### 4.3 内容让位
 

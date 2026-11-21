@@ -233,6 +233,14 @@
       "value": "Address is too long"
     },
     {
+      "name": "brew_source_err_url_builtin_exists",
+      "value": "This address is the built-in Harmonybrew source; it does not need to be added"
+    },
+    {
+      "name": "brew_source_err_url_builtin_unsupported",
+      "value": "This version does not support the Harmonybrew source"
+    },
+    {
       "name": "brew_source_err_save_failed",
       "value": "Save failed"
     },

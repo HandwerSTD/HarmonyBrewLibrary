@@ -4,7 +4,7 @@
 
 import { preferences } from '@kit.ArkData';
 import { Logger } from '@ohos/common';
-import { BREW_OFFICIAL_SOURCE_ID, BREW_SOURCE_VERIFY } from '../constant/BrewSourceConstants';
+import { BREW_HARMONYBREW_SOURCE_ID, BREW_OFFICIAL_SOURCE_ID, BREW_SOURCE_VERIFY } from '../constant/BrewSourceConstants';
 import {
   BrewProbeResult,
   BrewSource,
@@ -49,9 +49,14 @@ export class BrewSourceDiagnostics {
     const officialFirst: boolean = sources.length > 0 && sources[0].id === BREW_OFFICIAL_SOURCE_ID;
     const officialCount: number =
       sources.filter((one: BrewSource) => one.id === BREW_OFFICIAL_SOURCE_ID).length;
+    const harmonybrewCount: number =
+      sources.filter((one: BrewSource) => one.id === BREW_HARMONYBREW_SOURCE_ID).length;
+    const harmonybrewSecond: boolean = sources.length > 1 && sources[1].id === BREW_HARMONYBREW_SOURCE_ID;
     Logger.info(TAG, `verify registry n=${sources.length} active=${BrewSourceStore.activeId()} ` +
       `officialFirst=${officialFirst} officialCount=${officialCount} ` +
-      `ok=${officialFirst && officialCount === 1}`);
+      `harmonybrewSecond=${harmonybrewSecond} harmonybrewCount=${harmonybrewCount} ` +
+      `harmonybrewEnabled=${BrewSourceStore.harmonybrewBuiltinEnabled()} ` +
+      `ok=${officialFirst && officialCount === 1 && harmonybrewSecond && harmonybrewCount === 1}`);
     const session: BrewSource = BrewSourceStore.sessionActive();
     Logger.info(TAG, `verify session id=${session.id} base=${session.baseUrl} ok=${session.baseUrl.length > 0}`);
   }

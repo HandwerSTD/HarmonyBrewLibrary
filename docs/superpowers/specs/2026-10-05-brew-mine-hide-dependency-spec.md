@@ -222,6 +222,10 @@ cairo 与 gmp 是作为依赖安装的，与主动安装的 5 个一起出现在
 - 「待更新」列表与「更新全部」看向同一份本机 tap 状态，页面说升哪些就升哪些；
 - 不会出现「点一下更新，brew 先联网更新仓库，实际升级的包比列表里多」的情况。
 
+同一处前缀里的 `HOMEBREW_FORCE_API_AUTO_UPDATE=1` 不受这上面的限制：它只让 `brew`
+刷新 API 元数据（`api/internal/packages.<tag>.jws.json`），不碰 git 仓库、不跑 `brew update`，
+所以两件事不矛盾（详见 `2026-10-04-brew-command-execution-spec.md` §5.1）。
+
 ### 6.4 对本轮的影响
 
 隐藏是显示层的过滤，命令不变。打开隐藏之后点「更新全部」，设备上全部过时的包都会被升级，

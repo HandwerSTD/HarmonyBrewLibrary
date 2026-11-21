@@ -48,15 +48,16 @@ export class BrewDetailState {
   /** 本机安装状态，由 `BrewDetailViewModel.refreshInstallState` 按已安装快照重算 */
   public installState: BrewInstallState = BrewInstallState.UNKNOWN;
   /**
-   * 是否渲染「安装 / 升级」按钮：设备上的 brew 能力开启，且包名与 tap 都通过命令行校验。
-   * 校验不过时按钮整个不出现 —— 数据源来的包名不该进命令行。
+   * 是否渲染「安装 / 升级」按钮：设备上的 brew 能力开启、当前源的方言是 Harmonybrew，
+   * 且包名与 tap 通过命令行校验。任何一条不满足时按钮整个不出现 ——
+   * 上游源的包装不到本机的 Harmonybrew 上，数据源来的包名也不该进命令行。
    */
   public commandReady: boolean = false;
   /**
-   * 包名校验不过的 warn 只打一条。
+   * 「按钮被隐藏」的 warn 只打一条。
    * 这个标志不是给渲染看的，是给「每次重算都判一次、但别每次都打一条日志」用的去重开关。
    */
-  public unsafeNameWarned: boolean = false;
+  public commandHiddenWarned: boolean = false;
   /** 同分类其他包，独立加载，失败时保持为空 */
   public siblings: BrewPackageItem[] = [];
 }
