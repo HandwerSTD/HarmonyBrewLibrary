@@ -4,30 +4,31 @@
 
 BrewLibrary 是一个面向 **HarmonyOS PC（2in1）** 的 Homebrew 包浏览器：用桌面端布局浏览 Homebrew 的 formulae / casks，支持榜单发现、离线全文搜索、包详情与本机安装状态查看。
 
-- 设备形态：仅 2in1（PC），最小窗口 1080 × 608
-- 编译目标：HarmonyOS 6.1.0（API 23），hvigor 模型 5.0.0
-- 版本：1.3.0
-- 使用的技术：ArkTS / ArkUI（Stage 模型），两个 entry 模块：`products/pc_acl`（完整版，申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`）与 `products/pc_normal`（普通版，不申请受限权限）
+* 设备形态：仅 2in1（PC），最小窗口 1080 × 608
+
+* 编译目标：HarmonyOS 6.1.0（API 23），hvigor 模型 5.0.0
+
+* 版本：1.3.0
 
 ## 功能
 
-| 页签 | 说明 |
-| --- | --- |
-| **Discover** | 六个榜单推荐。榜单成员与数字在设备端现算，目录不可用时显示空态 |
-| **Formulae** | formulae 目录：分类 chips + 列表 + 详情页 |
-| **Casks** | casks 目录，与 formulae 共用同一套组件与详情页 |
-| **Search** | 本地搜索引擎（零依赖纯函数引擎 + 词表打分），离线可搜 |
-| **Me** | 本机已安装 / 可升级包（列表页可按 chip 隐藏作为依赖安装的包）、数据源切换与连通性状态、页面可选区块开关 |
+| 页签       | 说明                                                       |
+| -------- | -------------------------------------------------------- |
+| Discover | 六个榜单推荐。榜单成员与数字在设备端现算，目录不可用时显示空态                          |
+| Formulae | formulae 目录：分类 chips + 列表 + 详情页                          |
+| Casks    | casks 目录，与 formulae 共用同一套组件与详情页                          |
+| Search   | 本地搜索引擎（零依赖纯函数引擎 + 词表打分），离线可搜                             |
+| Me       | 本机已安装 / 可升级包（列表页可按 chip 隐藏作为依赖安装的包）、数据源切换与连通性状态、页面可选区块开关 |
 
 > 两个 entry 版本的功能差别只有「本机包」这一块：`pc_acl` 在「我的」页展示本机包三块，并读取设备上的 Homebrew 安装记录；`pc_normal` 不申请 `CUSTOM_SANDBOX` 与 `READ_WRITE_USER_FILE`，`PcAbility` 向 `AppStorage` 注入 `StorageKey.BREW_CLI_ENABLED = false`，「我的」页改为展示「激活本机包管理功能」卡片（点击把开源仓库地址 `https://gitcode.com/handwer/HarmonyBrewLibrary` 交给系统浏览器），本机包取数静默返回空集合。其余页签与页面在两个版本上表现一致。
 
 ## 数据来源
 
-| 来源 | 用途 |
-| --- | --- |
-| `formulae.brew.sh/api`（官方上游） | 包详情现网数据、per-token 索引 |
-| `harmonybrew.atomgit.com`（Harmonybrew 镜像） | 归一化全量目录 + 统计快照 |
-| 设备上的 `brew` 命令（`features/pcnative` + `BrewInstalledLoader`） | 「我的」页的本机已安装 / 可升级包（仅 `pc_acl` 版本提供） |
+| 来源                                                    | 用途                                |
+| ----------------------------------------------------- | --------------------------------- |
+| formulae.brew.sh/api（官方上游）                            | 包详情现网数据、per-token 索引              |
+| harmonybrew.atomgit.com（Harmonybrew 镜像）               | 归一化全量目录 + 统计快照                    |
+| 设备上的 brew 命令（features/pcnative + BrewInstalledLoader） | 「我的」页的本机已安装 / 可升级包（仅 pc_acl 版本提供） |
 
 两条方言由 `features/brewcommon/src/main/ets/service/source/BrewSourceAdapter.ets` 抽象（`UpstreamAdapter` / `HarmonybrewAdapter`），数据源地址与探活结果可在「我的」页切换查看。分类体系与榜单算法是本项目自建的，不是官方 API 字段——见 `docs/brew-marketplace-content-plan.md`、`docs/brew-discover-algo.md`。
 
@@ -57,10 +58,13 @@ keys/                     本机签名材料（已 gitignore，不入库）
 
 ## 环境要求
 
-- DevEco Studio 6.x（HarmonyOS 6.1.0 / API 23 SDK）
-- 2in1（PC）设备或 DevEco 预览器
-- Node 24+：仅运行搜索引擎检查脚本时需要
-- Python 3：仅校验策展清单 / 榜单算法不变量时需要
+* DevEco Studio 6.x（HarmonyOS 6.1.0 / API 23 SDK）
+
+* 2in1（PC）设备或 DevEco 预览器
+
+* Node 24+：仅运行搜索引擎检查脚本时需要
+
+* Python 3：仅校验策展清单 / 榜单算法不变量时需要
 
 ## 构建与运行
 
@@ -96,14 +100,14 @@ devecocli check lint                                       # ArkTS 代码检查
 
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [docs/brew-api-design.md](docs/brew-api-design.md) | 数据层设计：数据源、归一化、缓存、错误分类 |
-| [docs/brew-discover-algo.md](docs/brew-discover-algo.md) | Discover 榜单算法（现网口径，唯一权威） |
-| [docs/brew-catalog-fullsync-spec.md](docs/brew-catalog-fullsync-spec.md) | 全量目录同步规范 |
-| [docs/brew-marketplace-content-plan.md](docs/brew-marketplace-content-plan.md) | 内容与分类体系规划 |
-| [docs/hds-titlebar-blur.md](docs/hds-titlebar-blur.md) | 标题栏模糊效果说明 |
-| [docs/brew-handover.md](docs/brew-handover.md) | 交接说明：环境、命令、脚本与注意事项 |
+| 文档                                    | 内容                       |
+| ------------------------------------- | ------------------------ |
+| docs/brew-api-design.md               | 数据层设计：数据源、归一化、缓存、错误分类    |
+| docs/brew-discover-algo.md            | Discover 榜单算法（现网口径，唯一权威） |
+| docs/brew-catalog-fullsync-spec.md    | 全量目录同步规范                 |
+| docs/brew-marketplace-content-plan.md | 内容与分类体系规划                |
+| docs/hds-titlebar-blur.md             | 标题栏模糊效果说明                |
+| docs/brew-handover.md                 | 交接说明：环境、命令、脚本与注意事项       |
 
 ## 许可
 
