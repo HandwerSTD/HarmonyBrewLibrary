@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "top.handwer.brewlibrary",
     "vendor": "example",
-    "versionCode": 1003000,
-    "versionName": "1.3.0",
+    "versionCode": 1004000,
+    "versionName": "1.4.0",
     "icon": "$media:hmos_layered_image",
     "label": "$string:hmos_app_name",
   }
