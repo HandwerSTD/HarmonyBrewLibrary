@@ -33,6 +33,10 @@ const TAG: string = '[BrewCli]';
  * 去下那个已不存在的地址，于是 `curl: (22) 404`。这一项只放开元数据刷新，不执行 `brew update`，
  * 刷新窗口仍走 brew 自己的默认值：安装/升级 450 秒（`HOMEBREW_API_AUTO_UPDATE_SECS`），
  * 其余命令 7 天。
+ *
+ * `HOMEBREW_COLOR=1` 是给执行 Sheet 用的：brew 的着色判据是「输出是 tty」（`utils/helpers.sh`
+ * 里的 `-t 1` / `-t 2`），而我们的输出走管道不是 tty，不加这一项 brew 会自己降级成纯文本，
+ * 日志区就没有颜色可解。它只加进本应用起的子进程，系统终端里的 brew 不受影响。
  */
 export class BrewCli {
   /**
@@ -118,7 +122,7 @@ export class BrewCli {
     }
     const prefix: string = BrewCli.prefix();
     const env: string = 'HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1 ' +
-      'HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1';
+      'HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1 HOMEBREW_COLOR=1';
     const prefixEnv: string = prefix.length > 0 ? ` HOMEBREW_PREFIX="${prefix}"` : '';
     return `${env}${prefixEnv} "${brewPath}" ${args}`;
   }

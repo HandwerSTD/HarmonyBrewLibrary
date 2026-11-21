@@ -434,6 +434,7 @@ BrewDiscoverHomeView（壳，自己的 PageContext）
 | 同一个 URL 请求了好几次 | §9.13 | 缓存只在响应回来后才写入 → 必须再做一层**在途去重**（`inFlight` map）；页面加载被触发两次、页签并发批次有交集各占一半 |
 | 过期后要不要重下 / 怎么判断“变没变” | §7.7 | **主动 probe**：1 次 HEAD（`If-Modified-Since`）代表整批；CDN 的 **ETag 跨节点不一致**（实测命中仅 1/5）→ IMS 优先、ETag 兜底 |
 | 应用内安装/升级报 `curl: (22) ... 404`，系统终端里同样的包装得上 | `brew-command-execution-spec.md` §5.1 | `HOMEBREW_NO_AUTO_UPDATE=1` 让 API 元数据缓存永不过期，一直按旧记录去下服务端已重打删除的旧 bottle 文件名；必须配对 `HOMEBREW_FORCE_API_AUTO_UPDATE=1` |
+| 执行 Sheet 里 brew 输出全是纯白、一点颜色都没有 | `brew-command-execution-spec.md` §3.3 | brew 的着色判据是 `-t 1` / `-t 2`（输出是 tty），我们的输出走管道 → 必须在命令行前缀里带 `HOMEBREW_COLOR=1`；实测 `--json` 输出不会被 SGR 污染（见 `knowledge/2026-11-21-brew-ansi-color.md`） |
 
 ### 7.4 流程类
 

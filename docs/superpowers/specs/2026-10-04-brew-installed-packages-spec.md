@@ -238,6 +238,7 @@ features/brewcommon/src/main/ets/util/BrewInstalledParser.ets      解析成 Bre
 | `HOMEBREW_NO_ANALYTICS` | `1` | 不发送统计 |
 | `HOMEBREW_NO_ENV_HINTS` | `1` | 不输出环境提示 |
 | `NONINTERACTIVE` | `1` | 保证不会卡在交互提示 |
+| `HOMEBREW_COLOR` | `1` | 输出走管道不是 tty，不加这一项 brew 会自己降级成纯文本；JSON 输出不会被 SGR 污染（见 `docs/knowledge/2026-11-21-brew-ansi-color.md`） |
 | `PATH` | `<prefix>/bin` 前置 | brew 内部调用 `git` / `curl` 等 |
 
 超时 30 秒：brew 启动要拉起 vendored Ruby，首跑可能到秒级。

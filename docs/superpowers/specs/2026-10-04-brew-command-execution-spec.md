@@ -22,7 +22,7 @@
 | G1 | 「我的 - 待更新」页底部出现「更新全部」按钮，执行的命令跟随筛选 chips：全部 → `brew upgrade`；Formulae → `brew upgrade --formula`；Casks → `brew upgrade --cask` | Sheet 顶部显示的命令行；`[brew-cmd] start args=…` |
 | G2 | 当前筛选下列表为空时不显示按钮；正在执行的命令与本次将要发出的参数相同时按钮显示「执行中…」，点击重新打开 Sheet | 真机 |
 | G3 | 包详情页：未安装显示「安装」；已安装且有新版本显示「升级」；已安装且最新显示「已安装」且不可点击 | 真机与设备上 `brew list --versions` 对照 |
-| G4 | Sheet 按到达顺序流式显示 stdout 与 stderr，stderr 行使用不同颜色 | 真机；`[brew-cmd] poll out=… err=…` |
+| G4 | Sheet 按到达顺序流式显示 stdout 与 stderr，stdout 默认白字、stderr 默认浅黄字，brew 自己输出的 SGR 颜色（`==>` 的绿/蓝、`Warning:` 的黄、`Error:` 的红、链接的下划线）按原色渲染 | 真机；`[brew-cmd] poll out=… err=…` |
 | G5 | Sheet 的「中断」发送 SIGINT（与终端 Ctrl+C 相同），命令在 3 秒内结束并显示「已中断」 | `[brew-cmd] interrupt sig=int`、`[brew-cmd] exit error=1005` |
 | G6 | 中断后 5 秒仍未退出时按钮变为「强制终止」，点击后进程组被 SIGTERM / SIGKILL 终止 | 真机；`[brew-cmd] kill` |
 | G7 | Sheet 关闭后命令继续执行；重新进入页面时按钮显示进行中，点击可重新打开 Sheet 并看到完整输出 | 真机 |
@@ -134,7 +134,7 @@
 | 位置 | 内容 |
 | --- | --- |
 | 标题栏菜单 | trash（`sys.symbol.trash`）结束命令：第一次点击发 SIGINT，宽限期之后再点发 SIGTERM / SIGKILL；命令没在跑、或正处在宽限期内时不可点。xmark（`sys.symbol.xmark`）关闭 Sheet |
-| 内容区 | 一整块等宽文本：第一行是 `$ <命令>`（空一行接输出），后面每行一个 `Span`；黑底（`Color.Black`）、白字（`Color.White`）、字体 `JetBrains Mono NL`、行高 1.5 倍；stderr 行用 `sys.color.warning`；最多保留 1000 行，超出时命令行之后显示「已省略前 N 行」；命令结束之后在文本末尾追加状态行，写法是方括号里的短句：`[运行中]` / `[正在中断…]` / `[已完成 退出码 %d]` / `[已中断]` / `[执行超时]` / `[执行失败 退出码 %d]`（通道没给出退出码时是 `[执行失败]`） |
+| 内容区 | 一整块等宽文本：第一行是 `$ <命令>`（空一行接输出），后面每行由若干 `Span` 组成；黑底（`Color.Black`）、stdout 默认白字（`#FFFFFF`）、stderr 默认浅黄字（`#FFE08A`）、字体 `monospace`；brew 自己打的 SGR 颜色/粗细/下划线/反显按 `BrewAnsiParser` 解析结果逐段渲染；最多保留 1000 行，超出时命令行之后显示「已省略前 N 行」；命令结束之后在文本末尾追加状态行，写法是方括号里的短句：`[运行中]` / `[正在中断…]` / `[已完成 退出码 %d]` / `[已中断]` / `[执行超时]` / `[执行失败 退出码 %d]`（通道没给出退出码时是 `[执行失败]`） |
 
 组件入参：`@ObjectLink state: BrewCommandState`（`@Prop` 会深拷贝整个对象，1000 行日志每 200ms 复制一次不可接受），加上 `onInterrupt` / `onForceKill` / `onClose` 三个回调，由顶层宿主接到 `BrewCommandRunner` 上（中断与强制终止同样都调 `interrupt()`，升级成 SIGTERM / SIGKILL 由命令层按时机处理）。
 
@@ -142,9 +142,30 @@
 
 **行处理**：
 
-- 按 `\n` 分行，最后一段不完整的行留到下一次轮询再拼接；
-- 行内出现 `\r` 时只保留最后一个 `\r` 之后的内容（brew 的下载进度用 `\r` 重绘同一行，逐条追加会把进度碎片铺满整个日志区）；
-- 剥离 ANSI 转义序列（`ESC [ … 字母`）。
+- 按 `\n` 分行，最后一段不完整的行留到下一次轮询再拼接；stdout 与 stderr 各存各的尾行，两个流不拼在一起；
+- 行内出现 `\r` 时只保留最后一个非空段之后的内容（brew 的下载进度用 `\r` 重绘同一行，逐条追加会把进度碎片铺满整个日志区；跳过空段与 brew 自己的 `Tty.collapse_carriage_returns` 一致）；被丢掉的那些段照样走一遍解析器的样式更新（不产出段）—— 它们里面的 SGR 已经把终端改成了新样式，后半段是在那个样式下画的；
+- 剩下的部分交给 `BrewAnsiParser` 切成带样式的段：SGR（颜色、粗体、暗化、斜体、下划线、删除线、反显）折进每一段的 `color` / `background` / 四个布尔位，光标移动、清屏、OSC 标题这类没有载体的序列直接吃掉。
+
+**终端配色**（`features/brewcommon/src/main/ets/util/BrewAnsi.ets`）：
+
+| 项 | 取值 |
+| --- | --- |
+| stdout 默认前景 | `#FFFFFF` |
+| stderr 默认前景 | `#FFE08A`（浅黄） |
+| 基本 8 色（SGR 30–37 / 40–47） | `#000000 #CD3131 #0DBC79 #E5E510 #2472C8 #BC3FBC #11A8CD #E5E5E5` |
+| 亮色（SGR 90–97 / 100–107） | `#666666 #F14C4C #23D18B #F5F543 #3B8EEA #D670D6 #29B8DB #FFFFFF` |
+| 256 色（`38;5;n` / `48;5;n`） | 0–15 查上两表，16–231 是 6×6×6 立方体（每级 `0 95 135 175 215 255`），232–255 是灰阶 `8 + (n-232)*10` |
+| 真彩色（`38;2;r;g;b`） | 按原值 |
+| 暗化（SGR 2） | 各通道乘 0.55 |
+| 反显（SGR 7） | 前景与背景互换，背景空时用 Sheet 的黑底 |
+
+stderr 用浅黄而不是 `sys.color.warning`：stderr 里绝大多数行是 Warning 与进度提示，真正出错的是 `Error:` 那几行 —— brew 自己会给它们打红色 SGR，于是「整片红」变成「浅黄的常规输出 + 自己冒出来的红色错误」，层次才分得开。
+
+颜色不放进 `resources/*/element/color.json`：执行 Sheet 恒为黑底，深浅色两套在这里没有意义；ANSI 的 16 色本身是一份固定表，放进资源反而要在两处维护同一份十六进制。
+
+解析器按流各持一个实例（`stdoutAnsi` / `stderrAnsi`），样式状态跨行延续 —— 这是终端的真实行为：一条 `\033[32m` 之后的所有输出都是绿的，直到出现 `\033[0m`。brew 自己在每段末尾都会 reset，但做成有状态的解析器才不用赌对方一定守规矩。每段的 `id` 全局递增，用作 `ForEach` 的键（裁剪掉最旧的行之后，同一个下标会指向不同内容）。
+
+brew 的着色判据是「输出是 tty」（`utils/helpers.sh` 里的 `-t 1` / `-t 2`），我们的输出走管道不是 tty，因此 `BrewCli.commandLine()` 必须带 `HOMEBREW_COLOR=1`，否则 brew 会自己降级成纯文本、日志区没有颜色可解。该变量只加进本应用起的子进程，系统终端里的 brew 不受影响；`brew *_--json*` 的输出不会被 SGR 污染（实测加 `HOMEBREW_COLOR=1` 后 `info --json=v2 --installed` 的 SGR 计数为 0）。
 
 **关闭行为**：Sheet 可随时关闭（下滑、点遮罩、返回键，或标题栏菜单里的 xmark）。关闭不影响命令：任务状态在单例里，输出继续被收进行缓冲；页面按钮显示「执行中…」，点击重新打开 Sheet 并看到完整输出，命令结束后没看过终态结果时侧边栏底部的 Shell 入口一直也在（命令在后台执行、终态结果还没被看过时入口常驻，判据见 [`2026-10-04-brew-shell-sidebar-entry-spec.md`](2026-10-04-brew-shell-sidebar-entry-spec.md)）。
 
@@ -251,7 +272,7 @@ export class BrewCli {
 }
 ```
 
-环境前缀与现状相同（`HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1`，加 `HOMEBREW_PREFIX`）。
+环境前缀与现状相同（`HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_FORCE_API_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1 HOMEBREW_COLOR=1`，加 `HOMEBREW_PREFIX`）。
 
 `HOMEBREW_NO_AUTO_UPDATE=1` 保留的理由：页面上的「待更新」是按设备本地 tap 状态算出来的（`brew info --json=v2 --installed` 的 `outdated` 字段），升级命令用同一份状态才能做到「页面说升哪些就升哪些」；`brew update` 是另一件事（要联网、要 git、可能几分钟），不在本功能范围内。数据源里有、设备 tap 里没有的包会安装失败，brew 的原始错误会显示在 Sheet 里。
 
@@ -299,7 +320,10 @@ export enum BrewCommandStartResult {
 
 export class BrewCommandLine {
   public text: string;
+  /** 来自 stderr 流 */
   public stderr: boolean;
+  /** 按 ANSI 切好的样式段；渲染时逐段展开成 `Span` */
+  public segments: BrewTextSegment[];
 }
 
 export class BrewCommandState {

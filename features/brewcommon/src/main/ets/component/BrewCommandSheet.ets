@@ -4,14 +4,25 @@
 
 import { SymbolGlyphModifier, TextModifier } from '@kit.ArkUI';
 import { CommonConstants } from '@ohos/common';
-import { BrewCommandLine, BrewCommandState, BrewCommandStatus, brewCommandStatusText } from '../model/BrewCommandModels';
+import {
+  BrewCommandLine,
+  BrewCommandState,
+  BrewCommandStatus,
+  brewCommandStatusText,
+} from '../model/BrewCommandModels';
+import { BrewTextSegment, TERM_TEXT_COLOR } from '../util/BrewAnsi';
 
 /** 日志字体。设备自带的等宽字体；取不到时系统回退到默认字体 */
 const LOG_FONT_FAMILY: string = 'monospace';
 
-/** 终端观感：整页黑底，正文白字，stderr 行用 warning 色 */
+/**
+ * 终端观感：整页黑底，正文白字。
+ *
+ * 行内颜色不在这里定 —— 每行带着 `BrewAnsiParser` 切好的样式段，颜色已经折算好
+ * （stdout 默认白、stderr 默认浅黄、带 SGR 的段落用自己的色）。
+ */
 const SHEET_BACKGROUND: ResourceColor = Color.Black;
-const LOG_TEXT_COLOR: ResourceColor = Color.White;
+const LOG_TEXT_COLOR: ResourceColor = TERM_TEXT_COLOR;
 
 /** 日志行高倍数。等宽字体配 1.5 倍行高，长输出更容易按行扫读 */
 const LOG_LINE_HEIGHT: number = 1.5;
@@ -28,8 +39,8 @@ const MENU_ICON_SIZE: number = 20;
  * 重新打开看到的是完整输出。
  *
  * 内容区是一整块等宽文本（`Text` + `Span`）：第一行是真正跑的命令行，后面是输出行；
- * 黑底白字，stderr 行用 warning 色，命令结束之后把状态文案追加在文本末尾。
- * 整块文本放在 `Scroll` 里，可以随时回看历史输出。
+ * 黑底，stdout 默认白字、stderr 默认浅黄字，brew 自己打的 SGR 颜色覆盖默认色；
+ * 命令结束之后把状态文案追加在文本末尾。整块文本放在 `Scroll` 里，可以随时回看历史输出。
  *
  * 入参用 `@ObjectLink` 而不是 `@Prop`：`@Prop` 对对象做深拷贝，日志每 200ms 增一批行，
  * 1000 行每 200ms 复制一次不可接受。三个回调由页面接到 `BrewCommandRunner` 与 Sheet 的开关上 ——
@@ -122,8 +133,21 @@ export struct BrewCommandSheet {
   }
 
   /**
-   * 日志文本。整块日志是一个 `Text`：第一行是真正跑的命令行，后面每行一个 `Span`，
-   * stderr 行单独给 warning 色，命令结束之后在末尾追加状态行（如 `[已完成 退出码 0]`、`[已中断]`）。
+   * 下划线与删除线可以同时存在，`decoration` 只能填一个类型，同时出现时优先下划线。
+   */
+  private static decorationOf(segment: BrewTextSegment): TextDecorationType {
+    if (segment.underline) {
+      return TextDecorationType.Underline;
+    }
+    return segment.strike ? TextDecorationType.LineThrough : TextDecorationType.None;
+  }
+
+  /**
+   * 日志文本。整块日志是一个 `Text`：第一行是真正跑的命令行，后面每行一组 `Span`，
+   * 命令结束之后在末尾追加状态行（如 `[已完成 退出码 0]`、`[已中断]`）。
+   *
+   * 一行可能由多段组成（brew 自己的 ANSI 颜色），所以每行用 `ForEach` 展开诸段。
+   * 段颜色已经在解析时折算好（默认色、反显、暗化都折进去了），这里只管填。
    */
   @Builder
   LogText() {
@@ -140,8 +164,19 @@ export struct BrewCommandSheet {
       // 超出上限裁剪时最早的行被丢弃，同样的下标会指向不同的内容，
       // 用当前下标做键会让已渲染的行保留旧文本，看起来像日志不更新。
       ForEach(this.state.lines, (line: BrewCommandLine, index: number) => {
-        Span(`${line.text}\n`)
-          .fontColor(line.stderr ? $r('sys.color.warning') : LOG_TEXT_COLOR)
+        ForEach(line.segments, (segment: BrewTextSegment) => {
+          Span(segment.text)
+            .fontColor(segment.color)
+            .fontWeight(segment.bold ? FontWeight.Bold : FontWeight.Normal)
+            .fontStyle(segment.italic ? FontStyle.Italic : FontStyle.Normal)
+            .decoration({ type: BrewCommandSheet.decorationOf(segment), color: segment.color })
+            .textBackgroundStyle({
+              color: segment.background.length > 0 ? segment.background : Color.Transparent,
+              radius: segment.background.length > 0 ? 2 : 0,
+            })
+        }, (segment: BrewTextSegment) => `${segment.id}`)
+        Span('\n')
+          .fontColor(LOG_TEXT_COLOR)
       }, (line: BrewCommandLine, index: number) => `${this.state.omittedLines + index}`)
       if (this.state.status !== BrewCommandStatus.IDLE) {
         Span('\n')

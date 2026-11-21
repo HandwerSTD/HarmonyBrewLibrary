@@ -130,6 +130,9 @@ export {
   isBrewCommandEnded,
 } from './src/main/ets/model/BrewCommandModels';
 
+// 终端配色与 ANSI 解析：日志段的颜色与字体加成都由它切出来。
+export { BrewAnsiParser, BrewTextSegment } from './src/main/ets/util/BrewAnsi';
+
 // 执行 Sheet 的内容组件，两个页面共用一份。
 export { BrewCommandSheet } from './src/main/ets/component/BrewCommandSheet';
 

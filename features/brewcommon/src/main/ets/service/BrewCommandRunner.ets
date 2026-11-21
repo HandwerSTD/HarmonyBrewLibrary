@@ -25,15 +25,13 @@ import {
   isBrewCommandEnded,
 } from '../model/BrewCommandModels';
 import { BrewCommandGenerator } from '../util/BrewCommandGenerator';
+import { BrewAnsiParser, BrewTextSegment } from '../util/BrewAnsi';
 import { BrewCli } from './BrewCli';
 // 与 BrewInstalledLoader 互相 import 是有意的：读取路径要问「现在有没有写命令在执行」（spec §6.2 规则 5），
 // 写命令结束要让它失效并刷新（spec §5.3 第 5 点）。两侧都只在方法体内引用对方，不在顶层求值。
 import { BrewInstalledLoader } from './BrewInstalledLoader';
 
 const TAG: string = '[brew-cmd]';
-
-/** `ESC [ … 字母`。brew 的进度与着色输出里会出现，留在日志里只会占地方 */
-const ANSI_PATTERN: RegExp = /\u001b\[[0-9;?]*[A-Za-z]/g;
 
 /**
  * brew 写命令的执行层：单飞、轮询、行缓冲、中断与终止。
@@ -198,6 +196,11 @@ export class BrewCommandRunner {
   /** 两路输出各自的不完整尾行。分开存，因为它们是两个流，不能互相拼接 */
   private stdoutTail: string = '';
   private stderrTail: string = '';
+  /** 两路各自的 ANSI 样式状态。跨行延续，与真终端一致 */
+  private stdoutAnsi: BrewAnsiParser = new BrewAnsiParser(false);
+  private stderrAnsi: BrewAnsiParser = new BrewAnsiParser(true);
+  /** 样式段的全局序号，只在当前这条命令内递增 */
+  private nextSegmentId: number = 0;
   private listeners: (() => void)[] = [];
 
   /** 重置状态并起轮询。就地改一级属性，页面持有的实例与 `@ObjectLink` 才继续有效 */
@@ -205,6 +208,9 @@ export class BrewCommandRunner {
     this.taskId = taskId;
     this.stdoutTail = '';
     this.stderrTail = '';
+    this.stdoutAnsi.reset();
+    this.stderrAnsi.reset();
+    this.nextSegmentId = 0;
     this.state.title = request.title;
     this.state.command = request.command;
     this.state.args = request.args;
@@ -255,10 +261,9 @@ export class BrewCommandRunner {
   }
 
   /**
-   * 把一段增量输出转成行，返回本次落地的字符数（只用于日志打点）。
+   * 把一段增量输出转成行，返回本次落地的纯字符数（只用于日志打点）。
    *
-   * 三条处理规则：按 `\n` 分行且最后一段留到下一次；行内的 `\r` 只保留最后一段之后的内容
-   * （brew 用 `\r` 重绘同一条进度，逐条追加会把碎片铺满日志区）；剥掉 ANSI 转义序列。
+   * 按 `\n` 分行，最后一段不完整的留到下一次；行内 `\r` 与 ANSI 的处理交给 `buildLine`。
    */
   private append(data: string, isStderr: boolean): number {
     const tail: string = isStderr ? this.stderrTail : this.stdoutTail;
@@ -278,9 +283,9 @@ export class BrewCommandRunner {
     let added: number = 0;
     const batch: BrewCommandLine[] = [];
     for (const part of parts) {
-      const text: string = BrewCommandRunner.cleanLine(part);
-      batch.push(new BrewCommandLine(text, isStderr));
-      added += text.length;
+      const line: BrewCommandLine = this.buildLine(part, isStderr);
+      batch.push(line);
+      added += line.text.length;
     }
     this.pushLines(batch);
     return added;
@@ -290,14 +295,35 @@ export class BrewCommandRunner {
   private flushTails(): void {
     const batch: BrewCommandLine[] = [];
     if (this.stdoutTail.length > 0) {
-      batch.push(new BrewCommandLine(BrewCommandRunner.cleanLine(this.stdoutTail), false));
+      batch.push(this.buildLine(this.stdoutTail, false));
       this.stdoutTail = '';
     }
     if (this.stderrTail.length > 0) {
-      batch.push(new BrewCommandLine(BrewCommandRunner.cleanLine(this.stderrTail), true));
+      batch.push(this.buildLine(this.stderrTail, true));
       this.stderrTail = '';
     }
     this.pushLines(batch);
+  }
+
+  /** 把一段不带换行的原文切成一行（含样式段） */
+  private buildLine(raw: string, isStderr: boolean): BrewCommandLine {
+    const parser: BrewAnsiParser = isStderr ? this.stderrAnsi : this.stdoutAnsi;
+    const parts: string[] = raw.indexOf('\r') < 0 ? [raw] : raw.split('\r');
+    let kept: number = parts.length - 1;
+    while (kept > 0 && parts[kept].length === 0) {
+      kept--;
+    }
+    // 被 `\r` 盖掉的前半段不显示，但里面的 SGR 已经把终端改成了新样式 —— 先走一遍再画后半段
+    if (kept > 0) {
+      parser.advance(parts.slice(0, kept).join('\r'));
+    }
+    const segments: BrewTextSegment[] = parser.parse(parts[kept], this.nextSegmentId);
+    this.nextSegmentId += segments.length;
+    let text: string = '';
+    for (const segment of segments) {
+      text += segment.text;
+    }
+    return new BrewCommandLine(text, isStderr, segments);
   }
 
   /**
@@ -317,13 +343,6 @@ export class BrewCommandRunner {
       return;
     }
     this.state.lines = next;
-  }
-
-  /** 剥 ANSI 转义序列，并把 `\r` 之前的内容丢掉（`\r` 之后才是这条行的当前画面） */
-  private static cleanLine(raw: string): string {
-    const stripped: string = raw.replace(ANSI_PATTERN, '');
-    const redrawAt: number = stripped.lastIndexOf('\r');
-    return redrawAt >= 0 ? stripped.substring(redrawAt + 1) : stripped;
   }
 
   /**

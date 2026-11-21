@@ -2,6 +2,8 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
+import { BrewTextSegment } from '../util/BrewAnsi';
+
 /** 一条 brew 写命令的生命周期阶段 */
 export enum BrewCommandStatus {
   /** 从未执行过命令 */
@@ -35,14 +37,23 @@ export enum BrewCommandStartResult {
   BAD_ARGS = 'bad_args',
 }
 
-/** 日志区的一行。`stderr` 决定行的颜色 */
+/**
+ * 日志区的一行。
+ *
+ * 一行可能由多段不同样式的文本组成（brew 自己会输出 ANSI 颜色），所以带着切好的
+ * `segments` 而不是一整串文本：渲染层逐段出一个 `Span`，不用再解析一遍。
+ * `text` 是去掉转义序列之后的纯文本，只用于日志打点与占位判断。
+ */
 export class BrewCommandLine {
   public text: string;
   public stderr: boolean;
+  /** 切好的样式段，按顺序拼起来就是这一行 */
+  public segments: BrewTextSegment[];
 
-  public constructor(text: string, stderr: boolean) {
+  public constructor(text: string, stderr: boolean, segments: BrewTextSegment[]) {
     this.text = text;
     this.stderr = stderr;
+    this.segments = segments;
   }
 }
 
