@@ -10,6 +10,7 @@
 | --- | --- |
 | [2026-11-21-brew-cache-ownership.md](2026-11-21-brew-cache-ownership.md) | 设备上同时存在两份 brew 缓存，归属由 `XDG_CACHE_HOME` 决定；应用和宿主共用一份，HiShell 是例外 |
 | [2026-11-21-probe-inside-app.md](2026-11-21-probe-inside-app.md) | 想在**应用自己的进程里**执行命令做实验时，报告文件该写到哪、怎么取回来 |
+| [2026-11-21-brew-tap-trust.md](2026-11-21-brew-tap-trust.md) | brew 的 trust.json 落在哪、为什么 HiShell 里 trust 过的包应用里还报 untrusted，以及应用侧能读到的三条替代路 |
 
 写法上不必工整：现象、命令、原始输出、当时怎么想的，都行。日期放文件名前缀，
 因为同一件事早晚会变（例如 brew 升级之后缓存链可能改）。

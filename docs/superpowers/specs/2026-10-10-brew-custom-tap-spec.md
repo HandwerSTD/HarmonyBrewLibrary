@@ -144,6 +144,34 @@ Tap 自身也不提供统计，能拿到的量级只有 `brew info` 输出里这
    会让两种产品的列表形态不一致，而这个功能要上线到 `pc_normal`；
 3. 读设备上已有的 Tap 属于「本机包」那条链路，不是本轮需求。
 
+### 3.4 与设备上 brew 的 tap trust 无关
+
+brew 7.0 起，非官方 Tap 里的 formula、cask、command 必须先 `brew trust` 过才会被加载，
+否则 install 会报 `Error: Refusing to load formula <user>/<tap>/<token> from untrusted tap <user>/<tap>.`。
+这件事与本设计的 Tap 索引是**两条互不相干的链路**：
+
+| | 本设计的 Tap | 设备上 brew 的 Tap |
+|---|---|---|
+| 内容来源 | 应用自己克隆到沙箱，直接读 Ruby 源文件 | brew 自己克隆在 `<prefix>/Homebrew/Library/Taps/` |
+| 是否需要 trust | 不需要：不走 brew，也没有代码执行 | 需要，`trust.json` 里列过才加载 |
+| `pc_normal` | 有 | 没有 |
+
+因此「用户在这个应用里添加了一个 Tap」不等于「brew 信任这个 Tap」。详情页的「安装命令」卡片
+给出的是可复制的命令行，用户拿去执行时，设备上的 brew 仍然按自己的 `trust.json` 判定。
+
+实测（2026-11-21，brew 7.0.9_7）：trust 存在 `${HOMEBREW_USER_CONFIG_HOME}/trust.json`，
+而 `HOMEBREW_USER_CONFIG_HOME` 由 `XDG_CONFIG_HOME`（`bin/brew:164-172`）推出，
+所以应用与系统终端读的是两份不同的文件，在一边 trust 过不会影响另一边。
+对自定义 remote 的 Tap，`trustedtaps` 里必须写 remote URL 而不是 `user/tap` 名字
+（`tap.rb:941-958`）；`harmony/ohos` 的 remote 是
+`https://gitcode.com/OpenHarmonyPCDeveloper/ohpcd-brew.git`，只写名字不生效。
+细节与复现命令见 [`knowledge/2026-11-21-brew-tap-trust.md`](../../knowledge/2026-11-21-brew-tap-trust.md)。
+
+本设计**不代管** trust：不写 `trust.json`、不注入 `HOMEBREW_NO_REQUIRE_TAP_TRUST`。
+理由有三条：写入位置的 owner 落在 `file_manager` 组而不是应用 uid，`brew trust` 自己会拒绝写；
+`HOMEBREW_NO_REQUIRE_TAP_TRUST` 已 deprecated 且会放行所有第三方 Tap，范围过宽；
+本设计的 Tap 链路里没有任何「由应用代 brew 执行安装」的环节（§13），没有需要放行的时刻。
+
 ---
 
 ## 4. 模块与依赖
@@ -464,6 +492,7 @@ getTapCaskDetail(componentId: number, tap: string, token: string,
 `BrewCommandGenerator.qualifiedName` 已经会按 tap 拼限定名，因此详情页的「来源与主页」分区
 会显示 Tap 名，「安装命令」卡片给出的是带限定名的完整命令，可以复制。
 执行按钮的显隐仍由 `BREW_CLI_ENABLED` 决定，与现有规则一致。
+卡片下方一行小字说明：设备上的 brew 需要自行 `brew trust` 过才会加载非官方 Tap 的包（§3.4）。
 
 ---
 
@@ -599,6 +628,7 @@ Security.framework 的平台上一律要求选到 OpenSSL 或 mbedTLS。本机�
 | 沙箱空间被占用 | 存储压力 | 删除 Tap 时整目录删除；列表页可显示每个 Tap 的体积（低优先项） |
 | Tap 的 token 与源里的 token 同名 | 用户以为看到的是同一个包 | 详情页在 Tap 入口下不回落当前源（§8.5），来源分区显示 Tap 名 |
 | 页签数量增加 | 侧边栏变长 | `ALL_TABS` 插在 Casks 与搜索之间；`TAB_CONTENT_STATUSES` 与 `TabContent` 的顺序按枚举值同步追加（§8.1） |
+| 用户以为「应用里加过 Tap」就等于「brew 信任它」 | 复制安装命令执行时报 untrusted | 「安装命令」卡片下方一行说明：设备上的 brew 需另行 `brew trust`（§3.4） |
 
 回滚：Tap 链路不改动任何既有缓存键与数据形状。回滚等于移除页签入口与 `features/tapkit`；
 沙箱里的 `filesDir/brew_taps/` 是新增目录，不污染既有数据；主 store 只多一条小键 `brew_taps`。
@@ -617,4 +647,5 @@ Security.framework 的平台上一律要求选到 OpenSSL 或 mbedTLS。本机�
 | 私有仓库的凭据输入 | 同上；错误分类里给 `auth-required` 并说明只支持公开仓库 |
 | Tap 的定时自动同步 | 同步只在「添加」与「重新同步」时发生；自动更新需要先定频率与网络策略 |
 | 通过 Tap 执行安装与升级 | 需要设备上的 brew，`pc_normal` 没有该能力。安装命令卡片仍可复制（§8.5） |
+| 代管设备上 brew 的 tap trust | 与本设计的 Tap 索引是两条链路；写入位置 owner 不对、环境变量已 deprecated 且范围过宽（§3.4） |
 | 解析 Ruby 里的插值与条件分支 | §7.2，字符串保留原文 |
