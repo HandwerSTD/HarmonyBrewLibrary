@@ -4,13 +4,13 @@
       {
         "name": "default",
         "material": {
-          "storePassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
-          "certpath": "./keys/common_debug.cer",
-          "keyAlias": "QuickySticker",
-          "keyPassword": "0000001DC9D75A9F6DC7A3C8712333BCF08B07F8594B4B2A8E506CA35825E24BB93D704ADA26B5275301B79F4F",
-          "profile": "./keys/BrewTestDebugDebug.p7b",
+          "storePassword": "000000207107C3E677BFD10948E0D5345D6B271220BF2BB6BE907C51739C305BCE4CD26C580729A172B033A979BC73C1",
+          "certpath": "/storage/Users/currentUser/.ohos/config/default_sample_in_harmonyosxUtWmVQ_3hzp0RHsAjTXfXN_xlGQ9QhGhrjsGu0h8pU.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "000000207107C3E677BFD10948E0D5345D6B271220BF2BB6BE907C51739C305BCE4CD26C580729A172B033A979BC73C1",
+          "profile": "/storage/Users/currentUser/.ohos/config/default_sample_in_harmonyosxUtWmVQ_3hzp0RHsAjTXfXN_xlGQ9QhGhrjsGu0h8pU.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "./keys/quickysticker_sign.p12"
+          "storeFile": "/storage/Users/currentUser/.ohos/config/default_sample_in_harmonyosxUtWmVQ_3hzp0RHsAjTXfXN_xlGQ9QhGhrjsGu0h8pU.p12"
         },
         "type": "HarmonyOS"
       },
