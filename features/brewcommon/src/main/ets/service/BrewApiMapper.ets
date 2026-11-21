@@ -319,11 +319,15 @@ export class BrewApiMapper {
     BrewApiMapper.applyLifecycle(base, doc.deprecated, doc.deprecation_date, doc.deprecation_reason,
       doc.deprecation_replacement_formula, doc.deprecation_replacement_cask,
       doc.disabled, doc.disable_date, doc.disable_reason);
-    // formula 的安装量取 install_on_request（用户主动点名安装的次数），cask 取 install —— 与 generate.py 一致
-    const bucket: LiveAnalytics = doc.analytics ?? {};
-    base.installs30d = BrewApiMapper.installCount(bucket.install_on_request?.['30d'], token);
-    base.installs90d = BrewApiMapper.installCount(bucket.install_on_request?.['90d'], token);
-    base.installs365d = BrewApiMapper.installCount(bucket.install_on_request?.['365d'], token);
+    // formula 的安装量取 install_on_request（用户主动点名安装的次数），cask 取 install —— 与 generate.py 一致。
+    // 方言不带 analytics 时**不覆盖**：此时骨架里的 installs30d 是从目录拿的
+    // （`BrewTable.installCount` 的 v30，与 Discover 榜单同一份），按空桶算一次只会把它清零。
+    const bucket: LiveAnalytics | undefined = doc.analytics;
+    if (bucket !== undefined) {
+      base.installs30d = BrewApiMapper.installCount(bucket.install_on_request?.['30d'], token);
+      base.installs90d = BrewApiMapper.installCount(bucket.install_on_request?.['90d'], token);
+      base.installs365d = BrewApiMapper.installCount(bucket.install_on_request?.['365d'], token);
+    }
     base.installCommand = BrewApiMapper.installCommand(BrewKind.FORMULA, token, base.tap);
     return base;
   }
@@ -362,10 +366,13 @@ export class BrewApiMapper {
     BrewApiMapper.applyLifecycle(base, doc.deprecated, doc.deprecation_date, doc.deprecation_reason,
       doc.deprecation_replacement_formula, doc.deprecation_replacement_cask,
       doc.disabled, doc.disable_date, doc.disable_reason);
-    const bucket: LiveAnalytics = doc.analytics ?? {};
-    base.installs30d = BrewApiMapper.installCount(bucket.install?.['30d'], token);
-    base.installs90d = BrewApiMapper.installCount(bucket.install?.['90d'], token);
-    base.installs365d = BrewApiMapper.installCount(bucket.install?.['365d'], token);
+    // 与 `mergeFormula` 同理：没有 analytics 时保留骨架里来自目录的 installs30d
+    const bucket: LiveAnalytics | undefined = doc.analytics;
+    if (bucket !== undefined) {
+      base.installs30d = BrewApiMapper.installCount(bucket.install?.['30d'], token);
+      base.installs90d = BrewApiMapper.installCount(bucket.install?.['90d'], token);
+      base.installs365d = BrewApiMapper.installCount(bucket.install?.['365d'], token);
+    }
     base.installCommand = BrewApiMapper.installCommand(BrewKind.CASK, token, base.tap);
     return base;
   }

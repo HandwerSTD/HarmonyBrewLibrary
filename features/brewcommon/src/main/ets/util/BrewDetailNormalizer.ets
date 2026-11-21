@@ -191,10 +191,17 @@ export class BrewDetailNormalizer {
     return rows;
   }
 
-  /** 90/365 天安装量。都为空则不创建分区。 */
+  /**
+   * 90/365 天安装量。**三档都为 0 时返回空**，分区随之不创建。
+   *
+   * 30d 不无条件压一行：方言只给目录量值时，90/365 恒为 0，而目录尚未同步时
+   * 连 30d 也是 0 —— 那时硬写一个「近 30 天安装量 0」是在说一件我们并不知道的事。
+   */
   private static installsRows(installs30d: number, installs90d: number, installs365d: number): BrewInfoRow[] {
     const rows: BrewInfoRow[] = [];
-    rows.push(new BrewInfoRow($r('app.string.brew_label_installs_30d'), BrewFormat.compactCount(installs30d)));
+    if (installs30d > 0) {
+      rows.push(new BrewInfoRow($r('app.string.brew_label_installs_30d'), BrewFormat.compactCount(installs30d)));
+    }
     if (installs90d > 0) {
       rows.push(new BrewInfoRow($r('app.string.brew_label_installs_90d'), BrewFormat.compactCount(installs90d)));
     }

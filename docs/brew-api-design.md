@@ -80,7 +80,7 @@ brew 数据曾**不使用** `supportDevice` 子目录（只面向 2in1），因�
 | `subTitle` | `token`（如 `ripgrep`） | 卡片**主**文案（primaryText） |
 | `title` | `desc`（英文原文） | 卡片**副**文案（secondaryText），1 行省略 |
 | `stableVersion` | `versions.stable`（formula）/ `version`（cask） | 版本 |
-| `installs30d` | `analytics.install_on_request.30d[token]` / `analytics.install.30d[token]` | 热度 |
+| `installs30d` | `analytics.install_on_request.30d[token]` / `analytics.install.30d[token]`；方言无此字段时取目录的 `v30` | 热度 |
 | `kegOnly` / `autoUpdates` / `deprecated` / `disabled` | 同名顶层字段 | 徽标 / 警示 |
 | `license` | `license` | 详情 |
 | `categoryKey` | 自建（见 §5） | 分类 |
@@ -98,7 +98,7 @@ brew 数据曾**不使用** `supportDevice` 子目录（只面向 2in1），因�
 
 | 字段 | 计算方式 |
 |---|---|
-| `installs30d` / `installs90d` / `installs365d` | 三个时间桶各取一次，含 `"<token> --HEAD"` 变体求和取大 |
+| `installs30d` / `installs90d` / `installs365d` | 三个时间桶各取一次，含 `"<token> --HEAD"` 变体求和取大；`analytics` 缺失时三档都不动（保留骨架里的目录 `v30`） |
 | `bottleTags` | `bottle.stable.files` 的 key 排序 |
 | `artifacts[].artifactType` / `path` | 把 `artifacts` 数组归一化，只保留真正的安装产物类型（app/pkg/binary/font/…），过滤 `uninstall` / `zap` / `target` |
 | `zapPathCount` | 统计 `zap` 里的清理路径条数（UI 展示「可清理残留项 N 个」） |
@@ -152,7 +152,7 @@ UI 要求：`deprecated` 显示警示条 + 替代品跳转；`disabled` 显示�
 | 1 | Hero：图标 + 名称 + `desc` + tap 来源 + 安装状态徽标 | `name` `desc` `tap` `installed` | 恒显 |
 | 2 | 主操作：`brew install` 命令 + 复制按钮 | `installCommand` | 恒显 |
 | 2 | 主操作按钮在底部操作栏（与上一行同属分区 2，2026-10-05 从卡片标题行移出）：安装 / 升级 / 已安装 | 已安装快照（`BrewInstalledLoader`）+ `installCommand` | brew 能力可用、当前源方言为 harmonybrew，且 token / tap 通过校验（`commandReady`） |
-| 3 | 元信息：版本 / 许可 / 近 30 天安装量 / 分类排名 | `stableVersion`(或 cask `version`) `license` `installs30d` `categoryRank`+`categorySize` | 恒显 |
+| 3 | 元信息：版本 / 许可 / 近 30 天安装量 / 分类排名 | `stableVersion`(或 cask `version`) `license` `installs30d` `categoryRank`+`categorySize` | 恒显，但每行各自按值非空出现 |
 | 4 | **提供的命令**（formula）｜ **安装内容**（cask） | `executables` ｜ `artifacts[]` | 非空时 |
 | 5 | 兼容性与要求 | `bottleTags` / `dependsOn.macos` → `macosRequirement` / `requirements` | 非空时 |
 | 6 | 依赖（依赖 / 可选 / from macOS） | `dependencies` `optionalDependencies` `usesFromMacos` | 非空时 |
@@ -174,6 +174,10 @@ UI 要求：`deprecated` 显示警示条 + 替代品跳转；`disabled` 显示�
 Homebrew 唯一的热度信号是安装量分析数据。约定：
 
 - **近 30 天安装量** + **分类内排名**（`categoryRank` / `categorySize`，如 `3 / 14`）
+- **"安装量"分区只在至少一个窗口有数字时创建**：30d / 90d / 365d 都为 0 时整段不渲染。
+  之前 30d 是无条件压一行的，于是在「目录还没同步好」与「方言根本不提供该值」两种情况下
+  都会渲染出一个「近 30 天安装量 0」—— 那不是事实，是我们不知道。顶部元信息那一行
+  一直就是 `installs30d > 0` 才出现，二者现在一致。
 - 不做"星级/热度条"这类推算表达，避免与真实用户评价混淆
 - 榜单（Discover 的三张榜）取全局 `installs30d` Top N —— 早期产出在 `brew-*-banner.json`（**该产物与端点已删除**），然后是 `brew-discover-page.json`（**也已删除，2026-10**），现在只有**设备端现算的目录**，见 §7.4.1 与 `docs/brew-discover-algo.md`
 
@@ -564,7 +568,7 @@ pc_normal 为 false，未注入按 false 处理）。关掉时它不出现在源
 | `uses_from_macos` | 把 `stable_uses_from_macos` 的调用参数数组展平一层 |
 | `conflicts_with` | 每项 `conflicts` 调用参数数组取 `[0]` |
 | `service` | `service_run_args[0]` 数组原样放入 `{run: …}` |
-| `analytics` | 无；能力开关负责阻止无效请求 |
+| `analytics` | 无；能力开关负责阻止无效请求。**也因此 `mergeFormula` / `mergeCask` 在 `doc.analytics` 缺失时不覆盖安装量**，保留骨架里从目录拿的 `installs30d`（= `BrewTable` 的 `v30`，与 Discover 榜单同一份）；否则一次空桶合并会把详情页那个数字清零。`installs90d` / `installs365d` 仍为 0，详情页不渲染这两行 |
 
 三个实测陷阱均由 `BrewSourceDiagnostics` 固定样本覆盖：`apr` 的 provided-by-macos 不算 keg-only、
 `ant@1.9` 的 versioned-formula 算 keg-only；`access` 的过期日期生效而 2999 年样本不生效；
