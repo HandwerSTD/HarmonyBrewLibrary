@@ -49,7 +49,7 @@ features/
   mine/                   我的页
 products/pc_acl/          entry 模块（完整版）：PcAbility、启动页、主页面
 products/pc_normal/       entry 模块（普通版）：PcAbility、启动页、主页面
-docs/                     设计文档与交接说明
+docs/                     设计文档、交接说明与实测笔记（knowledge/）
 hmosword-build/
   brew-mockgen/           策展清单校验与榜单算法校验脚本（Python）
   brew-search/            搜索引擎的可执行检查（Node）
@@ -108,6 +108,7 @@ devecocli check lint                                       # ArkTS 代码检查
 | docs/brew-marketplace-content-plan.md | 内容与分类体系规划                |
 | docs/hds-titlebar-blur.md             | 标题栏模糊效果说明                |
 | docs/brew-handover.md                 | 交接说明：环境、命令、脚本与注意事项       |
+| docs/knowledge/                       | 散装实测笔记：缓存归属、环境路径、探针做法     |
 
 ## 许可
 

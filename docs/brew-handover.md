@@ -13,11 +13,15 @@
 | `brew-discover-algo.md` | **Discover 推荐算法（现网口径，唯一权威）**；`hmosword-build/brew-mockgen/check_algo.py` 是它的可执行形式 |
 | `hds-titlebar-blur.md` | **HDS 标题栏模糊的通用指南**（不限于 brew）：模糊类型/材质/区间、逐场景正确用法、让位三写法对照、踩坑清单、验证方法 |
 | **`brew-catalog-fullsync-spec.md`** | **待评审的 spec + plan**：去掉「浏览集前 100」硬裁切 —— 启动后**后台同步全量元数据**（`formula.json`/`cask.json`，gzip 5.29/2.05 MB，2 次请求）抽 `token → desc`，让分类不再依赖逐条现拉，列表随现网自动同步（无需发版）。**前提：只针对 `pc`（2in1），假定常驻 WLAN → 不做任何流量控制；性能（内存/耗时/帧率）不简化**，也不做分页（改为全量列表 + `LazyForEach` 虚拟滚动） |
+| `knowledge/` | **散装实测笔记**：环境归属、缓存路径、探针做法这类「知道一次就不用再查」的东西。不作为设计依据，不承诺维护到最新 |
 
 五份文档有明确边界：**算法口径只在 `brew-discover-algo.md`**，
 **版式归 `content-plan`**，**实现细节与踩坑归 `brew-api-design.md`**，
 **标题栏模糊（含非 brew 页）归 `hds-titlebar-blur.md`**。
 改任何一处时留意其余几处有没有需要同步的表述（这一点已经踩过坑，见 §5）。
+
+`knowledge/` 不属于这五份，它装的是实测得到的零散事实（缓存归属、探针做法之类）。
+那里的结论随时可能因环境变化而过期，引用之前先复现一遍。
 
 ---
 
