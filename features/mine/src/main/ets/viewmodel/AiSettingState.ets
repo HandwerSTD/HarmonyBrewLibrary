@@ -24,8 +24,13 @@ export class AiSettingState extends BaseState {
   public keyMemoryOnly: boolean = false;
   /** 「测试连接」进行中。 */
   public testing: boolean = false;
-  /** 测试结果行：成功时为「model · latency」，失败时为分级原因（human-readable key）。 */
-  public testOkText: string = '';
+  /**
+   * 测试结果行：空串 = 无结果。**只存 model 原文**（时延在 testOkLatencyMs）——
+   * 显示格式归 View（`ai_settings_test_ok_detail` 带参资源）；state 不拼展示串。
+   */
+  public testOkModel: string = '';
+  /** 测试结果时延（ms）。与 testOkModel 配对；-1 = 无结果。 */
+  public testOkLatencyMs: number = -1;
   public testErrorKind: string = '';
   /** 刚保存成功的提示（一次性）。 */
   public savedFlash: boolean = false;

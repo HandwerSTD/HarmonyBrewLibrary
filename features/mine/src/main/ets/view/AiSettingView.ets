@@ -215,9 +215,11 @@ export struct AiSettingView {
         .margin({ top: 8 })
       }
 
-      if (this.state.testOkText.length > 0) {
-        // G2：成功显示 model 与时延
-        Text(`${$r('app.string.ai_settings_test_ok')} · ${this.state.testOkText}`)
+      if (this.state.testOkModel.length > 0 && this.state.testOkLatencyMs >= 0) {
+        // G2：成功显示 model 与时延。**带参资源格式化**——不能在模板字符串里内插 $r()
+        //（Resource 对象会被 toString 成 [object Object]，真机实测过）。
+        Text($r('app.string.ai_settings_test_ok_detail', this.state.testOkModel,
+          this.state.testOkLatencyMs))
           .fontSize($r('sys.float.Body_S'))
           .fontColor($r('sys.color.font_emphasize'))
           .width(CommonConstants.FULL_PERCENT)

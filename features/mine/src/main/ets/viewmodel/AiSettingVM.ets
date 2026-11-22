@@ -113,7 +113,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       state.snapshot.config.model : AI_DEEPSEEK_DEFAULT_MODEL;
     state.editingKey = '';
     state.errorText = '';
-    state.testOkText = '';
+    state.testOkModel = '';
+    state.testOkLatencyMs = -1;
     state.testErrorKind = '';
     state.savedFlash = false;
   }
@@ -194,13 +195,16 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       return;
     }
     state.testing = true;
-    state.testOkText = '';
+    state.testOkModel = '';
+    state.testOkLatencyMs = -1;
     state.testErrorKind = '';
     AiClient.probe()
       .then((completion) => {
         const s: AiSettingState = this.getState();
         s.testing = false;
-        s.testOkText = `${completion.model} · ${completion.latencyMs} ms`;
+        // 只存结构化值，不拼展示串：格式化归 View 的带参资源（G2）
+        s.testOkModel = completion.model;
+        s.testOkLatencyMs = completion.latencyMs;
         Logger.info(TAG, `probe ok model=${completion.model} latency=${completion.latencyMs}`);
       })
       .catch((error: AiError) => {
