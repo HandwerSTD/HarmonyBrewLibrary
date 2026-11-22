@@ -23,6 +23,10 @@
     {
       "name": "tab_shell",
       "value": "Shell"
+    },
+    {
+      "name": "hmos_app_name",
+      "value": "BrewLibrary"
     }
   ]
 }

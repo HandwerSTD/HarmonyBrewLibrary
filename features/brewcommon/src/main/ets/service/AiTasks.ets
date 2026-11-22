@@ -7,6 +7,7 @@ import { BrewSearchEngine } from '../model/BrewSearchEngine';
 import type { BrewSearchEntry, BrewSearchHit } from '../model/BrewSearchEngine';
 import {
   AI_CACHE_TTL_D1_MS,
+  AI_PROMPT_MAX_CHARS,
   AI_CACHE_TTL_D2_MS,
   AI_D2_MAX_CANDIDATES,
   AI_D2_RESULT_LIMIT,
@@ -120,7 +121,7 @@ export class AiTasks {
     let deps: string = input.dependencies.join(', ');
     let base: string = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
       `caveats: ${caveats}\ndependencies: ${deps}`;
-    while (task_system_len(AiTasks.D1_SYSTEM) + task_system_len(base) > promptCap() &&
+    while ((AiTasks.D1_SYSTEM.length + base.length) > AI_PROMPT_MAX_CHARS &&
       caveats.length > 0) {
       // 先砍 caveats，再砍 dependencies；desc 与 token 是定位的最小集合，不砍
       caveats = caveats.substring(0, Math.floor(caveats.length / 2));
@@ -349,12 +350,12 @@ export class AiTasks {
     }
     let total: string = `命令: ${input.command}\n失败分类: ${input.failureKind}\n` +
       `包名: ${input.token}\nstderr(尾部):\n${stderr}\nstdout(尾部):\n${stdout}`;
-    if (task_system_len(AiTasks.D3_SYSTEM) + task_system_len(total) > promptCap()) {
+    if ((AiTasks.D3_SYSTEM.length + total.length) > AI_PROMPT_MAX_CHARS) {
       // 总量超限时丢 stdout，再超限就把 stderr 砍半
       stdout = '';
       total = `命令: ${input.command}\n失败分类: ${input.failureKind}\n` +
         `包名: ${input.token}\nstderr(尾部):\n${stderr}\nstdout(尾部):\n`;
-      while (task_system_len(AiTasks.D3_SYSTEM) + task_system_len(total) > promptCap() &&
+      while ((AiTasks.D3_SYSTEM.length + total.length) > AI_PROMPT_MAX_CHARS &&
         stderr.length > 64) {
         stderr = stderr.substring(stderr.length / 2);
         total = `命令: ${input.command}\n失败分类: ${input.failureKind}\n` +
@@ -416,16 +417,6 @@ export class AiTasks {
 }
 
 // ------------------------------------------------------- 模块级工具函数
-
-/** prompt 总长上限（AiConstants 的值；独立函数便于任务内调用）。 */
-function promptCap(): number {
-  return 8192;
-}
-
-/** 字符串长度（与 AiConstants 的 8KB 计数口径一致：UTF-16 code unit）。 */
-function task_system_len(text: string): number {
-  return text.length;
-}
 
 /** 意图 → 缓存 key 的 slug（非字母数字折 `-`；中文意图在 AI 模式也能成为合法文件名段）。 */
 function slugOf(text: string): string {
