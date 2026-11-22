@@ -3,10 +3,12 @@
  */
 
 /**
- * `brew install --dry-run` 输出解析器（纯函数层，Agent Skill 预演共用）。
+ * `brew install --dry-run` / `brew upgrade --dry-run` 输出解析器（纯函数层，Agent Skill 预演共用）。
  *
  * 设备实测样本（docs/knowledge/2026-11-21-brew-tap-trust.md）：
  *   `brew install --dry-run wget` → `==> Would install 1 formula: wget 1.25.0_2`
+ * 升级预演（v2 能力面扩充，输出格式待真机核对，解析保持宽容）：
+ *   `brew upgrade --dry-run wget` → `==> Would upgrade 1 outdated package: wget 1.25.0_2 -> 1.26.0`
  *
  * 本文件保持**零 import**、字符串常量而非 enum、无模板字符串：
  * `hmosword-build/brew-skill/audit_skill_no_exec.mjs` 会把本文件原样拷成 `.mts`
@@ -14,27 +16,29 @@
  * 与 J（装机预演）落地时共用同一解析器与同一组用例，格式漂移两处同源。
  */
 
-/** 解析出的包类别。字符串常量（node 剥离约束），取值 'formula' | 'cask' */
+/** 解析出的包类别。字符串常量（node 剥离约束），取值 'formula' | 'cask' | ''（混合清单） */
 export const BREW_DRYRUN_KIND_FORMULA: string = 'formula';
 export const BREW_DRYRUN_KIND_CASK: string = 'cask';
 
-/** Would install 清单里的一条（`name version`；version 可能缺省） */
+/** Would install / Would upgrade 清单里的一条（`name version`；version 可能缺省） */
 export class BrewDryRunItem {
   public name: string = '';
   public version: string = '';
   public kind: string = '';
+  /** 升级预演的旧版本（`name 旧版本 -> 新版本` 形态）。安装预演恒为空串 */
+  public fromVersion: string = '';
 }
 
 /** 一次 dry-run 输出的解析结果 */
 export class BrewDryRunResult {
-  /** 清单解析成功（不代表安装成功——dry-run 本身不动盘） */
+  /** 清单解析成功（不代表安装/升级会成功——dry-run 本身不动盘） */
   public ok: boolean = false;
   public wouldInstall: BrewDryRunItem[] = [];
   /** brew 自己报的数量（可能多于实际条目，如清单换行时），只作展示，不作判据 */
   public declaredCount: number = 0;
   /** brew 明确说没有这个包（NOT_FOUND 分支的判据，G7） */
   public notFound: boolean = false;
-  /** 失败摘要：Error 行原文或「没有 Would install 行」，只进回包 errMsg */
+  /** 失败摘要：Error 行原文或「没有 Would 行」，只进回包 errMsg */
   public failureMessage: string = '';
 }
 
@@ -44,6 +48,13 @@ export class BrewDryRunParser {
   /** 设备实测行：`==> Would install 1 formula: wget 1.25.0_2`。单数/复数、formula/cask 都收 */
   private static readonly WOULD_INSTALL_RE: RegExp =
     /Would install\s+(\d+)\s+(formulae|formulas|formula|casks|cask)\s*:?\s*(.*)/i;
+  /**
+   * 升级预游行：`==> Would upgrade 2 outdated packages: wget 1.25.0_2 -> 1.26.0, jq 1.7 -> 1.7.1`。
+   * formula 与 cask 分行时各自命中；通用名词（package/packages）kind 留空，
+   * 由调用方按目录/快照逐条补齐。
+   */
+  private static readonly WOULD_UPGRADE_RE: RegExp =
+    /Would upgrade\s+(\d+)\s+(outdated\s+)?(formulae|formulas|formula|casks|cask|packages|package)\s*:?\s*(.*)/i;
   private static readonly ERROR_RE: RegExp = /Error:\s*(.*)/i;
   private static readonly NOT_FOUND_RE: RegExp =
     /(No available formula|No available cask|No formulae found|No similarly named|was not found|nonexistent)/i;
@@ -67,6 +78,27 @@ export class BrewDryRunParser {
           const parts: string[] = list.split(',');
           for (const part of parts) {
             const item: BrewDryRunItem = BrewDryRunParser.itemOf(part, kind);
+            if (item.name.length > 0) {
+              result.wouldInstall.push(item);
+            }
+          }
+        }
+        continue;
+      }
+      const upgradeMatch: RegExpMatchArray | null = line.match(BrewDryRunParser.WOULD_UPGRADE_RE);
+      if (upgradeMatch !== null) {
+        const count: number = parseInt(upgradeMatch[1], 10);
+        if (!isNaN(count)) {
+          result.declaredCount = result.declaredCount + count;
+        }
+        const kindWord: string = upgradeMatch[3].toLowerCase();
+        const kind: string = kindWord.indexOf('cask') >= 0 ? BREW_DRYRUN_KIND_CASK :
+          (kindWord.indexOf('formula') >= 0 ? BREW_DRYRUN_KIND_FORMULA : '');
+        const list: string = upgradeMatch[4].trim();
+        if (list.length > 0) {
+          const parts: string[] = list.split(',');
+          for (const part of parts) {
+            const item: BrewDryRunItem = BrewDryRunParser.itemOfUpgrade(part, kind);
             if (item.name.length > 0) {
               result.wouldInstall.push(item);
             }
@@ -101,6 +133,33 @@ export class BrewDryRunParser {
       if (fields.length > 1) {
         item.version = fields[1];
       }
+    }
+    return item;
+  }
+
+  /** `wget 1.25.0_2 -> 1.26.0` -> item（带旧版本）；没有 `->` 时退化为「名字 + 版本」 */
+  private static itemOfUpgrade(part: string, kind: string): BrewDryRunItem {
+    const item: BrewDryRunItem = new BrewDryRunItem();
+    const fields: string[] = part.trim().split(/\s+/);
+    if (fields.length === 0 || fields[0].length === 0) {
+      return item;
+    }
+    item.name = fields[0];
+    item.kind = kind;
+    let arrowAt: number = -1;
+    for (let index: number = 1; index < fields.length; index++) {
+      if (fields[index] === '->') {
+        arrowAt = index;
+        break;
+      }
+    }
+    if (arrowAt > 1) {
+      item.fromVersion = fields[arrowAt - 1];
+      if (fields.length > arrowAt + 1) {
+        item.version = fields[arrowAt + 1];
+      }
+    } else if (fields.length > 1) {
+      item.version = fields[1];
     }
     return item;
   }

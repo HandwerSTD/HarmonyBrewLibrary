@@ -1,5 +1,5 @@
 /**
- * SKILL.md ↔ 入口脚本 ↔ module.json5 契约一致性检查（spec G10）。
+ * SKILL.md ↔ 入口脚本 ↔ module.json5 契约一致性检查（spec G10 + 2026-11-23 v2 能力面扩充）。
  *
  * 官方约定：SKILL.md 的 functionName 必须与入口脚本 `public async` 方法名严格一致；
  * name 必须与目录名、module.json5 skillProfiles[].name 三处一致。这里把这些约定
@@ -19,7 +19,12 @@ const SKILL_DIR = join(ROOT, 'products', 'pc_acl', 'skills', 'handwer-brew-libra
 const MODULE_JSON5 = join(ROOT, 'products', 'pc_acl', 'src', 'main', 'module.json5');
 const CONSTANTS = join(ROOT, 'features', 'brewcommon', 'src', 'main', 'ets', 'constant', 'SkillConstants.ets');
 
-const FNS = ['searchPackages', 'queryPackage', 'previewInstall', 'requestInstall'];
+const FNS = [
+  'searchPackages', 'queryPackage', 'previewInstall', 'requestInstall',
+  'listInstalled', 'listOutdated', 'packageDetail', 'packageUsage',
+  'listTrending', 'listCategories', 'checkBrew',
+  'previewUpgrade', 'previewUpgradeAll', 'previewUninstall',
+];
 
 const md = readFileSync(join(SKILL_DIR, 'SKILL.md'), 'utf8');
 const script = readFileSync(join(SKILL_DIR, 'scripts', 'BrewSkill.ets'), 'utf8');
@@ -50,6 +55,13 @@ assert(md.includes('不能安装本地 skill'), 'SKILL.md 缺「SKILL.md 不暴�
 assert(md.includes('发到小艺 Work 对话框'), 'SKILL.md 缺「整份投喂到对话框」操作指引');
 assert(md.includes("query\":\"python\"") || md.includes('query\\":\\"python'), 'SKILL.md 缺实测成功样本');
 
+// ---- 1.8 v2 能力面（三档 timeout 与预演业务语义）----
+assert(md.includes('60000') && md.includes('120000') && md.includes('180000'),
+  'SKILL.md 缺三档 timeout_ms 指引（60000 / 120000 / 180000）');
+assert(md.includes('nothing_to_upgrade'), 'SKILL.md 缺 nothing_to_upgrade 预演语义');
+assert(md.includes('not_installed'), 'SKILL.md 缺 not_installed 预演语义');
+assert(md.includes('不自动重放'), 'SKILL.md 缺「预演不自动重放」纪律');
+
 // ---- 2. module.json5 注册 ----
 assert(/"skillProfiles"[\s\S]*"name":\s*"handwer-brew-library"/.test(moduleJson5),
   'module.json5 缺 handwer-brew-library 的 skillProfiles 注册');
@@ -67,7 +79,7 @@ assert.deepStrictEqual([...new Set(scriptFns)].sort(), [...FNS].sort(),
 
 // ---- 4. 每个能力有 场景 小节且含 执行参数 / 执行返回值 ----
 for (const fn of FNS) {
-  const sectionRe = new RegExp('### 场景\\d：[^\\n]*[(（]' + fn + '[)）]([\\s\\S]*?)(?=\\n### |$)');
+  const sectionRe = new RegExp('### 场景\\d{1,2}：[^\\n]*[(（]' + fn + '[)）]([\\s\\S]*?)(?=\\n### |$)');
   const section = md.match(sectionRe);
   assert(section, 'SKILL.md 缺少 ' + fn + ' 的场景小节');
   assert(/执行参数/.test(section[1]), fn + ' 小节缺「执行参数」段');
@@ -93,6 +105,16 @@ const constPairs = [
   ['SKILL_FN_QUERY', 'queryPackage'],
   ['SKILL_FN_PREVIEW', 'previewInstall'],
   ['SKILL_FN_REQUEST', 'requestInstall'],
+  ['SKILL_FN_LIST_INSTALLED', 'listInstalled'],
+  ['SKILL_FN_LIST_OUTDATED', 'listOutdated'],
+  ['SKILL_FN_DETAIL', 'packageDetail'],
+  ['SKILL_FN_USAGE', 'packageUsage'],
+  ['SKILL_FN_TRENDING', 'listTrending'],
+  ['SKILL_FN_CATEGORIES', 'listCategories'],
+  ['SKILL_FN_CHECK', 'checkBrew'],
+  ['SKILL_FN_PREVIEW_UPGRADE', 'previewUpgrade'],
+  ['SKILL_FN_PREVIEW_UPGRADE_ALL', 'previewUpgradeAll'],
+  ['SKILL_FN_PREVIEW_UNINSTALL', 'previewUninstall'],
   ['SKILL_ERR_INVALID_PARAMS', 'ERR_INVALID_PARAMS'],
   ['SKILL_ERR_NOT_FOUND', 'ERR_NOT_FOUND'],
   ['SKILL_ERR_INTERNAL', 'ERR_INTERNAL'],
@@ -104,7 +126,7 @@ for (const [name, value] of constPairs) {
   assert(inScript && inScript[1] === value, '脚本本地副本的 ' + name + ' 漂移');
 }
 
-// ---- 8. requestInstall 的 needs_confirmation 语义在两处都有 ----
+// ---- 8. requestInstall / previewUninstall 的 needs_confirmation 语义在两处都有 ----
 assert(md.includes('"needs_confirmation"'), 'SKILL.md 缺 needs_confirmation 返回示例');
 assert(script.includes('needs_confirmation'), '脚本缺 needs_confirmation 内层状态');
 

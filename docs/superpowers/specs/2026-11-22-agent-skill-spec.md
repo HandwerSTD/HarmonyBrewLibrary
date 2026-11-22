@@ -178,3 +178,50 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 - dry-run 输出格式没有官方契约（brew 版本间可能漂移）：解析器按 tap-trust 实测样本编写，J 落地时共享同一解析器与用例，漂移风险两处同源。
 - SKILL.md 的检索与排序规则（哪个 skill 被小艺选中）平台侧不可控：description 措辞与触发场景边界是唯一抓手，G8 实测后按结果回改措辞。
 - 与 D 线的关系：本 spec 与 D1–D3（应用内 AI）**互不依赖**——Skill 端零 AI 调用；开工排序仍按构建顺序（D 合入后），只因 build-profile 冲突面，不因功能依赖。
+
+## 11. v2 能力面扩充（2026-11-23，需求方裁定「能暴露的都暴露」）
+
+技术验证（真机四话术 + exec 形态）通过后，按需求方裁定把应用的全部只读能力与写操作的
+dry-run 预演一次性暴露进 Skill。四能力扩到十四能力，版本 1.0.0 → 1.1.0。
+
+### 11.1 能力清单（新增十项）
+
+| functionName | 类型 | 数据来源 | 备注 |
+| --- | --- | --- | --- |
+| `listInstalled` | 读 | 盘上快照（缺失时补一次 `brew info --json=v2 --installed`） | filter: all/formula/cask/outdated/updated + query 子串 + limit |
+| `listOutdated` | 读 | 同上快照的 outdated 集 | 与「我的 - 待更新」同口径 |
+| `packageDetail` | 读+网络 | 现网单条（BrewRepository 归一详情，1h 缓存+回落）+ 快照合并 | kind 判定：目录 → 快照 → 兜底试另一侧 |
+| `packageUsage` | 读+网络 | TldrService 候选链 | 增强层：found=false 不算错误 |
+| `listTrending` | 读 | 包表 boards（trending/alltime/fresh × formula/cask） | 零请求；带数据窗口 |
+| `listCategories` | 读 | 包表浏览集分类 | 零请求；带表状态 |
+| `checkBrew` | 读+CLI | `brew config`（只读白名单）+ BrewCli 探测事实 | 回包永远 success，问题进字段 |
+| `previewUpgrade` | 预演 | `brew upgrade <token> --dry-run` | not_installed（快照口径免跑命令）/ nothing_to_upgrade 分支 |
+| `previewUpgradeAll` | 预演 | `brew upgrade [--formula|--cask] --dry-run` | scope: all/formula/cask |
+| `previewUninstall` | 预演 | 快照 + `brew uses --installed`（只读） | plannedCommand 仅展示，绝不执行卸载 |
+
+### 11.2 通道不变量（v2 收紧）
+
+- 命令执行收口两个 helper：`runDryRun`（尾巴恒为 `--dry-run`）与 `runRead`
+  （白名单 `config` / `uses --installed` / `info`）；审计以
+  「`ShellUtils.run` 调用点数量 === 2」锁死，任何新命令必须先过这两个 helper。
+- 原 BRIDGE_FORBIDDEN 的 `upgradeArgs` / `upgradeAllArgs` / `uninstallCommand` 解禁
+  （dry-run 拼装与 plannedCommand 展示需要），`upgradeCommand` 维持禁用。
+- 升级预演的通用名词行（`package(s)`）kind 留空，由 Bridge 按目录 → 快照逐条补齐
+  （`kindGuessOf`）。
+
+### 11.3 新增真机核对项（G13–G18）
+
+- **G13** `brew upgrade --dry-run` 在设备 brew 版本上可用（官方 4.x 为 experimental；
+  若不识别该 flag，回 ERR_INTERNAL，后续可降级为解析 `brew outdated --verbose`）。
+- **G14** Would upgrade 行格式与解析器假设一致（`name 旧 -> 新`、单复数、cask 分行）。
+- **G15** `brew uses --installed` 输出形状（纯名行 / 无噪音）。
+- **G16** `brew config` 四键抽取（API 模式下 Core tap 行缺席可容忍）。
+- **G17** Skill 进程内跑 `packageDetail` / `packageUsage` 的网络链路（AppStorage 上下文
+  与 UI 进程一致假设，§10 未决项的实证）。
+- **G18** listInstalled 冷路径：无快照时自动补一次读取并落快照（与 G11 冷启动话术合并测）。
+
+### 11.4 检查脚本状态
+
+- `check_skill_contract.mjs`：14 abilities / 17 constants 全绿（场景小节正则放宽到
+  `\d{1,2}` 支持两位数编号）。
+- `audit_skill_no_exec.mjs`：2 触达点 + 19 解析用例全绿（dry-run 12 / uses 4 / config 3）。
