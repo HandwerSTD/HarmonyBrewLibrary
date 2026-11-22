@@ -142,6 +142,9 @@ export { BrewAnsiParser, BrewTextSegment } from './src/main/ets/util/BrewAnsi';
 // 执行 Sheet 的内容组件，两个页面共用一份。
 export { BrewCommandSheet } from './src/main/ets/component/BrewCommandSheet';
 
+// D3 · AI 报错解读卡（执行 Sheet 失败终态的附加卡；G13：下一步只有复制、没有执行入口）。
+export { BrewAiFailureCard } from './src/main/ets/component/BrewAiFailureCard';
+
 // 标题栏模糊：brew 所有页共用一份实现（区间位置/长度只在 BrewTitleBar.ets 里定义）。
 // 改模糊表现只改这里 —— 各页原先各写一份，结果出现「有的页没有渐变、有的页先空行程再猛增」。
 export {
