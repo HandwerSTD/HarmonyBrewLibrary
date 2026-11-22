@@ -3,7 +3,14 @@
  */
 
 import type { BusinessError } from '@kit.BasicServicesKit';
-import { LoadingModel, LoadingStatus, Logger, RequestErrorCode, Toast } from '@ohos/common';
+import {
+  LoadingModel,
+  LoadingStatus,
+  Logger,
+  RequestErrorCode,
+  StorageKey,
+  Toast,
+} from '@ohos/common';
 import {
   BrewCaskModel,
   BrewCli,
@@ -257,8 +264,8 @@ export class BrewDetailViewModel {
    * - `TldrService.get()` 从不 reject（内部已把 404/断网/解析失败全收敛成 null），
    *   这里的 catch 只是兜住非预期异常 —— 无论哪条路，失败都保持 `hasTldr=false`，
    *   分区不渲染、零提示（G6）；
-   * - 数据到达时就地赋值插入（spec §4.2），不预留高度 —— 与 siblings 的异步插入
-   *   是同一条既有惯例，页面其余分区照常。
+   * - 数据到达时就地赋值插入（spec §4.2），并带 300ms 淡入转场（G15）——
+   *   缓存命中与临时拉取走**同一条**落地路径，视觉一致性优先。
    */
   private loadTldr(param: BrewDetailParams, state: BrewDetailState): void {
     if (param.kind !== BrewKind.FORMULA || param.token.trim().length === 0) {
@@ -267,12 +274,32 @@ export class BrewDetailViewModel {
     TldrService.getInstance().get(param.token).then((page: TldrPage | null) => {
       // 空示例页与无页同口径：只有真正可渲染的示例才值得占一个分区
       if (page !== null && page.examples.length > 0) {
-        state.tldrPage = page;
-        state.hasTldr = true;
+        BrewDetailViewModel.applyTldrWithTransition(state, page);
         Logger.info(TAG, `tldr ready, kind=${param.kind} token=${param.token} locale=${page.locale}`);
       }
     }).catch((error: Error) => {
       Logger.warn(TAG, `tldr load failed. reason=${error.message}`);
     });
+  }
+
+  /**
+   * tldr 数据落 state，带插入转场（G15）。
+   *
+   * `animateTo` 包住赋值：分区插入与下方内容的重排一起按 300ms 走
+   * （视图侧另有 `TransitionEffect` 控制新分区自己的淡入+上移，见 BrewDetailView）。
+   * UIContext 从 AppStorage 取（与 TldrService 同款取法）—— **拿不到时直接赋值不动画**：
+   * 转场是展示层锦上添花，任何环境下都不能因为它崩或卡住数据（G6 的兜底口径）。
+   */
+  private static applyTldrWithTransition(state: BrewDetailState, page: TldrPage): void {
+    const apply: () => void = () => {
+      state.tldrPage = page;
+      state.hasTldr = true;
+    };
+    const uiContext: UIContext | undefined = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
+    if (uiContext === undefined) {
+      apply();
+      return;
+    }
+    uiContext.animateTo({ duration: 300, curve: Curve.Friction }, apply);
   }
 }

@@ -301,7 +301,11 @@ export struct BrewDetailView {
             BrewInfoSectionView({ section: section })
             if (section.key === BREW_SECTION_KEY_EXECUTABLES && this.kind === BrewKind.FORMULA &&
               this.detailState.hasTldr) {
+              // 插入转场（G15）：淡入 + 轻微上移，消掉「数据到达瞬间闪现」的突兀感。
+              // 移除侧走同一效果的默认（对称），不单独配消失动画。
               BrewTldrSectionView({ token: this.detailState.params.token, page: this.detailState.tldrPage })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.Friction })
+                  .combine(TransitionEffect.translate({ y: 12 })))
             }
           }
           .width('100%')

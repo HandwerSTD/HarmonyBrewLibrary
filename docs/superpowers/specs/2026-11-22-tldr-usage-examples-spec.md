@@ -30,6 +30,7 @@
 | G11 | 分区底部固定署名行「示例来自 tldr-pages（CC BY 4.0）」，点击跳转 tldr-pages 仓库；OAT.xml 与关于页已登记 | 真机；OAT.xml diff |
 | G12 | 解析器检查脚本 `hmosword-build/brew-tldr/check_tldr_parser.mjs` 全绿：对 tldr 仓库抽样 30 页 + 构造用例（占位符 / 多行说明 / 无示例页 / 中文页）解析通过 | `node hmosword-build/brew-tldr/check_tldr_parser.mjs` |
 | G13 | 双 product 构建通过：`devecocli build --product default` 与 `--product pc_normal` | `BUILD SUCCESSFUL`，`ERROR` 计数 0 |
+| G15 | 异步到达的「用法示例」分区以转场出现（300ms 淡入 + 轻微上移），缓存命中与临时拉取两条路径观感一致、无闪烁 | 真机目测 |
 
 ---
 
@@ -93,7 +94,7 @@
 
 ### 4.1 「用法示例」分区
 
-- **位置**：详情页 caveats 分区之后（与「装后要做的事」相邻，形成说明书聚拢；沿用 round2 口径）。
+- **位置**：详情页「提供的命令」（`brew_label_executables`）分区**正下方**（真机评审后的调整：与「它提供哪些命令」相邻，正好承接「这些命令怎么用」；该分区 formula 独有，cask 不出现，G2 在数据层即成立；沿用 round2 口径的后续调整）。
 - **结构**：分区标题「用法示例」→ 说明段（可选）→ 示例卡片列表 → 署名行。
 - **示例卡片**：说明行（普通字重）+ 命令块（等宽字体、占位符高亮）+ 行尾两个操作：「复制」（always）；「执行」（仅 `!hasPlaceholder && BREW_CLI_ENABLED`）。
 - **「执行」**：将 `code` 原文作为命令送入既有执行 Sheet（流式输出 / 中断 / 退出码，全部复用 `2026-10-04-brew-command-execution-spec.md` 语义），**不做任何 AI 改写或参数猜测**。
@@ -103,6 +104,8 @@
 ### 4.2 加载时序
 
 分区随详情页其它分区一起渲染；tldr 数据异步到达后**就地插入**（不引起整页重排跳动：预留分区最小高度或按既有 live-data 分区的处理惯例，编码时对齐）。
+
+**插入转场（G15）**：数据落 state 时包在 `UIContext.animateTo({ duration: 300, curve: Curve.Friction })` 里（UIContext 取不到时直接赋值不动画，防御不崩）；视图侧 `BrewTldrSectionView` 挂 `TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.Friction }).combine(TransitionEffect.translate({ y: 12 }))` —— 300ms 淡入 + 12vp 上移，消掉「临时拉取后分区瞬间闪现」的突兀感；移除侧走对称默认。**缓存命中路径同样走此动画**（视觉一致性优先：用户不应能从呈现上区分「缓存命中」与「临时拉取」）。
 
 ---
 
