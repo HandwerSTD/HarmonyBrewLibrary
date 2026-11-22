@@ -16,6 +16,8 @@ export class AiSettingState extends BaseState {
   public editingModel: string = '';
   /** 表单字段：provider（deepseek | custom）。 */
   public editingProvider: string = 'deepseek';
+  /** 兼容模式（非流式）开关。自定义端点报「protocol 无法解析流式响应」时打开。 */
+  public editingNonStreaming: boolean = false;
   /** Key 输入框内容。**只在内存，保存即清空**——不进 state 快照、不进任何日志。 */
   public editingKey: string = '';
   /** 表单 / 保存校验错误（空串 = 无）。 */

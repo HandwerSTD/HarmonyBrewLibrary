@@ -30,6 +30,15 @@ export class AiSettingProviderEvent implements BaseVMEvent {
   }
 }
 
+/** 切兼容模式（非流式）开关。 */
+export class AiSettingNonStreamingEvent implements BaseVMEvent {
+  public enabled: boolean;
+
+  public constructor(enabled: boolean) {
+    this.enabled = enabled;
+  }
+}
+
 export class AiSettingSaveEvent implements BaseVMEvent {
 }
 
@@ -74,6 +83,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       this.init();
     } else if (event instanceof AiSettingProviderEvent) {
       this.switchProvider(event.provider);
+    } else if (event instanceof AiSettingNonStreamingEvent) {
+      this.getState().editingNonStreaming = event.enabled;
     } else if (event instanceof AiSettingSaveEvent) {
       this.saveConfig();
     } else if (event instanceof AiSettingKeySaveEvent) {
@@ -112,6 +123,7 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       state.snapshot.config.baseUrl : AI_DEEPSEEK_BASE_URL;
     state.editingModel = state.snapshot.config.model.length > 0 ?
       state.snapshot.config.model : AI_DEEPSEEK_DEFAULT_MODEL;
+    state.editingNonStreaming = state.snapshot.config.nonStreaming;
     state.editingKey = '';
     state.errorText = '';
     state.testOkText = '';
@@ -146,6 +158,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
     config.baseUrl = state.editingProvider === AI_PROVIDER_DEEPSEEK ?
       AI_DEEPSEEK_BASE_URL : state.editingBaseUrl.trim();
     config.model = model;
+    config.nonStreaming = state.editingProvider === AI_PROVIDER_CUSTOM &&
+      state.editingNonStreaming;
     const ok: boolean = AiSettingsStore.saveConfig(config);
     state.errorText = ok ? '' : 'save-failed';
     state.savedFlash = ok;

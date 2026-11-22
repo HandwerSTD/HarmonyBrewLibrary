@@ -51,6 +51,13 @@ export class AiProviderConfig {
   public baseUrl: string = '';
   /** 模型名，如 deepseek-chat。 */
   public model: string = '';
+  /**
+   * 兼容模式（非流式）开关（spec §3.2 排查记录：流式 usage=null 炸库）。
+   * 默认关。自定义端点报「protocol 无法解析模型流式响应」时打开——
+   * 请求走一次非流式 POST /chat/completions，绕开 @hmkit/ai 的流式 decoder。
+   * DeepSeek 预置模板不受影响（它的流式 chunk 一直带 usage）。
+   */
+  public nonStreaming: boolean = false;
 
   /** 是否已填到能发请求的程度（Key 在 Asset 里另查）。 */
   public isComplete(): boolean {

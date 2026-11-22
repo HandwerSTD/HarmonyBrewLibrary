@@ -791,6 +791,14 @@
     {
       "name": "ai_error_e5_detail",
       "value": "Request rejected (%s)"
+    },
+    {
+      "name": "ai_settings_non_streaming",
+      "value": "Compatibility mode (non-streaming)"
+    },
+    {
+      "name": "ai_settings_non_streaming_hint",
+      "value": "Enable when the endpoint reports protocol errors in the log; switches to a single non-streaming request"
     }
   ]
 }

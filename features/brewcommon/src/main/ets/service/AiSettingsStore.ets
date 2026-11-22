@@ -10,6 +10,7 @@ import { Logger, StorageKey } from '@ohos/common';
 import {
   AI_ASSET_ALIAS_API_KEY,
   AI_PREFS_KEY_CONFIG,
+  AI_PREFS_KEY_NON_STREAMING,
   AI_PREFS_STORE,
 } from '../constant/AiConstants';
 import { AiProviderConfig, AiSettingsSnapshot } from '../model/AiTypes';
@@ -172,6 +173,8 @@ export class AiSettingsStore {
       if (typeof obj['model'] === 'string') {
         out.model = obj['model'] as string;
       }
+      // 兼容模式开关（布尔，单独存；缺省 false）。
+      out.nonStreaming = store.getSync(AI_PREFS_KEY_NON_STREAMING, false) === true;
       return out;
     } catch (err) {
       const e: BusinessError = err as BusinessError;
@@ -192,6 +195,8 @@ export class AiSettingsStore {
     clean.model = config.model.trim();
     try {
       store.putSync(AI_PREFS_KEY_CONFIG, JSON.stringify(clean));
+      // 兼容模式开关单独存（布尔字段；入参 config 不含 Key，本行同样不含）。
+      store.putSync(AI_PREFS_KEY_NON_STREAMING, config.nonStreaming === true);
       // GSKV 不保证「写完即落盘」（见 BrewSourcePrefs.persistNow 的注释）；设置页低频写，
       // 这里同步 flush 语义靠 removePreferencesFromCacheSync 达成（下次读会重新开句柄）。
       Logger.info(TAG, `config saved provider=${clean.provider} model=${clean.model}`);
@@ -219,6 +224,7 @@ export class AiSettingsStore {
     if (store !== null) {
       try {
         store.deleteSync(AI_PREFS_KEY_CONFIG);
+        store.deleteSync(AI_PREFS_KEY_NON_STREAMING);
       } catch (err) {
         const e: BusinessError = err as BusinessError;
         Logger.error(TAG, `config delete failed, code=${e.code}`);

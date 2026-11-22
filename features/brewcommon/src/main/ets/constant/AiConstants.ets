@@ -92,6 +92,16 @@ export const AI_D2_RESULT_LIMIT: number = 8;
 export const AI_TIMEOUT_MS: number = 15000;
 
 /**
+ * 兼容模式（非流式）的偏好键（与 config 同一个 GSKV store，布尔字段单独存——
+ * 不塞进 config JSON，保持 load/saveConfig 的形态稳定）。
+ * 背景：@hmkit/ai 2.0.0 的 OpenAIStreamDecoder.consumeUsage 对流式 chunk 的
+ * `usage: null` 不判空（OpenAI 协议允许 chunk 不带 usage），部分自建/网关端点
+ * （one-api 等）全链路 usage=null 会炸出 PROTOCOL 错误。非流式响应体是单个
+ * JSON 对象，usage 缺省我们自己做 `?? 0` 兜底，绕开库的 decoder。
+ */
+export const AI_PREFS_KEY_NON_STREAMING: string = 'brew_ai_non_streaming';
+
+/**
  * Asset Store 不可用时的**会话内存兜底标记**（不落盘）：
  * 存不进 Asset 的 Key 只活在本进程内存里，设置页会提示用户重启后需重填。
  */
