@@ -6,6 +6,7 @@ import { PasteboardUtil } from '@ohos/common';
 import { AiError, AiErrorKind, AiFailureCard, AiFailureInput } from '../model/AiTypes';
 import { AiSettingsStore } from '../service/AiSettingsStore';
 import { AiTasks } from '../service/AiTasks';
+import { AiErrorDetail } from '../util/AiErrorDetail';
 
 /**
  * D3 · AI 报错解读卡（spec §6，挂在执行 Sheet 失败终态下方）。
@@ -32,8 +33,8 @@ export struct BrewAiFailureCard {
   @State private card: AiFailureCard | null = null;
   @State private loading: boolean = false;
   @State private errorKind: AiErrorKind | null = null;
-  /** E4 细分：输出被截断（finishReason=length）时用专门文案。 */
-  @State private errorTruncated: boolean = false;
+  /** E4/E5 的细节后缀（spec §8 排查记录：诊断信息直达 UI）。空串 = 无细节。 */
+  @State private errorDetail: string = '';
   @State private expanded: boolean = false;
 
   /** D3 按钮/卡片是否可见（G8：未配 Key 或断网时不出现；断网判定交给请求失败，
@@ -48,7 +49,7 @@ export struct BrewAiFailureCard {
     }
     this.loading = true;
     this.errorKind = null;
-    this.errorTruncated = false;
+    this.errorDetail = '';
     const input: AiFailureInput = new AiFailureInput();
     input.command = this.command;
     input.stderrTail = this.stderrTail;
@@ -64,17 +65,16 @@ export struct BrewAiFailureCard {
       .catch((error: AiError) => {
         this.loading = false;
         this.errorKind = error instanceof AiError ? error.kind : AiErrorKind.E2_NETWORK;
-        this.errorTruncated = error instanceof AiError && error.message.indexOf('reason=truncated') >= 0;
+        this.errorDetail = error instanceof AiError ? AiErrorDetail.of(error) : '';
       });
   }
 
   private errorText(): ResourceStr {
     if (this.errorKind === AiErrorKind.E4_BAD_FORMAT) {
-      return this.errorTruncated ? $r('app.string.ai_error_e4_truncated') :
-        $r('app.string.ai_error_e4');
+      return AiErrorDetail.e4Text(this.errorDetail);
     }
     if (this.errorKind === AiErrorKind.E5_BLOCKED) {
-      return $r('app.string.ai_error_e5');
+      return AiErrorDetail.e5Text(this.errorDetail);
     }
     return $r('app.string.ai_error_e2');
   }

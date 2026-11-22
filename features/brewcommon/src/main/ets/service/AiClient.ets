@@ -120,6 +120,8 @@ export class AiClient {
       Logger.info(TAG, `complete ok model=${out.model} latency=${latency} ` +
         `finish=${out.finishReason} tokens=${out.promptTokens}/${out.completionTokens} ` +
         `chars=${out.content.length}`);
+      // 响应头 80 字节脱敏打点（spec §8 排查记录 ④）：真机日志一眼看出端点返回了什么
+      Logger.info(TAG, `complete head=${AiClient.sanitize(out.content.substring(0, 80))}`);
       return out;
     } catch (err) {
       throw AiClient.classify(err, Date.now() - startedAt);
@@ -163,9 +165,14 @@ export class AiClient {
       case HmAIErrorCode.HTTP: {
         // 内容安全拒绝大多表现为 400 特定码或 403；没有响应体结构约定，
         // 统一按 E5（provider 拒绝）报——UI 文案对齐 spec §8 的 E5 行。
+        // 401/404 的 HTML 错误页是「格式异常」报障的常见真因（spec §8 排查记录 ③）：
+        // 响应体前 120 字节脱敏后带进 message 与 UI 细节行。
         const statusField: Object | undefined = (err as Record<string, Object>)['statusCode'];
         const status: number = typeof statusField === 'number' ? statusField as number : 0;
-        return new AiError(AiErrorKind.E5_BLOCKED, `http status=${status}`);
+        const bodyField: Object | undefined = (err as Record<string, Object>)['responseBody'];
+        const body: string = typeof bodyField === 'string' ? bodyField as string : '';
+        return new AiError(AiErrorKind.E5_BLOCKED,
+          `http status=${status} body=${AiClient.sanitize(body.substring(0, 120))}`);
       }
       case HmAIErrorCode.PROTOCOL:
         return new AiError(AiErrorKind.E4_BAD_FORMAT, e.message);
@@ -173,6 +180,30 @@ export class AiClient {
         // 其余（invalid_argument / internal）按网络失败归 E2：用户动作相同（重试）。
         return new AiError(AiErrorKind.E2_NETWORK, e.message);
     }
+  }
+
+  /**
+   * 脱敏：sk- 开头的 token 段替换为 `sk-***`。响应体/打点进日志与错误细节前必过这里
+   * （G1 的延伸：即便端点把 Key 回显在错误页里，也不落日志）。
+   */
+  public static sanitize(text: string): string {
+    let out: string = text;
+    const idx: number = out.indexOf('sk-');
+    if (idx >= 0) {
+      // 从 sk- 起把连续的 token 字符段（字母数字与 - _）替换掉
+      let end: number = idx + 3;
+      while (end < out.length) {
+        const ch: string = out.charAt(end);
+        const isTokenChar: boolean = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+          (ch >= '0' && ch <= '9') || ch === '-' || ch === '_';
+        if (!isTokenChar) {
+          break;
+        }
+        end++;
+      }
+      out = out.substring(0, idx) + 'sk-***' + out.substring(end);
+    }
+    return out.replace(/[\r\n]+/g, ' ');
   }
 
   private static clientOf(config: AiProviderConfig, apiKey: string): OpenAICompatibleClient {

@@ -775,6 +775,26 @@
     {
       "name": "ai_error_e4_truncated",
       "value": "输出被截断，请重试"
+    },
+    {
+      "name": "ai_error_e4_detail_fence",
+      "value": "响应格式异常（输出不是有效 JSON）"
+    },
+    {
+      "name": "ai_error_e4_detail_truncated",
+      "value": "响应格式异常（输出被截断，请重试）"
+    },
+    {
+      "name": "ai_error_e4_detail_schema",
+      "value": "响应格式异常（字段校验不过）"
+    },
+    {
+      "name": "ai_error_e4_detail_nonjson",
+      "value": "响应格式异常（端点返回了非 JSON 内容，请检查端点地址与 API Key）"
+    },
+    {
+      "name": "ai_error_e5_detail",
+      "value": "请求被拒绝（%s）"
     }
   ]
 }

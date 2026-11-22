@@ -5,6 +5,7 @@
 import { Logger } from '@ohos/common';
 import {
   AiError,
+  AiErrorDetail,
   AiErrorKind,
   AiIntentInput,
   AiTaskWords,
@@ -31,8 +32,8 @@ export class AiFindState {
   public mode: string = 'idle';
   /** 错误分级（mode=error 时有值）。 */
   public errorKind: AiErrorKind | null = null;
-  /** E4 细分：输出被截断（finishReason=length）时用专门文案。 */
-  public errorTruncated: boolean = false;
+  /** E4/E5 的细节后缀（spec §8 排查记录：诊断信息直达 UI）。空串 = 无细节。 */
+  public errorDetail: string = '';
   /** 词表模式的提示显隐（G6 的「AI 未配置，已切换离线词表」）。 */
   public fallbackNotice: boolean = false;
   /** 本页最近一次意图（防旧结果覆盖：与搜索页 appliedKeyword 同一思路）。 */
@@ -68,7 +69,7 @@ export class AiFindVM {
     state.appliedIntent = trimmed;
     state.mode = 'loading';
     state.errorKind = null;
-    state.errorTruncated = false;
+    state.errorDetail = '';
     state.fallbackNotice = false;
     const input: AiIntentInput = new AiIntentInput();
     input.intent = trimmed;
@@ -101,7 +102,7 @@ export class AiFindVM {
         }
         state.mode = 'error';
         state.errorKind = kind;
-        state.errorTruncated = (error as AiError).message.indexOf('reason=truncated') >= 0;
+        state.errorDetail = error instanceof AiError ? AiErrorDetail.of(error) : '';
         return Promise.resolve([]);
       });
   }

@@ -3,7 +3,7 @@
  */
 
 import { CommonConstants } from '@ohos/common';
-import { AiErrorKind } from '@ohos/brewcommon';
+import { AiErrorDetail, AiErrorKind } from '@ohos/brewcommon';
 import { AiFindVM, AiFindState } from '../viewmodel/AiFindVM';
 import { AiFindRowSource, AiFindRow } from '../model/AiFindRowSource';
 
@@ -57,11 +57,10 @@ export struct BrewAiFindCard {
 
   private errorText(): ResourceStr {
     if (this.state.errorKind === AiErrorKind.E4_BAD_FORMAT) {
-      return this.state.errorTruncated ? $r('app.string.ai_error_e4_truncated') :
-        $r('app.string.ai_error_e4');
+      return AiErrorDetail.e4Text(this.state.errorDetail);
     }
     if (this.state.errorKind === AiErrorKind.E5_BLOCKED) {
-      return $r('app.string.ai_error_e5');
+      return AiErrorDetail.e5Text(this.state.errorDetail);
     }
     return $r('app.string.ai_error_e2');
   }

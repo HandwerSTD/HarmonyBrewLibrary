@@ -771,6 +771,26 @@
     {
       "name": "ai_error_e4_truncated",
       "value": "Output was truncated, please retry"
+    },
+    {
+      "name": "ai_error_e4_detail_fence",
+      "value": "Unexpected response format (output is not valid JSON)"
+    },
+    {
+      "name": "ai_error_e4_detail_truncated",
+      "value": "Unexpected response format (output was truncated, please retry)"
+    },
+    {
+      "name": "ai_error_e4_detail_schema",
+      "value": "Unexpected response format (field validation failed)"
+    },
+    {
+      "name": "ai_error_e4_detail_nonjson",
+      "value": "Unexpected response format (endpoint returned non-JSON content; check the endpoint URL and API key)"
+    },
+    {
+      "name": "ai_error_e5_detail",
+      "value": "Request rejected (%s)"
     }
   ]
 }

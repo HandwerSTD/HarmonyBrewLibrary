@@ -255,6 +255,7 @@ export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
 // ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3）
 
 export { AiClient } from './src/main/ets/service/AiClient';
+export { AiErrorDetail } from './src/main/ets/util/AiErrorDetail';
 export { AiSettingsStore } from './src/main/ets/service/AiSettingsStore';
 export { AiCache, AiCacheRead, AiCacheReadResult, AiCacheEnvelope } from './src/main/ets/service/AiCache';
 export { AiTasks } from './src/main/ets/service/AiTasks';

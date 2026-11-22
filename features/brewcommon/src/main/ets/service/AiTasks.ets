@@ -103,9 +103,11 @@ export class AiTasks {
     task.temperature = AI_TEMPERATURE_D1;
     task.maxTokens = AI_MAX_TOKENS_D1;
     return AiClient.complete(task).then((completion) => {
-      const card: AiExplainCard | null = AiTasks.parseExplain(completion.content);
+      const outcome: ParseOutcome = new ParseOutcome();
+      const card: AiExplainCard | null = AiTasks.parseExplain(completion.content, outcome);
       if (card === null) {
-        throw new AiError(AiErrorKind.E4_BAD_FORMAT, `d1 reason=${e4ReasonOf(completion)}`);
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `d1 reason=${e4ReasonOf(completion, outcome.reason)}`);
       }
       AiCache.write('d1', providerKey, input.token, AI_PROMPT_VERSION_D1, completion.model,
         JSON.stringify(card));
@@ -144,7 +146,7 @@ export class AiTasks {
     '{"summary":"定位一句话","scenarios":["适用场景，最多3条"],' +
     '"caveats":["注意与坑，最多3条"],"steps":["上手三步，正好3条"]}。';
 
-  private static parseExplain(text: string): AiExplainCard | null {
+  private static parseExplain(text: string, outcome?: ParseOutcome): AiExplainCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiExplainCard | null => {
       const card: AiExplainCard = new AiExplainCard();
       card.summary = typeof obj['summary'] === 'string' ? obj['summary'] as string : '';
@@ -186,10 +188,12 @@ export class AiTasks {
     task.temperature = AI_TEMPERATURE_D2;
     task.maxTokens = AI_MAX_TOKENS_D2;
     return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
       const result: AiToolResult | null = AiTasks.filterAndRank(completion.content, entries,
-        input.intent);
+        input.intent, outcome);
       if (result === null) {
-        throw new AiError(AiErrorKind.E4_BAD_FORMAT, `d2 reason=${e4ReasonOf(completion)}`);
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `d2 reason=${e4ReasonOf(completion, outcome.reason)}`);
       }
       AiCache.write('d2', providerKey, cacheKey, AI_PROMPT_VERSION_D2, completion.model,
         JSON.stringify(completion.content));
@@ -230,9 +234,9 @@ export class AiTasks {
   }
 
   /** 目录过滤 + 引擎排序（G5 / spec §5 第 2、3 步）。AI 文本解析失败返回 null（E4）。 */
-  private static filterAndRank(aiText: string, entries: BrewSearchEntry[], intent: string):
-    AiToolResult | null {
-    const candidates: AiToolCandidate[] | null = AiTasks.parseCandidates(aiText);
+  private static filterAndRank(aiText: string, entries: BrewSearchEntry[], intent: string,
+    outcome?: ParseOutcome): AiToolResult | null {
+    const candidates: AiToolCandidate[] | null = AiTasks.parseCandidates(aiText, outcome);
     if (candidates === null) {
       return null;
     }
@@ -288,7 +292,7 @@ export class AiTasks {
     return result;
   }
 
-  private static parseCandidates(text: string): AiToolCandidate[] | null {
+  private static parseCandidates(text: string, outcome?: ParseOutcome): AiToolCandidate[] | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiToolCandidate[] | null => {
       const listObj: Object | undefined = obj['candidates'];
       if (!Array.isArray(listObj)) {
@@ -330,9 +334,11 @@ export class AiTasks {
     task.temperature = AI_TEMPERATURE_D3;
     task.maxTokens = AI_MAX_TOKENS_D3;
     return AiClient.complete(task).then((completion) => {
-      const card: AiFailureCard | null = AiTasks.parseFailure(completion.content);
+      const outcome: ParseOutcome = new ParseOutcome();
+      const card: AiFailureCard | null = AiTasks.parseFailure(completion.content, outcome);
       if (card === null) {
-        throw new AiError(AiErrorKind.E4_BAD_FORMAT, `d3 reason=${e4ReasonOf(completion)}`);
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `d3 reason=${e4ReasonOf(completion, outcome.reason)}`);
       }
       Logger.info(TAG, `d3 ok latency=${completion.latencyMs}`);
       return card;
@@ -371,7 +377,7 @@ export class AiTasks {
     '推测要标注「可能」。输出 JSON：{"what":"发生了什么，一句话","causes":["可能原因，最多3条"],' +
     '"nextSteps":["下一步建议，最多3条，可以包含具体命令"]}。';
 
-  private static parseFailure(text: string): AiFailureCard | null {
+  private static parseFailure(text: string, outcome?: ParseOutcome): AiFailureCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiFailureCard | null => {
       const card: AiFailureCard = new AiFailureCard();
       card.what = typeof obj['what'] === 'string' ? obj['what'] as string : '';
@@ -419,9 +425,12 @@ export class AiTasks {
 
 // ------------------------------------------------------- 模块级工具函数
 
-/** E4 的 reason 判定（spec §8 排查记录 ④）：finishReason=length 即截断，其余走 schema。 */
-function e4ReasonOf(completion: AiCompletion2): string {
-  return completion.finishReason === 'length' ? 'truncated' : 'schema';
+/** E4 的 reason 判定：finishReason=length 即截断；其余用解析层的归类（schema/fence/nonjson）。 */
+function e4ReasonOf(completion: AiCompletion2, parseReason: string): string {
+  if (completion.finishReason === 'length') {
+    return 'truncated';
+  }
+  return parseReason.length > 0 ? parseReason : 'schema';
 }
 
 
@@ -470,38 +479,103 @@ function stripJsonWrapping(text: string): string {
 }
 
 /**
- * JSON 解析 + 对象级校验的统一壳：解析失败 / 类型不符返回 null（调用方抛 E4）。
- * `cast` 返回 null = Schema 校验不过。
- * `reason` 由调用方传入做日志区分（fence=栅栏剥离后恢复 / schema=字段校验不过）。
+ * 一次解析尝试的 reason 归类（E4 细分，UI 与日志共用）：
+ *   - 'ok'：解析且校验通过；
+ *   - 'schema'：JSON 合法但字段校验不过；
+ *   - 'fence'：剥离包裹后仍不是合法 JSON 对象；
+ *   - 'nonjson'：剥离后连 `{` 都没有——端点返回了 HTML 错误页 / 纯文本
+ *     （路径错、鉴权失败、网关拦截的典型形态），文案引导检查端点与 Key。
  */
-function parseJsonSafe<T>(text: string, cast: (obj: Record<string, Object>) => T | null): T | null {
-  let body: string = text;
-  try {
-    const direct: Object = JSON.parse(body) as Object;
-    if (direct !== null && direct !== undefined) {
-      const casted: T | null = cast(direct as Record<string, Object>);
-      if (casted === null) {
-        Logger.warn(TAG, `json schema mismatch, reason=schema, len=${body.length}`);
-      }
-      return casted;
+const E4_REASON_OK: string = 'ok';
+const E4_REASON_SCHEMA: string = 'schema';
+const E4_REASON_FENCE: string = 'fence';
+const E4_REASON_NONJSON: string = 'nonjson';
+
+/**
+ * JSON 解析 + 对象级校验的统一壳。
+ *
+ * 尝试顺序：原文直接 parse → 剥离包裹（栅栏 / 前后缀）parse → 数组包裹（`[...]`，
+ * 部分端点对小 prompt 返回数组）取首元素 parse。`reasonOut.reason` 带回归类供
+ * 调用方抛带 reason 的 E4；找不到任何 `{` / `[` 时归 nonjson。
+ */
+class ParseOutcome {
+  public reason: string = E4_REASON_OK;
+}
+
+function parseJsonSafe<T>(text: string, cast: (obj: Record<string, Object>) => T | null,
+  reasonOut?: ParseOutcome): T | null {
+  const setReason = (r: string): void => {
+    if (reasonOut !== undefined) {
+      reasonOut.reason = r;
     }
-  } catch (err) {
-    // 直接 parse 失败才走剥离路径；成功路径零开销
-  }
-  body = stripJsonWrapping(text);
-  try {
-    const parsed: Object = JSON.parse(body) as Object;
-    if (parsed === null || parsed === undefined) {
-      Logger.warn(TAG, `json parse failed, reason=fence, len=${body.length}`);
+  };
+  // ---- 尝试 1：原文直接 parse ----
+  let parsed: Object | null = tryParseObject(text);
+  if (parsed !== null) {
+    const casted: T | null = cast(parsed as Record<string, Object>);
+    if (casted === null) {
+      Logger.warn(TAG, `json schema mismatch, reason=schema, len=${text.length}`);
+      setReason(E4_REASON_SCHEMA);
       return null;
     }
+    setReason(E4_REASON_OK);
+    return casted;
+  }
+  // ---- 尝试 2：剥离栅栏 / 前后缀 ----
+  const body: string = stripJsonWrapping(text);
+  // 剥离后既无 `{` 也无 `[`：端点给的不是 JSON（HTML 错误页 / 纯文本），单独归类
+  if (body.indexOf('{') < 0 && body.indexOf('[') < 0) {
+    Logger.warn(TAG, `json parse failed, reason=nonjson, len=${body.length}`);
+    setReason(E4_REASON_NONJSON);
+    return null;
+  }
+  parsed = tryParseObject(body);
+  if (parsed !== null) {
     const casted: T | null = cast(parsed as Record<string, Object>);
     if (casted === null) {
       Logger.warn(TAG, `json schema mismatch, reason=schema, len=${body.length}`);
+      setReason(E4_REASON_SCHEMA);
+      return null;
     }
+    setReason(E4_REASON_OK);
     return casted;
+  }
+  // ---- 尝试 3：JSON 数组包裹（取首个对象元素）----
+  const arrStart: number = body.indexOf('[');
+  const arrEnd: number = body.lastIndexOf(']');
+  if (arrStart >= 0 && arrEnd > arrStart) {
+    const arrParsed: Object | null = tryParseObject(body.substring(arrStart, arrEnd + 1));
+    if (arrParsed !== null && Array.isArray(arrParsed)) {
+      const list: Array<Object> = arrParsed as Array<Object>;
+      if (list.length > 0) {
+        const first: Object | undefined = list[0];
+        if (first !== undefined && first !== null) {
+          const casted: T | null = cast(first as Record<string, Object>);
+          if (casted === null) {
+            Logger.warn(TAG, `json schema mismatch, reason=schema, len=${body.length}`);
+            setReason(E4_REASON_SCHEMA);
+            return null;
+          }
+          setReason(E4_REASON_OK);
+          return casted;
+        }
+      }
+    }
+  }
+  Logger.warn(TAG, `json parse failed, reason=fence, len=${body.length}`);
+  setReason(E4_REASON_FENCE);
+  return null;
+}
+
+/** tryParseObject：JSON.parse 且结果必须是对象（非数组）时返回，否则 null。 */
+function tryParseObject(text: string): Object | null {
+  try {
+    const parsed: Object = JSON.parse(text) as Object;
+    if (parsed === null || parsed === undefined || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
   } catch (err) {
-    Logger.warn(TAG, `json parse failed, reason=fence, len=${body.length}`);
     return null;
   }
 }
