@@ -62,7 +62,23 @@
 
 ### 3.2 AiClient（`features/brewcommon/service/AiClient.ets`）
 
-- **AI infra 依赖（需求方指定）**：模型调用基础设施使用 `ohpm install @hmkit/ai`（ohpm 三方库，经 `oh-package.json5` 声明依赖）；AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按 §3.1 设置与存储；`@hmkit/ai` 的初始化参数与能力边界（response_format 支持、流式、错误结构）编码第一天以最小样例核对，结论写回本节。
+- **AI infra 依赖（需求方指定；2026-11-22 起改为 vendor 源码引入）**：模型调用基础设施使用
+  `@hmkit/ai`（upstream `https://github.com/lxshwyan/hmkit-ai`，MIT）。原以 ohpm 包依赖引入；
+  真机接自建 OpenAI 兼容端点（one-api 类网关）时暴露其流式解析缺陷（见下），需求方指示改为
+  **vendor 源码引入**：`features/hmkit-ai/`（module 名 `ai`，HAR），主工程以
+  `file:./features/hmkit-ai` 路径依赖，来源与全部本地改动登记在 `features/hmkit-ai/NOTICE.md`。
+  AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按
+  §3.1 设置与存储。
+- **vendor 缺陷修复（2026-11-22，真机日志定位）**：upstream 2.0.0 的
+  `OpenAIStreamDecoder.consumeEvent` 只拦 `chunk.usage !== undefined`，拦不住 JSON null——
+  OpenAI 流式协议允许 chunk 不带 usage（`stream_options.include_usage` 只保证最后一个 chunk
+  带），one-api 类网关转发时全链路 `"usage": null`，`consumeUsage(null)` 读
+  `null.prompt_tokens` 崩出 PROTOCOL → 上层误报 E4「响应格式异常」。vendor 源码修复：
+  `chunk.model / chunk.usage / chunk.choices` 判空补 `!== null`，`consumeUsage` 入口
+  `undefined || null` 兜底，`choices` / `tool_calls` 元素判空跳过；`ResponsesDecoder` 同款
+  陷阱预防（`event.item / event.response / response.usage` 补 null）。曾实现过「兼容模式
+  （非流式 POST）」绕行层，根因修复后按决策整体移除（设置页 Toggle、`AiProviderConfig`
+  开关、偏好键、`AiClient` 非流式路径），不留死代码。
 - **兼容性修复（2026-11-22，自建 chat completions 端点实测）**：① `AiTasks.parseJsonSafe` 解析前先剥离 markdown 代码栅栏（```json … ```）与首尾非 JSON 字符（取首个 `{` 到最后一个 `}`），自建网关 / 忽略 response_format 的端点常输出包裹文本；② `finish_reason === 'length'`（max_tokens 截断导致 JSON 不完整）显式归 E4，错误文案「输出被截断，请重试」——此前 finishReason 被忽略、截断输出只会以「schema mismatch」面目出现；③ D1 `steps` 放宽为 2–3 条（`isValid` 同步放宽），部分模型习惯输出两条步骤。
 - 非流式 chat completion；超时 15s；**不自动重试**（全部显式触发场景，用户自己重试）。
 - 输入截断：prompt 总长上限 8KB（超出按 §4/§6 各自的截断规则）。
@@ -137,6 +153,15 @@
 > 导致 JSON 不完整——代码未读 finishReason。④Schema 校验过严（如 D1 `steps` 必须恰好 3 条）。
 > 修复项（已实施，见 §3.2）：解析前剥离代码栅栏与首尾非 JSON 文本；`finish_reason=length` 归 E4 并
 > 提示「输出被截断，请重试（模型输出过长）」；`steps` 放宽为 2–3 条。
+>
+> **排查记录二（2026-11-22 续，真机日志 `complete fail code=protocol msg=无法解析模型流式响应：
+> Cannot read property prompt_tokens of null`）**：真因在 `@hmkit/ai` 2.0.0 自身——流式 chunk 的
+> `"usage": null`（OpenAI 协议允许；one-api 类网关全链路如此）穿过 `!== undefined` 栅栏，
+> `consumeUsage(null)` 读 `null.prompt_tokens` 崩 PROTOCOL 被误报为 E4。处置：`@hmkit/ai` 改
+> **vendor 源码引入**（`features/hmkit-ai/`，NOTICE.md 登记改动），decoder 判空补 `!== null`
+> 直接修根因；曾加的「兼容模式（非流式）」绕行层（设置页 Toggle + 非流式 POST 路径）随之整体
+> 移除。伴随的观测增强（E4 reason 四分 fence/truncated/schema/nonjson、E5 body 前 120 字节
+> 脱敏直达 UI、`complete head=` 打点）保留——本次报障能 10 分钟定位到根因，靠的就是它们。
 | E5 | Provider 内容安全拒绝 | 显示「该包内容无法生成讲解」 | 显示「该意图无法处理」 | 显示「无法解读」 |
 | E6 | 用户取消 | 骨架消失，无痕 | 输入保留 | 卡片收起 |
 
