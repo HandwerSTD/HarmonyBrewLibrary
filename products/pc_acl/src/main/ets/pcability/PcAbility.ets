@@ -3,6 +3,7 @@ import { window } from '@kit.ArkUI';
 import { Logger, StorageKey } from '@ohos/common';
 import { ShellStreamProbe } from '@ohos/pcnative';
 import { BaseAbilityHelper } from '@ohos/pcui';
+import { SkillProbe } from '../skill/SkillProbe';
 
 const TAG: string = '[PcAbility]';
 
@@ -18,6 +19,8 @@ export default class PcAbility extends UIAbility {
     AppStorage.setOrCreate<boolean>(StorageKey.BREW_HARMONYBREW_SOURCE_ENABLED, true);
     // 执行通道启动自检。`SHELL_STREAM_VERIFY` 默认关闭，此时这里不会起任何子进程
     ShellStreamProbe.run();
+    // Agent Skill 注册自检（G3 / Stage 0 探针）：只读查询本应用技能注册状态，只打日志
+    SkillProbe.probe();
     this.baseAbilityHelper.doOnCreate(this.context, want, launchParam);
   }
 

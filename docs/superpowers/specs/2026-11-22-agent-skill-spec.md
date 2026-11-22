@@ -151,6 +151,7 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 | `products/pc_acl/skills/handwer-brew-library/scripts/BrewSkill.ets` | 四能力薄适配 + 唯一 report 出口 |
 | `products/pc_acl/src/main/module.json5` | `skillProfiles` 注册（Q3 结论决定 srcEntries 写法）；无新增权限 |
 | `products/pc_acl/src/main/ets/skill/BrewSkillBridge.ets` | 只读业务出口（headless）：目录检索 / 盘上快照 / dry-run / 冷启动目录就绪 |
+| `products/pc_acl/src/main/ets/skill/SkillProbe.ets` | 启动自检（G3 探针位）：`skillManager.getSkillInfoForSelf` 查注册状态，只读只打日志（`[skill-probe]`）；17700093 = skillProfiles/SKILL.md 未生效 |
 | `features/brewcommon/src/main/ets/util/BrewDryRunParser.ets` | `--dry-run` 输出解析（Would install 清单 / 体积行 / Not found），纯函数 + 检查脚本用例 |
 | `features/brewcommon/src/main/ets/constant/SkillConstants.ets` | pending 键、超时阈值、路由参数名 |
 | `build-profile.json5` | Q2 放行后 `compatibleSdkVersion/targetSdkVersion` → 26（双 product 同步），升级说明入 decisions.md |
@@ -163,7 +164,7 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 1. **探针（真机，用户执行）**：§3.1 四问逐项记录 → Q1 不过则停（不排期）；Q2/Q3/Q4 决定升版与兜底方案。
 2. **静态**：`node hmosword-build/brew-skill/check_skill_contract.mjs` 与 `audit_skill_no_exec.mjs` 全绿（G11/G6）。
 3. **构建**：升版后双 product `devecocli build` ERROR 0（G2/G9）。
-4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
+4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → 应用启动后看 `[skill-probe]` 日志确认注册状态（`skill registered` + `self skill count=1` 为生效；`17700093` 为未生效，查 name 三处一致与 srcEntries 路径）→ 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
 5. **回归（真机）**：API 升版后存量冒烟清单（G12）——tldr 区块、详情页、本机包管理、执行 Sheet、（若已合入）AI 卡片与哨兵卡片。
 
 ## 10. 风险与未决
