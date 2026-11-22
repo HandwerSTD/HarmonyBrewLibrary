@@ -124,6 +124,7 @@
 - 小艺 Work 经 ArkTS Skill 连接：对外暴露 `search / preview / install / query` 四个技能；`install` = 唤起详情页预填 + 装机预演（J）确认后执行——**AI 发起，人类点头**。
 - 已确认机制：小艺 Work 为本地运行 harness（与 Intents Kit / 小艺 Agent 不同）；**前置实测**：Skill 注册与触发口径真机验证通过后单独立项细化。
 - 本 spec 只保证：底座与缓存结构不阻碍阶段二（AiClient 可被 Skill 入口复用，install 流程复用预演语义）。
+- **实现登记（2026-11-22）**：阶段二未实现。接口方向——`AiClient.complete / AiTasks.*` 均为无 UI 依赖的静态入口（Context 经 `AppStorage[UI_CONTEXT]` 惰性获取），Skill 入口可直接复用；缓存目录与 promptVersion 机制与入口无关。
 
 ---
 
@@ -178,14 +179,15 @@
 
 | 模块 | 改动 |
 |---|---|
-| `features/brewcommon` | 新增 `service/AiClient.ets`、`service/AiSettingsStore.ets`（Asset Store 封装）、`model/AiTypes.ets`（D1/D2/D3 的请求 / 响应 / 错误类型）、`constant/AiConstants.ets`（promptVersion / TTL / 截断常量）、`util/AiTaskWords.ets`（28 词表加载与匹配） |
-| `features/brewdetail` | AI 讲解卡组件 + 装配（描述分区之后、tldr 之前） |
-| `features/brewsearch` | 「AI 帮我找工具」入口 + 结果列表 + 词表降级 |
-| `features/mine` | AI 设置页（provider / baseURL / Key / model / 测试连接） |
-| 执行 Sheet | 失败终态新增 D3 入口与结果卡（不动执行链路） |
+| `features/brewcommon` | 新增 `service/AiClient.ets`、`service/AiSettingsStore.ets`（Asset Store 封装）、`service/AiTasks.ets`（三任务的 prompt/解析/缓存/过滤编排）、`service/AiCache.ets`（盘上缓存）、`model/AiTypes.ets`（D1/D2/D3 的请求 / 响应 / 错误类型）、`constant/AiConstants.ets`（promptVersion / TTL / 截断常量）、`util/AiTaskWords.ets`（28 词表加载与匹配）、`component/BrewAiFailureCard.ets`（D3 卡，随执行 Sheet 分发） |
+| `features/brewdetail` | AI 讲解卡组件 `BrewAiExplainCard.ets` + 装配（描述分区之后、tldr 之前） |
+| `features/brewsearch` | 「AI 帮我找工具」入口（`BrewAiFindCard`，挂未提交态历史/发现区之前）+ `model/AiCatalogIndex.ets`（目录成员判定）+ 结果列表 + 词表降级（`AiFindVM`） |
+| `features/mine` | AI 设置页（provider / baseURL / Key / model / 测试连接；路由 `MineAiSettingsView`） |
+| 执行 Sheet | 失败终态（FAILED / TIMEOUT）新增 D3 入口与结果卡（不动执行链路；入口随 `BREW_CLI_ENABLED` 门控） |
 | `hmosword-build` | 新增 `brew-ai/check_taskwords.py`（词表结构 / token 存在性校验，走 generate.py 体系） |
-| `resources` | §10 文案（zh/en） |
-| `rawfile/ai/taskwords.json` | 28 策展表（首批 ≥20 条高频中文任务词） |
+| `resources` | §10 文案（zh/en/base 三套，落在 `features/brewcommon`——全项目字符串的既有归属地）；关于页隐私披露 |
+| `rawfile/ai/taskwords.json` | 28 策展表（首批 ≥20 条高频中文任务词；随 `features/brewcommon` HAR 打包） |
+| 根 `oh-package.json5` | `@hmkit/ai@^2.0.0`；`parameterFile` 参数化移除（ohpm 6.0.1 拒绝在含 parameterFile 的工程执行 `ohpm install <pkg>`，@param 引用就地内联，行为不变） |
 
 ---
 
@@ -208,6 +210,6 @@
 | OpenAI 兼容端点差异（response_format / 错误结构不一） | AiClient 做能力探测 + 宽松解析；E4 兜底 |
 | JSON 输出不稳定 | 低温度 + Schema 校验 + E4 明确错误态（不做自动多次重试） |
 | 成本失控 | 显式触发 + 缓存 + 截断 + max_tokens；设置页显示当前 model |
-| Asset Store Kit API 可用性与并发限制 | 编码第一天最小样例验证；不可用则回退加密偏好（方案 B，需评审） |
+| Asset Store Kit API 可用性与并发限制 | 编码第一天最小样例验证；不可用则回退加密偏好（方案 B，需评审）。**实测（2026-11-22）：Asset Store Kit（@kit.AssetStoreKit，API 23 SDK）可用，`addSync` / `querySync` / `removeSync` 已接入**；不可用时的兜底为「进程内存」（不落盘版本），重启后需重填，设置页有提示。加密偏好方案 B 未启用、无需评审。 |
 | 小艺 Work Skill 触发口径未知 | 阶段二独立实测；本 spec 不依赖其结论 |
 | pc_normal 的 AI 体验完整性 | D3 / 系统级不出现属预期；D1 / D2 / I 完整可用 |
