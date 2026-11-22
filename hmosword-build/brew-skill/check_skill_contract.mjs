@@ -30,7 +30,17 @@ const constants = readFileSync(CONSTANTS, 'utf8');
 const fm = md.match(/^---\r?\n([\s\S]*?)\r?\n---/);
 assert(fm, 'SKILL.md 缺少 YAML front matter');
 assert(/^name:\s*handwer-brew-library\s*$/m.test(fm[1]), 'front matter name 必须是 handwer-brew-library');
-assert(/^description:\s*\S/m.test(fm[1]), 'front matter description 缺失');
+assert(/^description:\s*>-/m.test(fm[1]), 'front matter description 必须是 >- 多行块（含不适用边界）');
+assert(/不适用于/.test(fm[1]), 'front matter description 缺「不适用于」边界');
+
+// ---- 1.5 调用契约与错误重试纪律（对照真实生产样本 biandan-assistant 的约定）----
+assert(md.includes('## 调用方式'), 'SKILL.md 缺「调用方式」段（单 JSON 字符串 + 转义约定）');
+assert(md.includes('JSON.stringify'), 'SKILL.md 缺 JSON.stringify 压参约定');
+assert(md.includes('\\"'), 'SKILL.md 缺命令行转义形态示例（\\"）');
+assert(md.includes('argv.length === 1'), 'SKILL.md 缺 argv.length === 1 检查要求');
+assert(md.includes('参数传递格式错误'), 'SKILL.md 缺「参数传递格式错误」自动重试判定锚点');
+assert(md.includes('## 返回结果与错误处理'), 'SKILL.md 缺「返回结果与错误处理」段');
+assert(md.includes('## 运行条件与业务约定'), 'SKILL.md 缺「运行条件与业务约定」段');
 
 // ---- 2. module.json5 注册 ----
 assert(/"skillProfiles"[\s\S]*"name":\s*"handwer-brew-library"/.test(moduleJson5),

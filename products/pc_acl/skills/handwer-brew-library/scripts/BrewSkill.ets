@@ -56,6 +56,10 @@ export default class BrewSkill {
   /** 按名称找包：SKILL.md 场景1。小艺的 LLM 负责从自然语言抽词，这里只做目录检索 */
   public async searchPackages(info: scriptManager.ArkTSScriptInfo, ...argv: string[]): Promise<void> {
     console.info('[skill] fn=' + SKILL_FN_SEARCH + ' begin');
+    if (!BrewSkill.argvShapeOk(argv)) {
+      await this.replyMalformed(info);
+      return;
+    }
     const keyword: string = BrewSkill.argOf(argv, 'query', 0);
     if (keyword.length === 0) {
       await this.replyInvalid(info, 'keyword is empty', SUGGEST_ASK_QUERY);
@@ -77,6 +81,10 @@ export default class BrewSkill {
   /** 包的状态与详情：SKILL.md 场景2。目录事实 + 盘上快照，不执行任何命令 */
   public async queryPackage(info: scriptManager.ArkTSScriptInfo, ...argv: string[]): Promise<void> {
     console.info('[skill] fn=' + SKILL_FN_QUERY + ' begin');
+    if (!BrewSkill.argvShapeOk(argv)) {
+      await this.replyMalformed(info);
+      return;
+    }
     const token: string = BrewSkill.argOf(argv, 'token', 0);
     if (!BrewSkill.isSafeToken(token)) {
       await this.replyInvalid(info, 'token is empty or invalid', SUGGEST_ASK_TOKEN);
@@ -120,6 +128,10 @@ export default class BrewSkill {
 
   private async previewAndReply(info: scriptManager.ArkTSScriptInfo,
     argv: string[], isRequest: boolean): Promise<void> {
+    if (!BrewSkill.argvShapeOk(argv)) {
+      await this.replyMalformed(info);
+      return;
+    }
     const token: string = BrewSkill.argOf(argv, 'token', 0);
     if (!BrewSkill.isSafeToken(token)) {
       await this.replyInvalid(info, 'token is empty or invalid', SUGGEST_ASK_TOKEN);
@@ -229,12 +241,48 @@ export default class BrewSkill {
   }
 
   private static parseArgs(text: string): SkillArgs | null {
+    let value: SkillArgs | null = BrewSkill.tryParseArgs(text);
+    if (value === null) {
+      // 命令行传输层可能把内部双引号转义成 \" 后整段传入（真实 harness 有此形态）：
+      // 还原后重试一次，两种形态都收。
+      value = BrewSkill.tryParseArgs(text.replace(/\\"/g, '"'));
+    }
+    return value;
+  }
+
+  private static tryParseArgs(text: string): SkillArgs | null {
     try {
-      const value = JSON.parse(text) as SkillArgs;
-      return value;
+      const parsed = JSON.parse(text) as Object;
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed as SkillArgs;
     } catch (err) {
       return null;
     }
+  }
+
+  /** argv 形态校验：空 argv 或「看着像 JSON 却解析不了」都算形态错误（自动重试的判定锚点） */
+  private static argvShapeOk(argv: string[]): boolean {
+    if (argv.length === 0) {
+      return false;
+    }
+    const first: string = argv[0].trim();
+    if (first.charAt(0) === '{') {
+      return BrewSkill.parseArgs(first) !== null;
+    }
+    // 位置参数形态仅作兼容（SKILL.md 契约仍要求单一 JSON 字符串），不判形态错误
+    return true;
+  }
+
+  /** argv 形态错误：errMsg 带「参数传递格式错误」锚点，SKILL.md 据此指示自动压参重试一次 */
+  private async replyMalformed(info: scriptManager.ArkTSScriptInfo): Promise<void> {
+    const data: Record<string, Object> = {};
+    await this.reply(info, -1, BrewSkill.failedPayload(SKILL_ERR_INVALID_PARAMS,
+      '参数传递格式错误：argv[0] 必须是可解析的 JSON 对象字符串。',
+      '请先对完整参数对象执行 JSON.stringify，再把结果作为唯一参数传入；命令行调用时转义内部双引号。',
+      data));
+    console.info('[skill] reply malformed-argv');
   }
 
   /** token 形状校验：非空、无空白、目录名常见字符。存在性校验在 Bridge（G7） */
