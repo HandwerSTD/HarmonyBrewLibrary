@@ -56,7 +56,7 @@
 | Q1 | 真机 OS 版本与小艺 Work 可用性：OS 是否 ≥ Skill 要求的设备版本？小艺 Work 入口与 Agent 触发是否可用？ | 不满足 → 32 停在 spec，标记「平台门未过」，不排期（L 版本时光机同款规矩） |
 | Q2 | 工具链：本机 DevEco/devecocli 是否有 API 26 SDK；`compatibleSdkVersion/targetSdkVersion` 升 26 后双 product 构建、存量代码是否报错 | 决定升版代价（G2/G12 的范围） |
 | Q3 | Skill 脚本能否 import 跨模块包（`@ohos/brewcommon` 等）：官方示例为模块内相对路径，本项目业务全在 feature 模块 | 不可用则兜底：pc_acl 内写转发薄层 |
-| Q4 | Skill 导入与路由验证：invoke 工具注册后设备侧能否路由到脚本（判据 = `[skill]` 日志落地）；不落地则回退意图框架方案；exec-cli 通道的可用性另探 | 决定验证路径 |
+| Q4 | ~~Skill 导入与路由验证~~ → 已解：exec-cli 通道真机通过（2026-11-23，小艺 Work 开完全权限后）；剩余验证为小艺可见性、四话术触发、冷启动调起 | 已验证 |
 
 ### 3.2 目录与注册（Q3 放行后）
 
@@ -73,8 +73,7 @@ products/pc_acl/
 `BrewSkill.ets` 只做三件事：按 Schema 前置校验 argv（白名单枚举二次校验）、调用 `BrewSkillBridge`（§3.4）、按契约构造 `ExecuteResult` 并经唯一的 `report()` 出口回包。**业务逻辑一律不进脚本**。
 
 对照真实生产样本（`biandan-assistant`，2026-11-22 需求方提供）后的契约加固与裁决：
-- **A/B 双通道**（裁决演进：2026-11-22 首轮真机实测 exec-cli 未通 → 激活云端 invoke）：A = `references/tools/<bundleName>__<toolName>.json` 注册件（云端 invoke 工具，deviceCommand 模板 `achieveType: INTENT`）；B = exec-cli/ohos-arkTSScript，两者可用时优先 B。
-- **不进意图框架**：样本 SKILL.md 明写「所有函数、A 和 B 都遵守同一个要求：ETS 只接收一个 JSON 对象字符串」——A 与 B 汇合到同一脚本入口，`intentName` 即 `functionName`，`intentParam` 占位符替换后整体序列化成那一个字符串送进 ETS；设备侧代理框架按 bundleName+intentName 路由到已注册技能（`skillManager` 文档：代理框架查询的就是技能）。**验证判据：invoke 调用后 `[skill]` 日志落地**；若不落地，回退意图框架方案（InsightIntentExecutor / 装饰器），记为未决。
+- **单通道收敛（裁决终局，2026-11-23）**：exec-cli（ohos-arkTSScript）**真机验证通过**；首轮失败根因是小艺 Work 未开完全权限，与通道无关。A 通道（云端 invoke：工具注册件 + A/B 路由，完整实现见 commit `82339f8`、验证快照 `92c1f92`）按需求方裁定放弃并移除；日后需要云侧调用时从该提交取回注册件即可。
 - **argv 单 JSON 字符串约定**：SKILL.md 教 harness 先 `JSON.stringify` 再转义 `\"`，脚本端「直接解析 → 失败还原 `\"` 重试一次」双形态兼容；argv 形态错误的 errMsg 带「参数传递格式错误」锚点，SKILL.md 据此指示自动压参重试一次（业务字段缺失与 NOT_FOUND 不自动重试）。
 - **跨模块编译已被样本证明**：样本脚本直接 import 多个跨模块包，探针 Q3 的风险基本排除；本技能的常量本地副本仍是刻意的保守设计（契约检查脚本核对不漂移）。
 
@@ -148,8 +147,7 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 
 | 文件 | 改动 |
 | --- | --- |
-| `products/pc_acl/skills/handwer-brew-library/SKILL.md` | 声明契约（§3.3 全文）：触发场景 / A-B 调用路由 / 错误重试纪律 / 四能力 args 与返回 Schema |
-| `products/pc_acl/skills/handwer-brew-library/references/tools/top.handwer.brewlibrary__<fn>.json` ×4 | A 通道 invoke 工具注册件：arguments Schema 与场景同源，deviceCommand 模板 `achieveType: INTENT`、`intentName` = functionName（照生产样本格式） |
+| `products/pc_acl/skills/handwer-brew-library/SKILL.md` | 声明契约（§3.3 全文）：触发场景 / exec-cli 调用约定 / 错误重试纪律 / 四能力 args 与返回 Schema |
 | `products/pc_acl/skills/handwer-brew-library/scripts/BrewSkill.ets` | 四能力薄适配 + 唯一 report 出口 |
 | `products/pc_acl/src/main/module.json5` | `skillProfiles` 注册（Q3 结论决定 srcEntries 写法）；无新增权限 |
 | `products/pc_acl/src/main/ets/skill/BrewSkillBridge.ets` | 只读业务出口（headless）：目录检索 / 盘上快照 / dry-run / 冷启动目录就绪 |
@@ -166,10 +164,12 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 1. **探针（真机，用户执行）**：§3.1 四问逐项记录 → Q1 不过则停（不排期）；Q2/Q3/Q4 决定升版与兜底方案。
 2. **静态**：`node hmosword-build/brew-skill/check_skill_contract.mjs` 与 `audit_skill_no_exec.mjs` 全绿（G11/G6）。
 3. **构建**：升版后双 product `devecocli build` ERROR 0（G2/G9）。
-4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → 应用启动后看 `[skill-probe]` 日志确认注册状态（`skill registered` + `self skill count=1` 为生效；`17700093` 为未生效，查 name 三处一致与 srcEntries 路径）→ 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
+4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → **确认小艺 Work 已开完全权限（首轮失败根因）** → 应用启动后看 `[skill-probe]` 日志确认注册状态（`skill registered` + `self skill count=1` 为生效；`17700093` 为未生效，查 name 三处一致与 srcEntries 路径）→ 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
 5. **回归（真机）**：API 升版后存量冒烟清单（G12）——tldr 区块、详情页、本机包管理、执行 Sheet、（若已合入）AI 卡片与哨兵卡片。
 
 ## 10. 风险与未决
+
+- **小艺 Work 权限是 exec-cli 的前置条件**（2026-11-23 实测教训）：权限未开全时 exec-cli 调用失败，极易误判为「通道不可用」——本轮就因此误走了一段云端 invoke 弯路。探针文档必须记录权限开启路径，作为 G3 的前置检查项。
 
 - **平台门是第一风险**：Q1 任一分叉（OS 版本不够 / 小艺 Work 不可用）→ 本 spec 停在评审态，进 decisions.md 实测门槛账，与 L 版本时光机同款处理，不强行降级实现（Skill 机制没有「部分可用」形态）。
 - **API 26 升版波及全量代码**：升版可能触发存量 API 弃用告警/行为变化；G2/G12 把代价显性化。若升版代价不可控，备选路径是等 D 线与主线四收尾后再评估（32 本就排序靠后，不阻塞任何线）。

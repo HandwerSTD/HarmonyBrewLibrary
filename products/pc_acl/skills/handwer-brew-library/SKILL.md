@@ -11,24 +11,10 @@ description: >-
 # Harmonybrew 软件包技能
 
 提供 `searchPackages`（找包）、`queryPackage`（查状态）、`previewInstall`（预演）、
-`requestInstall`（发起安装，只预演不执行）四项能力。提供两种调用方式：鸿蒙端侧的
-exec-cli（方式 B）与云端小艺 Work 的已注册 invoke 工具（方式 A）。
+`requestInstall`（发起安装，只预演不执行）四项能力。本技能只提供设备侧
+exec-cli（ohos-arkTSScript）通道，由设备上的小艺 Work 直接调用应用内脚本。
 
-## 调用方式（先选 A 或 B）
-
-| 当前可用能力 | 使用方式 |
-| --- | --- |
-| 鸿蒙端侧提供 `exec-cli` 和 `ohos-arkTSScript` | 用 B；两种方式都可用时也用 B |
-| 云端小艺 Work 等环境只提供已注册的 Harmonybrew invoke 工具 | 用 A；不要在云端沙箱执行 B 命令 |
-| 两者都不可用 | 告知当前环境无法调用 Harmonybrew，停止 |
-
-**A：invoke。** 按实际工具定义选择函数，应用标识为 `top.handwer.brewlibrary`；工具名与
-functionName 一一对应（searchPackages / queryPackage / previewInstall / requestInstall），
-参数按各场景的 args Schema **结构化**传入（工具 arguments 与场景 Schema 是同一份）。
-不要猜测参数名，也不要擅自改变工具 schema。A 与 B 的回包语义完全一致——两者汇合到
-同一个 ETS 回包出口，错误处理与重试纪律对 A 同样适用。
-
-**B：exec-cli / ohos-arkTSScript。**
+## 调用方式（exec-cli / ohos-arkTSScript）
 
 **第一步：先把全部业务参数压成一个字符串。** 构造业务参数对象，执行一次
 `JSON.stringify(params)` 得到 `payload`，作为**唯一**参数传入（`argv.length === 1`，
