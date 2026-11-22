@@ -75,11 +75,17 @@ export class OpenAICompatibleStreamDecoder {
     }
     try {
       const chunk: OpenAIStreamChunk = JSON.parse(data) as OpenAIStreamChunk;
-      if (chunk.model !== undefined) this.model = chunk.model;
-      if (chunk.usage !== undefined) this.consumeUsage(chunk.usage);
-      if (chunk.choices === undefined) return;
+      // JSON null 陷阱（usage=null 崩溃根因修复，NOTICE.md 登记项 1）：
+      // OpenAI 流式协议允许 chunk 不带 usage（stream_options.include_usage 只保证
+      // 最后一个 chunk 带），部分网关（one-api 等）转发时全链路 "usage": null——
+      // `!== undefined` 拦不住 JSON null，consumeUsage(null) 读 null.prompt_tokens
+      // 直接崩 PROTOCOL。model / usage / delta / tool_calls 一律同时判 null。
+      if (chunk.model !== undefined && chunk.model !== null) this.model = chunk.model;
+      if (chunk.usage !== undefined && chunk.usage !== null) this.consumeUsage(chunk.usage);
+      if (chunk.choices === undefined || chunk.choices === null) return;
       for (let index: number = 0; index < chunk.choices.length; index++) {
         const choice: OpenAIStreamChoice = chunk.choices[index];
+        if (choice === undefined || choice === null) continue;
         this.consumeDelta(choice.delta);
         if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
           this.finishReason = choice.finish_reason;
@@ -93,6 +99,8 @@ export class OpenAICompatibleStreamDecoder {
   }
 
   private consumeUsage(source: OpenAIStreamUsage): void {
+    // 入口判空兜底（NOTICE.md 登记项 1）：JSON null 意外漏到这里的任何路径都不再崩。
+    if (source === undefined || source === null) return;
     const usage: HmAIUsage = new HmAIUsage();
     usage.promptTokens = source.prompt_tokens ?? 0;
     usage.completionTokens = source.completion_tokens ?? 0;
@@ -101,16 +109,18 @@ export class OpenAICompatibleStreamDecoder {
   }
 
   private consumeDelta(delta: OpenAIDeltaPayload | undefined): void {
-    if (delta === undefined) return;
+    if (delta === undefined || delta === null) return;
     let contentDelta: string = '';
     if (delta.content !== undefined && delta.content !== null && delta.content.length > 0) {
       contentDelta = delta.content;
       this.content += contentDelta;
     }
     const toolDeltas: HmAIToolCall[] = [];
-    if (delta.tool_calls !== undefined) {
+    if (delta.tool_calls !== undefined && delta.tool_calls !== null) {
       for (let index: number = 0; index < delta.tool_calls.length; index++) {
-        toolDeltas.push(this.consumeToolDelta(delta.tool_calls[index], index));
+        const toolDelta: OpenAIToolCallDelta | undefined = delta.tool_calls[index];
+        if (toolDelta === undefined || toolDelta === null) continue;
+        toolDeltas.push(this.consumeToolDelta(toolDelta, index));
       }
     }
     if (contentDelta.length > 0 || toolDeltas.length > 0) {

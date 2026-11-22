@@ -16,10 +16,17 @@ usage），upstream `OpenAIStreamDecoder.consumeEvent` 只拦 `undefined` 不拦
 
 全部修改集中在本文件登记，方便日后升级 upstream 时 rebase：
 
-1. `src/main/ets/protocol/OpenAIStreamDecoder.ets`：chunk.usage / chunk.model 判空补
-   `!== null`（usage=null 崩溃根因修复）；`consumeUsage` 入口判空兜底。
-2. `src/main/module.json5`：deviceTypes 增加 `default` / `2in1`（本工程 PC 形态）。
-3. 删除 `src/test/`（本工程未启用该 HAR 的 ohosTest target）。
-4. 本 NOTICE 与 oh-package.json5 描述。
+1. `src/main/ets/protocol/OpenAIStreamDecoder.ets`：
+   - `consumeEvent`：`chunk.model` / `chunk.usage` / `chunk.choices` 判空补 `!== null`
+     （`"usage": null` 崩溃根因修复）；`choice` / `tool_calls[i]` 元素也判空跳过；
+   - `consumeUsage` 入口 `undefined || null` 判空兜底；
+   - `consumeDelta`：`delta.tool_calls` 判空补 `!== null`。
+2. `src/main/ets/responses/ResponsesDecoder.ets`：同款 JSON null 陷阱预防——
+   `event.item` / `event.response` / `response.usage` 判空补 `!== null`。
+2. `src/main/ets/responses/ResponsesDecoder.ets`：同款 JSON null 陷阱预防——
+   `event.item` / `event.response` / `response.usage` 判空补 `!== null`。
+3. `src/main/module.json5`：deviceTypes 增加 `default` / `2in1`（本工程 PC 形态）。
+4. 删除 `src/test/`（本工程未启用该 HAR 的 ohosTest target）。
+5. 本 NOTICE 与 oh-package.json5 描述。
 
 其余文件与 upstream 2.0.0 一致；升级时以 upstream 为准重新对diff。

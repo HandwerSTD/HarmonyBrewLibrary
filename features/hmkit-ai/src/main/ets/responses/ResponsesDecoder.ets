@@ -107,14 +107,19 @@ export class OpenAIResponsesStreamDecoder {
     try {
       const event: ResponsesEventWire = JSON.parse(data) as ResponsesEventWire;
       const type: string = event.type ?? '';
+      // 同款 JSON null 陷阱预防（OpenAIStreamDecoder usage=null 崩溃的姊妹路径）：
+      // `!== undefined` 拦不住 JSON null，event.item / event.response 判空同加 null。
       if (type === 'response.output_text.delta') this.consumeText(event.delta ?? '');
-      else if (type === 'response.output_item.added' && event.item !== undefined) {
+      else if (type === 'response.output_item.added' && event.item !== undefined &&
+        event.item !== null) {
         this.consumeAddedItem(event.item, event.output_index ?? 0);
       } else if (type === 'response.function_call_arguments.delta') {
         this.consumeArguments(event.item_id ?? '', event.delta ?? '', event.output_index ?? 0);
-      } else if (type === 'response.output_item.done' && event.item !== undefined) {
+      } else if (type === 'response.output_item.done' && event.item !== undefined &&
+        event.item !== null) {
         this.consumeDoneItem(event.item, event.output_index ?? 0);
-      } else if (type === 'response.completed' && event.response !== undefined) {
+      } else if (type === 'response.completed' && event.response !== undefined &&
+        event.response !== null) {
         this.consumeCompleted(event.response);
         this.complete();
       } else if (type === 'response.failed' || type === 'error') {
@@ -161,7 +166,7 @@ export class OpenAIResponsesStreamDecoder {
     this.responseId = response.id ?? this.responseId;
     this.model = response.model ?? this.model;
     this.status = response.status ?? 'completed';
-    if (response.usage !== undefined) {
+    if (response.usage !== undefined && response.usage !== null) {
       const usage: HmAIUsage = new HmAIUsage();
       usage.promptTokens = response.usage.input_tokens ?? 0;
       usage.completionTokens = response.usage.output_tokens ?? 0;
