@@ -267,3 +267,26 @@ export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
 export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewInstalledSets } from './src/main/ets/service/BrewInstalledLoader';
 export { BrewInstalledParser } from './src/main/ets/util/BrewInstalledParser';
 export type { BrewCaskDoc, BrewFormulaDoc, BrewInstalledDoc, BrewInstalledKegDoc } from './src/main/ets/model/BrewInstalledDoc';
+
+// ---------------------------------------------------------------- Agent Skill（32 号功能点）
+
+// `brew install --dry-run` 输出解析（纯函数层）。Agent Skill 的预演与检查脚本共用同一份；
+// 检查脚本按 tldr 的方式把本文件拷成 .mts 在 node 里跑，因此它保持零 import、字符串常量。
+export { BrewDryRunParser, BrewDryRunItem, BrewDryRunResult } from './src/main/ets/util/BrewDryRunParser';
+
+// Skill 契约常量（specs/2026-11-22-agent-skill-spec.md §3）。skills/ 目录的入口脚本不引跨模块包，
+// 那边另有逐字一致的本地副本，契约检查脚本核对两处与 SKILL.md 不漂移。
+export {
+  SKILL_BREW_TIMEOUT_MS,
+  SKILL_ERR_INTERNAL,
+  SKILL_ERR_INVALID_PARAMS,
+  SKILL_ERR_NOT_FOUND,
+  SKILL_FN_PREVIEW,
+  SKILL_FN_QUERY,
+  SKILL_FN_REQUEST,
+  SKILL_FN_SEARCH,
+  SKILL_NAME,
+  SKILL_SCRIPT_PATH,
+  SKILL_SEARCH_LIMIT,
+  SKILL_VERSION,
+} from './src/main/ets/constant/SkillConstants';

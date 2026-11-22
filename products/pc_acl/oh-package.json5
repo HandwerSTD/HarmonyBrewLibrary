@@ -8,6 +8,7 @@
   "dependencies": {
     "@ohos/common": "file:../../common",
     "@ohos/pcnative": "file:../../features/pcnative",
-    "@ohos/pcui": "file:../../features/pcui"
+    "@ohos/pcui": "file:../../features/pcui",
+    "@ohos/brewcommon": "file:../../features/brewcommon"
   }
 }
