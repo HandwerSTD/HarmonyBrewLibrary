@@ -13,6 +13,7 @@ import {
   OpenAICompatibleClient,
   OpenAICompatibleClientOptions,
 } from '@hmkit/ai';
+import type { HmAIProviderConfig } from '@hmkit/ai';
 import { Logger } from '@ohos/common';
 import {
   AI_PROMPT_MAX_CHARS,
@@ -132,6 +133,11 @@ export class AiClient {
     return AiClient.complete(task);
   }
 
+  /** 任务请求描述的构造入口（AiTasks 用；不外泄 AiChatTask 的其它用法）。 */
+  public static newTask(): AiChatTask {
+    return new AiChatTask();
+  }
+
   /** HmAIErrorCode → 本 spec 的 E 分级（spec §8 的映射行）。 */
   private static classify(err: Object, latencyMs: number): AiError {
     const e: Error = err as Error;
@@ -165,9 +171,10 @@ export class AiClient {
   private static clientOf(config: AiProviderConfig, apiKey: string): OpenAICompatibleClient {
     let options: OpenAICompatibleClientOptions;
     if (config.isDeepSeek()) {
-      options = HmAIProviders.deepSeek(config.model).createChatClient() === undefined ?
-        new OpenAICompatibleClientOptions('https://api.deepseek.com', config.model) :
-        HmAIProviders.deepSeek(config.model).createChatClient();
+      // DeepSeek 模板：baseURL 用库内置预设（api.deepseek.com），model 用用户配置的值。
+      const provider: HmAIProviderConfig = HmAIProviders.deepSeek(config.model);
+      options = new OpenAICompatibleClientOptions(provider.baseURL, config.model);
+      options.chatCompletionsPath = provider.chatCompletionsPath;
     } else {
       options = new OpenAICompatibleClientOptions(config.baseUrl, config.model);
     }
@@ -184,4 +191,5 @@ export class AiClient {
   }
 }
 
-export { AiChatTask };
+/** 任务请求描述的外部名（AiTasks 用；ArkTS 不支持跨文件引非导出类，取别名导出）。 */
+export { AiChatTask as AiClientTask };

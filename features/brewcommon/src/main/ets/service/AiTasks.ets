@@ -1,0 +1,481 @@
+/*
+ * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
+ */
+
+import { Logger } from '@ohos/common';
+import { BrewSearchEngine } from '../model/BrewSearchEngine';
+import type { BrewSearchEntry, BrewSearchHit } from '../model/BrewSearchEngine';
+import {
+  AI_CACHE_TTL_D1_MS,
+  AI_CACHE_TTL_D2_MS,
+  AI_D2_MAX_CANDIDATES,
+  AI_D2_RESULT_LIMIT,
+  AI_D3_STDERR_TAIL_CHARS,
+  AI_D3_STDOUT_TAIL_CHARS,
+  AI_MAX_TOKENS_D1,
+  AI_MAX_TOKENS_D2,
+  AI_MAX_TOKENS_D3,
+  AI_PROMPT_VERSION_D1,
+  AI_PROMPT_VERSION_D2,
+  AI_TEMPERATURE_D1,
+  AI_TEMPERATURE_D2,
+  AI_TEMPERATURE_D3,
+} from '../constant/AiConstants';
+import {
+  AiError,
+  AiErrorKind,
+  AiExplainCard,
+  AiExplainInput,
+  AiFailureCard,
+  AiFailureInput,
+  AiIntentInput,
+  AiToolCandidate,
+  AiToolResult,
+} from '../model/AiTypes';
+import { AiCache, AiCacheReadResult } from './AiCache';
+import { AiClient } from './AiClient';
+import type { AiClientTask } from './AiClient';
+import { AiSettingsStore } from './AiSettingsStore';
+import { AiTaskWords as AiTaskWordsStatic, AiTaskWord } from '../util/AiTaskWords';
+
+const TAG: string = '[ai]';
+
+/** 缓存 read 的内部展开（三个任务共用一次 read 调用的结论）。 */
+class AiCacheLookup {
+  public hit: boolean = false;
+  public stale: boolean = false;
+  public dataJson: string = '';
+  public missReason: string = '';
+  public model: string = '';
+  public age: number = 0;
+}
+
+/**
+ * AI 三个任务（D1 讲解 / D2 找工具 / D3 报错解读）的任务层。
+ *
+ * AiClient 只负责「发一次请求、拿回正文」；prompt 组装、JSON 解析校验、缓存、
+ * 目录过滤与引擎排序都在这里。UI 层只认这三个入口与 `AiError.kind`。
+ *
+ * ## 缓存与降级总则（spec §3.3 / §8）
+ *
+ * - D1 / D2 落盘缓存（TTL 7 天 / 1 天，stale-while-revalidate）；D3 不缓存；
+ * - 无 Key（E1）/ 网络失败（E2）/ 超时（E3）→ 调用方按 spec §8 的列降级：
+ *   D1 引导、D2 切词表、D3 隐藏。本类**不**吞错误——降级是 UI 的决定权；
+ * - D2 的 AI 候选**必须**过目录过滤（G5 防幻觉）+ 引擎排序（AI 只提名）。
+ */
+export class AiTasks {
+  // ------------------------------------------------------------ D1 · 讲解卡
+
+  /**
+   * 取讲解卡：缓存命中直接返回（G3 秒开）；否则调模型、写缓存。
+   * stale 时先返回旧值，再在后台刷新（G10，刷新结果经 onRefreshed 回调给 UI）。
+   */
+  public static explain(input: AiExplainInput, onRefreshed: (card: AiExplainCard) => void):
+    Promise<AiExplainCard> {
+    const cacheKey: string = input.token;
+    const providerKey: string = AiTasks.providerModelKey();
+    const cached: AiCacheLookup = AiTasks.lookup('d1', providerKey, cacheKey,
+      AI_PROMPT_VERSION_D1, AI_CACHE_TTL_D1_MS);
+    if (cached.hit) {
+      const card: AiExplainCard | null = AiTasks.parseExplain(cached.dataJson);
+      if (card !== null) {
+        Logger.info(TAG, `d1 cache hit token=${input.token} age=${cached.age} model=${cached.model}`);
+        return Promise.resolve(card);
+      }
+    }
+    if (cached.stale) {
+      const staleCard: AiExplainCard | null = AiTasks.parseExplain(cached.dataJson);
+      if (staleCard !== null) {
+        Logger.info(TAG, `stale-while-revalidate feature=d1 token=${input.token}`);
+        AiTasks.fetchExplain(input, providerKey, onRefreshed);
+        return Promise.resolve(staleCard);
+      }
+    }
+    return AiTasks.fetchExplain(input, providerKey, onRefreshed);
+  }
+
+  private static fetchExplain(input: AiExplainInput, providerKey: string,
+    onRefreshed: (card: AiExplainCard) => void): Promise<AiExplainCard> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.D1_SYSTEM;
+    task.user = AiTasks.d1UserPrompt(input);
+    task.temperature = AI_TEMPERATURE_D1;
+    task.maxTokens = AI_MAX_TOKENS_D1;
+    return AiClient.complete(task).then((completion) => {
+      const card: AiExplainCard | null = AiTasks.parseExplain(completion.content);
+      if (card === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT, 'd1 schema mismatch');
+      }
+      AiCache.write('d1', providerKey, input.token, AI_PROMPT_VERSION_D1, completion.model,
+        JSON.stringify(card));
+      Logger.info(TAG, `d1 ok token=${input.token} latency=${completion.latencyMs}`);
+      onRefreshed(card);
+      return card;
+    });
+  }
+
+  private static d1UserPrompt(input: AiExplainInput): string {
+    // grounding：全部字段来自详情页既有数据；超限先截 caveats（spec §4）
+    let caveats: string = input.caveats;
+    let deps: string = input.dependencies.join(', ');
+    let base: string = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
+      `caveats: ${caveats}\ndependencies: ${deps}`;
+    while (task_system_len(AiTasks.D1_SYSTEM) + task_system_len(base) > promptCap() &&
+      caveats.length > 0) {
+      // 先砍 caveats，再砍 dependencies；desc 与 token 是定位的最小集合，不砍
+      caveats = caveats.substring(0, Math.floor(caveats.length / 2));
+      base = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
+        `caveats: ${caveats}\ndependencies: ${deps}`;
+      if (caveats.length < 32) {
+        caveats = '';
+        deps = '';
+        base = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
+          `caveats: \ndependencies: `;
+        break;
+      }
+    }
+    return base + '\n请按 schema 输出 JSON。';
+  }
+
+  private static readonly D1_SYSTEM: string = '你是 Homebrew 包讲解助手。只基于用户提供的字段回答，' +
+    '用简体中文；不得虚构版本号、命令或功能；caveats 是英文原文时翻译成中文并归纳风险点；' +
+    '字段里没有的信息就直说无法判断。输出 JSON，结构：' +
+    '{"summary":"定位一句话","scenarios":["适用场景，最多3条"],' +
+    '"caveats":["注意与坑，最多3条"],"steps":["上手三步，正好3条"]}。';
+
+  private static parseExplain(text: string): AiExplainCard | null {
+    return parseJsonSafe(text, (obj: Record<string, Object>): AiExplainCard | null => {
+      const card: AiExplainCard = new AiExplainCard();
+      card.summary = typeof obj['summary'] === 'string' ? obj['summary'] as string : '';
+      card.scenarios = stringArrayOf(obj['scenarios'], 3);
+      card.caveats = stringArrayOf(obj['caveats'], 3);
+      card.steps = stringArrayOf(obj['steps'], 6);
+      if (!card.isValid()) {
+        return null;
+      }
+      return card;
+    });
+  }
+
+  // ------------------------------------------------------------ D2 · 找工具
+
+  /**
+   * AI 找工具（spec §5）：提名 → 目录过滤（G5）→ 引擎排序 → 截断。
+   *
+   * `entries` 是本地目录的搜索索引（调用方从 BrewTable 组装，与主搜索同源）。
+   * AI 模式失败（E2/E3/E4）时**不在这里**降级——调用方拿 `AiError.kind` 自己决定
+   * 是否切词表模式（spec §8 的降级矩阵）。
+   */
+  public static findTools(input: AiIntentInput, entries: BrewSearchEntry[]): Promise<AiToolResult> {
+    const cacheKey: string = slugOf(input.intent);
+    const providerKey: string = AiTasks.providerModelKey();
+    const cached: AiCacheLookup = AiTasks.lookup('d2', providerKey, cacheKey,
+      AI_PROMPT_VERSION_D2, AI_CACHE_TTL_D2_MS);
+    if (cached.hit) {
+      const result: AiToolResult | null = AiTasks.filterAndRank(cached.dataJson, entries, input.intent);
+      if (result !== null) {
+        Logger.info(TAG, `d2 cache hit key=${cacheKey} age=${cached.age}`);
+        return Promise.resolve(result);
+      }
+    }
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.D2_SYSTEM;
+    task.user = `用户意图：${input.intent}\n请按 schema 输出 JSON。`;
+    task.temperature = AI_TEMPERATURE_D2;
+    task.maxTokens = AI_MAX_TOKENS_D2;
+    return AiClient.complete(task).then((completion) => {
+      const result: AiToolResult | null = AiTasks.filterAndRank(completion.content, entries,
+        input.intent);
+      if (result === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT, 'd2 schema mismatch');
+      }
+      AiCache.write('d2', providerKey, cacheKey, AI_PROMPT_VERSION_D2, completion.model,
+        JSON.stringify(completion.content));
+      Logger.info(TAG, `d2 ok dropped=${result.dropped} kept=${result.candidates.length} ` +
+        `latency=${completion.latencyMs}`);
+      return result;
+    });
+  }
+
+  /**
+   * 离线词表模式（G6）：中文意图 → 词表条目 → 候选去重 → 引擎排序。
+   * **不发任何请求**。命中空表的意图由 UI 显示空态。
+   */
+  public static findToolsOffline(intent: string, entries: BrewSearchEntry[],
+    words: AiTaskWord[]): AiToolResult {
+    const result: AiToolResult = new AiToolResult();
+    const seen: Set<string> = new Set<string>();
+    const hits: AiTaskWord[] =
+      AiTasks.wordlistMatch(intent, words);
+    hits.forEach((word) => {
+      word.tokens.forEach((token: string) => {
+        if (!seen.has(token)) {
+          seen.add(token);
+          const cand: AiToolCandidate = new AiToolCandidate();
+          cand.token = token;
+          cand.why = word.note;
+          result.candidates.push(cand);
+        }
+      });
+    });
+    return AiTasks.rankCandidates(result, entries, intent);
+  }
+
+  private static wordlistMatch(intent: string, words: AiTaskWord[]): AiTaskWord[] {
+    // 与 `AiTaskWords.match()` 同口径（精确 / 前缀）。AiTaskWords 是零依赖纯工具类，
+    // 这里直接 import 不构成循环；匹配逻辑收在 AiTaskWords 一处、这里只做转发更干净。
+    return AiTaskWordsStatic.match(intent, words);
+  }
+
+  /** 目录过滤 + 引擎排序（G5 / spec §5 第 2、3 步）。AI 文本解析失败返回 null（E4）。 */
+  private static filterAndRank(aiText: string, entries: BrewSearchEntry[], intent: string):
+    AiToolResult | null {
+    const candidates: AiToolCandidate[] | null = AiTasks.parseCandidates(aiText);
+    if (candidates === null) {
+      return null;
+    }
+    const known: Map<string, BrewSearchEntry> = new Map<string, BrewSearchEntry>();
+    entries.forEach((entry: BrewSearchEntry) => {
+      known.set(entry.token, entry);
+    });
+    const result: AiToolResult = new AiToolResult();
+    const seen: Set<string> = new Set<string>();
+    candidates.forEach((cand: AiToolCandidate) => {
+      const token: string = cand.token.trim().toLowerCase();
+      if (token.length === 0 || seen.has(token)) {
+        return;
+      }
+      if (!known.has(token)) {
+        // 目录外名字：计数进日志，**名单不留存、不展示**（G5 防 slopsquatting）
+        result.dropped++;
+        return;
+      }
+      seen.add(token);
+      result.candidates.push(cand);
+    });
+    Logger.info(TAG, `d2 filtered dropped=${result.dropped} kept=${result.candidates.length}`);
+    return AiTasks.rankCandidates(result, entries, intent);
+  }
+
+  /** 引擎重排：AI 只提名，顺序由 BrewSearchEngine 说了算（spec §5 第 3 步）。 */
+  private static rankCandidates(result: AiToolResult, entries: BrewSearchEntry[],
+    intent: string): AiToolResult {
+    if (result.candidates.length === 0) {
+      return result;
+    }
+    const byToken: Map<string, AiToolCandidate> = new Map<string, AiToolCandidate>();
+    result.candidates.forEach((cand: AiToolCandidate) => {
+      byToken.set(cand.token.toLowerCase(), cand);
+    });
+    const intentHits: BrewSearchHit[] = BrewSearchEngine.rank(intent, entries, 0);
+    const scoreByToken: Map<string, number> = new Map<string, number>();
+    intentHits.forEach((hit: BrewSearchHit, index: number) => {
+      scoreByToken.set(hit.token, 1000 - index);
+    });
+    result.candidates.sort((a: AiToolCandidate, b: AiToolCandidate): number => {
+      const sa: number = scoreByToken.get(a.token.toLowerCase()) ?? 0;
+      const sb: number = scoreByToken.get(b.token.toLowerCase()) ?? 0;
+      if (sa !== sb) {
+        return sb - sa;
+      }
+      return a.token.localeCompare(b.token);
+    });
+    if (result.candidates.length > AI_D2_RESULT_LIMIT) {
+      result.candidates = result.candidates.slice(0, AI_D2_RESULT_LIMIT);
+    }
+    return result;
+  }
+
+  private static parseCandidates(text: string): AiToolCandidate[] | null {
+    return parseJsonSafe(text, (obj: Record<string, Object>): AiToolCandidate[] | null => {
+      const listObj: Object | undefined = obj['candidates'];
+      if (!Array.isArray(listObj)) {
+        return null;
+      }
+      const list: Array<Object> = listObj as Array<Object>;
+      if (list.length === 0 || list.length > AI_D2_MAX_CANDIDATES) {
+        return null;
+      }
+      const out: AiToolCandidate[] = [];
+      for (let i: number = 0; i < list.length; i++) {
+        const rec: Record<string, Object> = list[i] as Record<string, Object>;
+        const token: string = typeof rec['token'] === 'string' ? rec['token'] as string : '';
+        const why: string = typeof rec['why'] === 'string' ? rec['why'] as string : '';
+        if (token.trim().length === 0) {
+          return null;
+        }
+        const cand: AiToolCandidate = new AiToolCandidate();
+        cand.token = token;
+        cand.why = why;
+        out.push(cand);
+      }
+      return out;
+    });
+  }
+
+  private static readonly D2_SYSTEM: string = '你是 Homebrew 工具推荐助手。根据用户的中文意图，' +
+    '推荐最多 5 个真实存在的通用命令行工具（Homebrew 包名）。只输出 JSON：' +
+    '{"candidates":[{"token":"包名（英文小写）","why":"一句话中文理由"}]}。' +
+    '不得编造包名；不确定的宁可不推荐。';
+
+  // ------------------------------------------------------------ D3 · 报错解读
+
+  /** 报错解读（spec §6）。不缓存（每次失败现场解读）；下一步建议 UI 侧只给复制（G13）。 */
+  public static explainFailure(input: AiFailureInput): Promise<AiFailureCard> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.D3_SYSTEM;
+    task.user = AiTasks.d3UserPrompt(input);
+    task.temperature = AI_TEMPERATURE_D3;
+    task.maxTokens = AI_MAX_TOKENS_D3;
+    return AiClient.complete(task).then((completion) => {
+      const card: AiFailureCard | null = AiTasks.parseFailure(completion.content);
+      if (card === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT, 'd3 schema mismatch');
+      }
+      Logger.info(TAG, `d3 ok latency=${completion.latencyMs}`);
+      return card;
+    });
+  }
+
+  private static d3UserPrompt(input: AiFailureInput): string {
+    // 截断规则（spec §6）：stderr 尾部 ≤4KB、stdout 尾部 ≤2KB
+    let stderr: string = input.stderrTail;
+    let stdout: string = input.stdoutTail;
+    if (stderr.length > AI_D3_STDERR_TAIL_CHARS) {
+      stderr = stderr.substring(stderr.length - AI_D3_STDERR_TAIL_CHARS);
+    }
+    if (stdout.length > AI_D3_STDOUT_TAIL_CHARS) {
+      stdout = stdout.substring(stdout.length - AI_D3_STDOUT_TAIL_CHARS);
+    }
+    let total: string = `命令: ${input.command}\n失败分类: ${input.failureKind}\n` +
+      `包名: ${input.token}\nstderr(尾部):\n${stderr}\nstdout(尾部):\n${stdout}`;
+    if (task_system_len(AiTasks.D3_SYSTEM) + task_system_len(total) > promptCap()) {
+      // 总量超限时丢 stdout，再超限就把 stderr 砍半
+      stdout = '';
+      total = `命令: ${input.command}\n失败分类: ${input.failureKind}\n` +
+        `包名: ${input.token}\nstderr(尾部):\n${stderr}\nstdout(尾部):\n`;
+      while (task_system_len(AiTasks.D3_SYSTEM) + task_system_len(total) > promptCap() &&
+        stderr.length > 64) {
+        stderr = stderr.substring(stderr.length / 2);
+        total = `命令: ${input.command}\n失败分类: ${input.failureKind}\n` +
+          `包名: ${input.token}\nstderr(尾部):\n${stderr}\nstdout(尾部):\n`;
+      }
+    }
+    return total + '\n请按 schema 输出 JSON。';
+  }
+
+  private static readonly D3_SYSTEM: string = '你是 Homebrew 命令报错解读助手。' +
+    '基于给出的命令、失败分类与输出尾部，解释失败原因。用简体中文；只陈述输出里有依据的结论，' +
+    '推测要标注「可能」。输出 JSON：{"what":"发生了什么，一句话","causes":["可能原因，最多3条"],' +
+    '"nextSteps":["下一步建议，最多3条，可以包含具体命令"]}。';
+
+  private static parseFailure(text: string): AiFailureCard | null {
+    return parseJsonSafe(text, (obj: Record<string, Object>): AiFailureCard | null => {
+      const card: AiFailureCard = new AiFailureCard();
+      card.what = typeof obj['what'] === 'string' ? obj['what'] as string : '';
+      card.causes = stringArrayOf(obj['causes'], 3);
+      card.nextSteps = stringArrayOf(obj['nextSteps'], 3);
+      if (!card.isValid()) {
+        return null;
+      }
+      return card;
+    });
+  }
+
+  // ------------------------------------------------------------ 缓存与工具
+
+  /** providerModel 缓存段：`<provider>_<model>`（sanitize 在 AiCache 里再做）。 */
+  public static providerModelKey(): string {
+    const config = AiSettingsStore.loadConfig();
+    return `${config.provider}_${config.model}`.toLowerCase();
+  }
+
+  private static lookup(feature: string, providerKey: string, cacheKey: string,
+    promptVersion: number, ttlMs: number): AiCacheLookup {
+    const out: AiCacheLookup = new AiCacheLookup();
+    const read = AiCache.read(feature, providerKey, cacheKey, promptVersion, ttlMs);
+    if (read.result === AiCacheReadResult.HIT && read.envelope !== null) {
+      out.hit = true;
+      out.stale = false;
+      out.dataJson = read.envelope.dataJson;
+      out.model = read.envelope.model;
+      out.age = Date.now() - read.envelope.fetchedAt;
+      return out;
+    }
+    if (read.result === AiCacheReadResult.STALE && read.envelope !== null) {
+      out.stale = true;
+      out.dataJson = read.envelope.dataJson;
+      out.model = read.envelope.model;
+      out.age = Date.now() - read.envelope.fetchedAt;
+      return out;
+    }
+    out.missReason = read.missReason;
+    Logger.info(TAG, `cache miss feature=${feature} reason=${read.missReason}`);
+    return out;
+  }
+}
+
+// ------------------------------------------------------- 模块级工具函数
+
+/** prompt 总长上限（AiConstants 的值；独立函数便于任务内调用）。 */
+function promptCap(): number {
+  return 8192;
+}
+
+/** 字符串长度（与 AiConstants 的 8KB 计数口径一致：UTF-16 code unit）。 */
+function task_system_len(text: string): number {
+  return text.length;
+}
+
+/** 意图 → 缓存 key 的 slug（非字母数字折 `-`；中文意图在 AI 模式也能成为合法文件名段）。 */
+function slugOf(text: string): string {
+  let out: string = '';
+  for (let i: number = 0; i < text.length; i++) {
+    const ch: string = text.charAt(i).toLowerCase();
+    const isAlnum: boolean = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+    out += isAlnum ? ch : '-';
+  }
+  const trimmed: string = out.replace(/-+/g, '-');
+  return trimmed.length === 0 ? 'empty' : trimmed.substring(0, 48);
+}
+
+/**
+ * JSON 解析 + 对象级校验的统一壳：解析失败 / 类型不符返回 null（调用方抛 E4）。
+ * `cast` 返回 null = Schema 校验不过。
+ */
+function parseJsonSafe<T>(text: string, cast: (obj: Record<string, Object>) => T | null): T | null {
+  try {
+    const parsed: Object = JSON.parse(text) as Object;
+    if (parsed === null || parsed === undefined) {
+      return null;
+    }
+    return cast(parsed as Record<string, Object>);
+  } catch (err) {
+    Logger.warn(TAG, `json parse failed, len=${text.length}`);
+    return null;
+  }
+}
+
+/** string[] 字段抽取：非数组 / 元素非字符串 / 超上限都判格式不符。 */
+function stringArrayOf(value: Object | undefined, max: number): string[] {
+  if (value === undefined || !Array.isArray(value)) {
+    return [];
+  }
+  const list: Array<Object> = value as Array<Object>;
+  if (list.length > max) {
+    return [];
+  }
+  const out: string[] = [];
+  for (let i: number = 0; i < list.length; i++) {
+    const one: Object = list[i];
+    if (typeof one !== 'string') {
+      return [];
+    }
+    const text: string = one as string;
+    if (text.trim().length === 0) {
+      return [];
+    }
+    out.push(text);
+  }
+  return out;
+}

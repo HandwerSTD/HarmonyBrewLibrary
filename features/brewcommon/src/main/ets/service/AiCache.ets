@@ -97,14 +97,15 @@ export class AiCache {
     envelope.fetchedAt = Date.now();
     envelope.model = model;
     envelope.dataJson = dataJson;
-    const body: string = JSON.stringify({
-      'meta': {
-        'promptVersion': envelope.promptVersion,
-        'fetchedAt': envelope.fetchedAt,
-        'model': envelope.model,
-      },
-      'data': envelope.dataJson,
-    } as Record<string, Object>);
+    // ArkTS 禁无类型对象字面量：先落一个带类型标注的空 Record 再逐键填（与 BrewCatalogFile 同款）
+    const meta: Record<string, Object> = {};
+    meta['promptVersion'] = envelope.promptVersion;
+    meta['fetchedAt'] = envelope.fetchedAt;
+    meta['model'] = envelope.model;
+    const body: Record<string, Object> = {};
+    body['meta'] = meta;
+    body['data'] = envelope.dataJson;
+    const bodyText: string = JSON.stringify(body);
     let file: fileIo.File | undefined = undefined;
     const tempPath: string = path + '.tmp';
     try {
@@ -122,14 +123,14 @@ export class AiCache {
       }
       file = fileIo.openSync(tempPath, fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE |
         fileIo.OpenMode.TRUNC);
-      fileIo.writeSync(file.fd, body);
+      fileIo.writeSync(file.fd, bodyText);
       fileIo.closeSync(file);
       file = undefined;
       if (fileIo.accessSync(path)) {
         fileIo.unlinkSync(path);
       }
       fileIo.renameSync(tempPath, path);
-      Logger.info(TAG, `cache write feature=${feature} key=${cacheKey} bytes=${body.length}`);
+      Logger.info(TAG, `cache write feature=${feature} key=${cacheKey} bytes=${bodyText.length}`);
     } catch (error) {
       if (file !== undefined) {
         try {

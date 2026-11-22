@@ -243,6 +243,48 @@ export { BrewCacheAdmin } from './src/main/ets/service/BrewCacheAdmin';
 export { BrewCacheEpoch } from './src/main/ets/service/BrewCacheEpoch';
 export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
 
+// ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3）
+
+export { AiClient } from './src/main/ets/service/AiClient';
+export { AiSettingsStore } from './src/main/ets/service/AiSettingsStore';
+export { AiCache, AiCacheRead, AiCacheReadResult, AiCacheEnvelope } from './src/main/ets/service/AiCache';
+export { AiTasks } from './src/main/ets/service/AiTasks';
+export {
+  AiError,
+  AiErrorKind,
+  AiProviderConfig,
+  AiSettingsSnapshot,
+  AiExplainCard,
+  AiToolCandidate,
+  AiToolResult,
+  AiFailureCard,
+  AiExplainInput,
+  AiFailureInput,
+  AiIntentInput,
+  isKnownAiProvider,
+  d2CandidateCap,
+} from './src/main/ets/model/AiTypes';
+export {
+  AI_PROMPT_VERSION_D1,
+  AI_PROMPT_VERSION_D2,
+  AI_CACHE_TTL_D1_MS,
+  AI_CACHE_TTL_D2_MS,
+  AI_PROMPT_MAX_CHARS,
+  AI_D3_STDERR_TAIL_CHARS,
+  AI_D3_STDOUT_TAIL_CHARS,
+  AI_TASKWORDS_RAWFILE,
+  AI_TASKWORDS_MIN_COUNT,
+  AI_D2_MAX_CANDIDATES,
+  AI_D2_RESULT_LIMIT,
+  AI_TIMEOUT_MS,
+  AI_PROVIDER_DEEPSEEK,
+  AI_PROVIDER_CUSTOM,
+  AI_DEEPSEEK_BASE_URL,
+  AI_DEEPSEEK_DEFAULT_MODEL,
+  AI_ASSET_ALIAS_API_KEY,
+} from './src/main/ets/constant/AiConstants';
+export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
+
 // ------------------------------------------------------------------ 本机包（设备上的 brew 安装记录）
 
 // 执行设备上的 `brew info --json=v2 --installed` 并把结果归一成三个集合。

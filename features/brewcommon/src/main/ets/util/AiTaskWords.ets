@@ -2,8 +2,7 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
-import { Logger } from '@ohos/common';
-import { ResourceUtil } from '@ohos/common';
+import { Logger, ResourceUtil, StorageKey } from '@ohos/common';
 import {
   AI_TASKWORDS_MIN_COUNT,
   AI_TASKWORDS_RAWFILE,
