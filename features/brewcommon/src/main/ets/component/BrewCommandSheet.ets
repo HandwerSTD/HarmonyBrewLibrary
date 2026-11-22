@@ -11,6 +11,7 @@ import {
   brewCommandStatusText,
 } from '../model/BrewCommandModels';
 import { BrewAiFailureCard } from './BrewAiFailureCard';
+import { BrewCli } from '../service/BrewCli';
 import { BrewTextSegment, TERM_TEXT_COLOR } from '../util/BrewAnsi';
 
 /** 日志字体。设备自带的等宽字体；取不到时系统回退到默认字体 */
@@ -194,8 +195,13 @@ export struct BrewCommandSheet {
     .padding($r('sys.float.padding_level6'))
   }
 
-  /** D3 入口的显隐（G8：未配 Key 不出现；pc_normal 无执行通道，本 Sheet 本身不弹）。 */
+  /** D3 入口的显隐（G8：未配 Key 不出现；pc_normal 无执行通道也不出现——随 BREW_CLI_ENABLED）。 */
   private aiCardVisible(): boolean {
+    // pc_normal 没有 brew 执行通道，这个 Sheet 理论上不会被打开；但侧边栏「执行记录」等
+    // 路径仍可能触发，这里再守一道：能力开关关闭时 D3 一并隐藏（G12/G13 的防线）。
+    if (!BrewCli.isEnabled()) {
+      return false;
+    }
     return BrewAiFailureCard.buttonVisible();
   }
 
