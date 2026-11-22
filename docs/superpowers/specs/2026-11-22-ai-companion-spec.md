@@ -63,6 +63,13 @@
 ### 3.2 AiClient（`features/brewcommon/service/AiClient.ets`）
 
 - **AI infra 依赖（需求方指定）**：模型调用基础设施使用 `ohpm install @hmkit/ai`（ohpm 三方库，经 `oh-package.json5` 声明依赖）；AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按 §3.1 设置与存储；`@hmkit/ai` 的初始化参数与能力边界（response_format 支持、流式、错误结构）编码第一天以最小样例核对，结论写回本节。
+  - **核对结论（2026-11-22，@hmkit/ai 2.0.0，ohpm 注册表可安装）**：
+    - 初始化：`HmAIProviders.deepSeek(model)` / `HmAIProviders.custom(baseUrl, model)` → `HmAIProviderConfig` → `createChatClient()` 得 `OpenAICompatibleClient`；自定义端点直接 `new OpenAICompatibleClientOptions(baseUrl, model)`（BYOK 三元组均可注入）；
+    - response_format：支持，`HmAIResponseFormat.jsonObject()`（`json_schema` 也有）；端点不支持时服务端忽略该字段，落到「prompt 要求 JSON + 解析校验 E4」兜底；
+    - 调用形态：库只有流式入口 `client.createStream(request).start(): Promise<HmAIChatResult>`，非流式语义 = 取最终 result、忽略 onDelta；
+    - 错误结构：`HmAIError { code: HmAIErrorCode, statusCode?, responseBody? }`，code ∈ network / timeout / http / protocol / cancelled / invalid_argument / internal / tool*——与本 spec E2/E3/E4/E6 一一映射；HTTP 4xx/5xx 走 `http` 码 + `statusCode`（内容安全按 E5）；
+    - 其它：`connectTimeoutMs` / `readTimeoutMs` 可设（取 15s）；`HmAIUsage`（promptTokens/completionTokens）随 `includeUsage=true` 返回；Key 在库的 `options.apiKey` 上设置，不落日志。
+    - 已知边界：库不做非流式接口、不做端点能力探测（本 spec 也不做探测，E4 兜底）。
 - 非流式 chat completion；超时 15s；**不自动重试**（全部显式触发场景，用户自己重试）。
 - 输入截断：prompt 总长上限 8KB（超出按 §4/§6 各自的截断规则）。
 - 输出约定：**所有任务要求 JSON 输出**（`response_format` 若端点支持则使用；否则靠 prompt + 解析校验），低温度（D1 0.3 / D2 0.2 / D3 0.2）。
