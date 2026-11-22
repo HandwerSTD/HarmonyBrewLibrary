@@ -615,6 +615,10 @@
     {
       "name": "brew_cmd_title_tldr",
       "value": "Run example: %s"
+    },
+    {
+      "name": "brew_tldr_command_hint",
+      "value": "%s provides the command %s"
     }
   ]
 }

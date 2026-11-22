@@ -27,7 +27,19 @@ import {
   TLDR_URL_JSDELIVR_BASE,
 } from '../constant/TldrConstants';
 import { TldrPage } from '../model/TldrPage';
-import { TldrParser } from '../util/TldrParser';
+import {
+  TLDR_CHAIN_ALL_NOT_FOUND,
+  TLDR_CHAIN_FAILED,
+  TLDR_CHAIN_HIT,
+  TLDR_ORIGIN_DISK,
+  TLDR_ORIGIN_NETWORK,
+  TLDR_OUTCOME_FAILED,
+  TLDR_OUTCOME_HIT,
+  TLDR_OUTCOME_NOT_FOUND,
+  TldrCandidateOutcome,
+  TldrChainResult,
+  TldrParser,
+} from '../util/TldrParser';
 import { BrewHttp, BrewHttpResult } from './BrewHttp';
 
 const TAG: string = TLDR_LOG_TAG;
@@ -39,7 +51,7 @@ class TldrMeta {
   public locale: string = '';
 }
 
-/** 负缓存标记文件的形状（`<token>.neg.json`） */
+/** 负缓存标记文件的形状（`<候选名>.neg.json`，候选粒度） */
 class TldrNegMeta {
   public fetchedAt: number = 0;
 }
@@ -52,7 +64,7 @@ class TldrAttempt {
   public url: string = '';
 }
 
-/** 一次取数链的结果 */
+/** 一次单候选取数链的结果 */
 enum TldrFetchOutcome {
   /** 拿到 markdown */
   HIT = 'hit',
@@ -69,7 +81,7 @@ class TldrFetchResult {
   public locale: string = '';
 }
 
-/** 落盘缓存的一次读取结果 */
+/** 落盘缓存的一次读取结果（键是候选页名） */
 class TldrDiskEntry {
   public markdown: string = '';
   public fetchedAt: number = 0;
@@ -77,16 +89,28 @@ class TldrDiskEntry {
 }
 
 /**
- * tldr 用法示例的取数层：内存缓存 → 落盘缓存（TTL 14 天 + stale-while-revalidate）→
- * 双渠道网络抓取（jsDelivr → GitHub raw）→ 24h 404 负缓存。
+ * tldr 用法示例的取数层：**候选名链**（spec §3.1 命名错位修复）——
+ * `查询候选 = [token, 剥 @version 后缀, …executables]`，按序逐候选走
+ * 内存 → 落盘（TTL 14 天 + stale-while-revalidate）→ 双渠道网络（jsDelivr → GitHub raw），
+ * **命中即停**。两条硬规则（不许破）：
  *
- * 流水线口径见 spec §3.1；失败分级见 spec §5 —— **tldr 是增强层**：它的缺席不得产生
- * 任何错误可见性，所有失败在这里收敛成 `null`，UI 据此整区隐藏（G6）。
+ * 1. **单个候选的 404 不毒化整链**：负缓存保持候选粒度（`rg` 404 只写 `rg` 的负缓存），
+ *    链上全部候选都 ALL_NOT_FOUND 才整链隐藏；24h 语义不变（G9）。
+ *    网络失败（非 404）与 404 严格分开：链上出现一次网络失败立即终止（F1），不写任何负缓存
+ *    —— 瞬时断网不能把候选毒化成 24h 的「无此页」。
+ * 2. 解析器标题校验放宽为「标题 = 任一候选」（F6），防抓错页的防御不松（见 TldrParser）。
+ *
+ * **在途合并键 = 包名 token（链身份）**：候选链由 token 与 executables 派生，同一详情页
+ * 的并发 get 必然派生同一条链，按 token 合并即可保证同链并发不重复取数；
+ * 按首候选合并反而会让「token 与首候选不同」的链（ripgrep→rg）无法共享。
+ *
+ * 失败分级见 spec §5 —— **tldr 是增强层**：它的缺席不得产生任何错误可见性，
+ * 所有失败在这里收敛成 `null`，UI 据此整区隐藏（G6）。
  *
  * ## 缓存目录与归属
  *
- * `filesDir/brew_live/tldr/<locale>/<token>.md` + `<token>.meta.json`（spec §3.1）；
- * 负缓存标记在根目录 `<token>.neg.json`。目录由 `BrewCacheAdmin` 统一清理
+ * `filesDir/brew_live/tldr/<locale>/<命中页名>.md` + `<命中页名>.meta.json`（spec §3.1）；
+ * 负缓存标记在根目录 `<候选名>.neg.json`（候选粒度）。目录由 `BrewCacheAdmin` 统一清理
  * （`clear()` 会连带删它），**不随 CacheEpoch（换源）清理** —— tldr 与浏览源无关，
  * 所以本类不读、不写世代号。
  *
@@ -109,11 +133,11 @@ export class TldrService {
   /** utf-8 解码器。单例：TextDecoder.create 有构造成本，本类所有读盘共用一个 */
   private static decoder: util.TextDecoder = util.TextDecoder.create('utf-8', { ignoreBOM: true });
 
-  /** 内存正缓存：token（小写）→ 页面 */
+  /** 内存正缓存：**候选页名**（小写）→ 页面。链查找按候选序扫 */
   private pageCache: Map<string, TldrPage> = new Map();
-  /** 内存负缓存：token（小写）→ 写入时刻 */
+  /** 内存负缓存：**候选名**（小写）→ 写入时刻（G9 候选粒度） */
   private negCache: Map<string, number> = new Map();
-  /** 在途请求合并：同一 token 的并发 get 共享同一个 Promise */
+  /** 在途请求合并：键 = 包名 token（链身份，见类注释） */
   private inflight: Map<string, Promise<TldrPage | null>> = new Map();
   /** F2：后台刷新连续失败计数（会话内；成功一次清零） */
   private refreshFailStreak: number = 0;
@@ -122,37 +146,56 @@ export class TldrService {
   }
 
   /**
-   * 取一页 tldr。**任何失败都返回 null**（404 / 网络 / 解析 / 非法 token），
+   * 取一页 tldr。**任何失败都返回 null**（整链无页 / 网络 / 解析 / 非法 token），
    * 不抛错 —— 调用方（详情页 VM）拿到 null 就把分区藏掉，无需区分原因（G6）。
+   *
+   * `executables` 是详情页「提供的命令」清单（Normalizer 已有），参与候选链构建；
+   * token 自身与剥 @version 后缀始终在链首。
    */
-  public get(token: string): Promise<TldrPage | null> {
+  public get(token: string, executables: string[]): Promise<TldrPage | null> {
     const normalized: string = token.trim().toLowerCase();
-    if (normalized.length === 0 || !TldrService.isCacheableToken(normalized)) {
+    if (normalized.length === 0) {
       Logger.info(TAG, `get token=${token} ok=false channel=none reason=bad_token`);
       return Promise.resolve(null);
     }
-    // 1. 内存正缓存
-    const memory: TldrPage | undefined = this.pageCache.get(normalized);
-    if (memory !== undefined) {
-      Logger.info(TAG, `get token=${normalized} locale=${memory.locale} ok=true channel=memory`);
-      return Promise.resolve(memory);
+    const candidates: string[] = TldrParser.buildCandidates(normalized, executables);
+    if (candidates.length === 0) {
+      Logger.info(TAG, `get token=${normalized} ok=false channel=none reason=bad_candidates`);
+      return Promise.resolve(null);
     }
-    // 2. 内存负缓存（24h 内不再重复请求，G9）
-    const negAt: number | undefined = this.negCache.get(normalized);
-    if (negAt !== undefined) {
-      if (Date.now() - negAt < TLDR_NEG_TTL_MS) {
-        Logger.info(TAG, `neg-cache hit token=${normalized} age=${Date.now() - negAt}ms`);
-        return Promise.resolve(null);
+    // 1. 链级内存缓存：按候选序扫，第一个命中的候选直接返回
+    for (const candidate of candidates) {
+      const memory: TldrPage | undefined = this.pageCache.get(candidate);
+      if (memory !== undefined) {
+        Logger.info(TAG, `get token=${normalized} locale=${memory.locale} ok=true channel=memory ` +
+          `candidate=${candidate}`);
+        return Promise.resolve(memory);
       }
-      this.negCache.delete(normalized);
     }
-    // 3. 在途请求合并
+    // 2. 链级负缓存：全部候选都在 24h 负缓存内 → 整链无页（G9，候选粒度不毒化）
+    let firstNegCandidate: string = '';
+    let allNeg: boolean = true;
+    for (const candidate of candidates) {
+      if (this.negFreshAt(candidate) !== null) {
+        if (firstNegCandidate.length === 0) {
+          firstNegCandidate = candidate;
+        }
+      } else {
+        allNeg = false;
+        break;
+      }
+    }
+    if (allNeg) {
+      Logger.info(TAG, `neg-cache hit token=${firstNegCandidate} chain=${candidates.join(',')}`);
+      return Promise.resolve(null);
+    }
+    // 3. 在途请求合并（键 = token，链身份）
     const pending: Promise<TldrPage | null> | undefined = this.inflight.get(normalized);
     if (pending !== undefined) {
       return pending;
     }
-    // 在途合并：load() 自身吞掉全部失败（从不 reject），这里只是确保注册项一定被摘除
-    const task: Promise<TldrPage | null> = this.load(normalized).then(
+    // 在途合并：loadChain 自身吞掉全部失败（从不 reject），这里只是确保注册项一定被摘除
+    const task: Promise<TldrPage | null> = this.loadChain(normalized, candidates).then(
       (page: TldrPage | null) => {
         this.inflight.delete(normalized);
         return page;
@@ -176,117 +219,155 @@ export class TldrService {
     this.refreshFailStreak = 0;
   }
 
-  // ---------------------------------------------------------------- 主流程
+  // ---------------------------------------------------------------- 候选链
 
-  private load(normalized: string): Promise<TldrPage | null> {
-    // 4. 落盘缓存。命中且未过期 → 直接用；已过期 → 先返回旧值 + 后台刷新（G8）
-    const disk: TldrDiskEntry | null = this.readDisk(normalized);
-    if (disk !== null) {
-      const parsed: TldrPage | null = TldrParser.parse(disk.markdown, normalized, disk.locale);
-      if (parsed !== null) {
-        this.pageCache.set(normalized, parsed);
-        const fresh: boolean = Date.now() - disk.fetchedAt < TLDR_TTL_MS;
-        if (fresh) {
-          Logger.info(TAG, `get token=${normalized} locale=${parsed.locale} ok=true channel=disk`);
-          return Promise.resolve(parsed);
-        }
-        // stale-while-revalidate：旧值立刻返回，刷新在后台完成（G8）
-        Logger.info(TAG, `get token=${normalized} locale=${parsed.locale} ok=true channel=disk stale=true`);
-        this.refreshInBackground(normalized);
-        return Promise.resolve(parsed);
+  private async loadChain(token: string, candidates: string[]): Promise<TldrPage | null> {
+    // 落盘 stale 命中的候选：链命中即停后据此发起 SWR（G8）
+    let staleCandidate: string = '';
+    const result: TldrChainResult = await TldrParser.resolveChain(candidates,
+      (candidate: string): Promise<TldrCandidateOutcome> => {
+        return this.resolveCandidate(candidate, candidates, (stale: string) => {
+          staleCandidate = stale;
+        });
+      });
+    if (result.status === TLDR_CHAIN_HIT && result.page !== null) {
+      if (result.hitOrigin === TLDR_ORIGIN_NETWORK) {
+        // 网络命中才落盘（存原始 markdown，不是解析产物）；盘上命中的内容本来就是盘上的
+        this.writeDisk(result.candidate, result.hitMarkdown, result.page.locale, result.hitChannel);
       }
-      // 盘上内容解析失败（F3 / F6）：删掉这份被污染的缓存，走网络重取
-      Logger.info(TAG, `parse fail token=${normalized} channel=disk head=${TldrService.headOf(disk.markdown)}`);
-      this.deleteCached(normalized, disk.locale);
+      this.pageCache.set(result.candidate, result.page);
+      this.refreshFailStreak = 0;
+      Logger.info(TAG, `get token=${token} locale=${result.page.locale} ok=true ` +
+        `channel=${result.hitOrigin === TLDR_ORIGIN_DISK ? TLDR_ORIGIN_DISK : result.hitChannel} ` +
+        `candidate=${result.candidate}`);
+      if (staleCandidate.length > 0) {
+        // SWR（G8）：旧值已经返回，刷新在后台完成
+        this.refreshInBackground(token, candidates);
+      }
+      return result.page;
     }
-    // 5. 落盘负缓存（跨进程存续，G9）
-    const negDisk: number | null = this.readNegDisk(normalized);
-    if (negDisk !== null && Date.now() - negDisk < TLDR_NEG_TTL_MS) {
-      this.negCache.set(normalized, negDisk);
-      Logger.info(TAG, `neg-cache hit token=${normalized} age=${Date.now() - negDisk}ms source=disk`);
-      return Promise.resolve(null);
+    if (result.status === TLDR_CHAIN_FAILED) {
+      // F1：无缓存 + 全渠道网络失败 → 分区隐藏，UI 零提示；不写任何负缓存
+      Logger.info(TAG, `fetch fail token=${token} candidates=${candidates.join(',')}`);
+      return null;
     }
-    // 6. 网络抓取（双渠道 × 回落路径）
-    return this.fetchChain(normalized).then((result: TldrFetchResult) => {
-      if (result.outcome === TldrFetchOutcome.HIT) {
-        const parsed: TldrPage | null = TldrParser.parse(result.markdown, normalized, result.locale);
-        if (parsed === null) {
-          // F3 / F6：内容不是可用的 tldr 页。不写任何缓存，让下次访问重取
-          Logger.info(TAG, `parse fail token=${normalized} channel=${result.channel} ` +
-            `head=${TldrService.headOf(result.markdown)}`);
-          return null;
-        }
-        this.writeDisk(normalized, result.markdown, result.channel, parsed.locale);
-        this.pageCache.set(normalized, parsed);
-        this.refreshFailStreak = 0;
-        Logger.info(TAG, `get token=${normalized} locale=${parsed.locale} ok=true channel=${result.channel}`);
-        return parsed;
-      }
-      if (result.outcome === TldrFetchOutcome.ALL_NOT_FOUND) {
-        // F4：确凿的「没有这一页」→ 负缓存 24h（G9）
-        const now: number = Date.now();
-        this.negCache.set(normalized, now);
-        this.writeNegDisk(normalized, now);
-        Logger.info(TAG, `neg-cache put token=${normalized} ttl=24h`);
-        return null;
-      }
-      // F1：无缓存 + 全渠道网络失败 → 分区隐藏，UI 零提示
-      Logger.info(TAG, `fetch fail token=${normalized}`);
-      return null;
-    }).catch((error: Error) => {
-      // 取数链内部已经吞掉单次失败，走到这里属于非预期异常：按 F1 处理
-      Logger.warn(TAG, `fetch unexpected token=${normalized} msg=${error.message}`);
-      return null;
-    });
+    if (result.parseFailHead.length > 0) {
+      // F3 / F6：链上拿到的内容对不上任一候选。不写缓存，让下次访问重取
+      Logger.info(TAG, `parse fail token=${token} head=${result.parseFailHead}`);
+    }
+    // 整链 all_not_found：每个候选的负缓存已由 resolveCandidate 逐个写入
+    Logger.info(TAG, `chain-miss token=${token} candidates=${candidates.join(',')}`);
+    return null;
   }
 
   /**
-   * stale-while-revalidate 的后台半程。
+   * 单候选的一次取数结论（供 `TldrParser.resolveChain` 回调）。
    *
-   * 失败静默（F2：继续显示旧值，UI 无感知），连续失败 3 次后本次会话不再刷新。
-   * 成功后就地替换内存与盘上副本 —— 正在展示的页面下次进入（或内存命中）拿到新值。
+   * 顺序：候选负缓存（跳过）→ 落盘（解析校验通过即命中；stale 走 SWR）→
+   * 网络（双渠道 × 回落路径；全 404 写**该候选**的负缓存）。
    */
-  private refreshInBackground(normalized: string): void {
+  private async resolveCandidate(candidate: string, candidates: string[],
+    staleSink: (candidate: string) => void): Promise<TldrCandidateOutcome> {
+    // 1. 候选粒度负缓存（G9）：24h 内不再请求这一个候选
+    const negAt: number | null = this.negFreshAt(candidate);
+    if (negAt !== null) {
+      Logger.info(TAG, `neg-cache hit token=${candidate} age=${Date.now() - negAt}ms`);
+      return TldrService.outcome(TLDR_OUTCOME_NOT_FOUND);
+    }
+    // 2. 落盘缓存（键 = 候选页名）
+    const disk: TldrDiskEntry | null = this.readDisk(candidate);
+    if (disk !== null) {
+      const parsed: TldrPage | null = TldrParser.parse(disk.markdown, candidates, disk.locale);
+      if (parsed !== null) {
+        if (Date.now() - disk.fetchedAt >= TLDR_TTL_MS) {
+          // stale：链在这一候选停下（返回旧值），SWR 由 loadChain 统一发起（G8）
+          staleSink(candidate);
+          Logger.info(TAG, `refresh stale token=${candidate}`);
+        }
+        return TldrService.outcome(TLDR_OUTCOME_HIT, disk.markdown, disk.locale, TLDR_ORIGIN_DISK);
+      }
+      // 盘上内容解析失败（F3 / F6）：删掉这份被污染的缓存，本候选继续走网络
+      Logger.info(TAG, `parse fail token=${candidate} channel=disk head=${TldrService.headOf(disk.markdown)}`);
+      this.deleteCached(candidate, disk.locale);
+    }
+    // 3. 网络抓取（双渠道 × 回落路径，per candidate）
+    const fetched: TldrFetchResult = await this.fetchChain(candidate);
+    if (fetched.outcome === TldrFetchOutcome.HIT) {
+      return TldrService.outcome(TLDR_OUTCOME_HIT, fetched.markdown, fetched.locale,
+        TLDR_ORIGIN_NETWORK, fetched.channel);
+    }
+    if (fetched.outcome === TldrFetchOutcome.ALL_NOT_FOUND) {
+      // F4：确凿的「没有这一页」→ **该候选**的负缓存 24h（G9，不毒化整链）
+      const now: number = Date.now();
+      this.negCache.set(candidate, now);
+      this.writeNegDisk(candidate, now);
+      Logger.info(TAG, `neg-cache put token=${candidate} ttl=24h`);
+      return TldrService.outcome(TLDR_OUTCOME_NOT_FOUND);
+    }
+    // 网络失败：交给链决策（resolveChain 立即终止整链，不写负缓存）
+    return TldrService.outcome(TLDR_OUTCOME_FAILED);
+  }
+
+  /**
+   * stale-while-revalidate 的后台半程（G8）。
+   *
+   * 只走网络（盘上的旧值就是正在展示的内容）；失败静默（F2：继续显示旧值，UI 无感知），
+   * 连续失败 3 次后本次会话不再刷新。成功后就地替换内存与盘上副本。
+   */
+  private refreshInBackground(token: string, candidates: string[]): void {
     if (this.refreshFailStreak >= TLDR_REFRESH_FAIL_LIMIT) {
-      Logger.info(TAG, `refresh skipped token=${normalized} streak=${this.refreshFailStreak}`);
+      Logger.info(TAG, `refresh skipped token=${token} streak=${this.refreshFailStreak}`);
       return;
     }
-    Logger.info(TAG, `refresh stale token=${normalized}`);
-    this.fetchChain(normalized).then((result: TldrFetchResult) => {
-      if (result.outcome !== TldrFetchOutcome.HIT) {
-        this.refreshFailStreak++;
-        Logger.info(TAG, `refresh fail token=${normalized} count=${this.refreshFailStreak}`);
+    TldrParser.resolveChain(candidates, (candidate: string): Promise<TldrCandidateOutcome> => {
+      return this.refreshCandidate(candidate);
+    }).then((result: TldrChainResult) => {
+      if (result.status === TLDR_CHAIN_HIT && result.page !== null) {
+        if (result.hitOrigin === TLDR_ORIGIN_NETWORK) {
+          this.writeDisk(result.candidate, result.hitMarkdown, result.page.locale, result.hitChannel);
+        }
+        this.pageCache.set(result.candidate, result.page);
+        this.refreshFailStreak = 0;
+        Logger.info(TAG, `refresh ok token=${token} locale=${result.page.locale} ` +
+          `channel=${result.hitChannel} candidate=${result.candidate}`);
         return;
       }
-      const parsed: TldrPage | null = TldrParser.parse(result.markdown, normalized, result.locale);
-      if (parsed === null) {
-        // 刷新拿到的是坏内容：不动旧缓存（旧值继续可用），按一次失败计
-        Logger.info(TAG, `parse fail token=${normalized} channel=${result.channel} ` +
-          `head=${TldrService.headOf(result.markdown)}`);
+      if (result.status === TLDR_CHAIN_FAILED) {
         this.refreshFailStreak++;
+        Logger.info(TAG, `refresh fail token=${token} count=${this.refreshFailStreak}`);
         return;
       }
-      this.writeDisk(normalized, result.markdown, result.channel, parsed.locale);
-      this.pageCache.set(normalized, parsed);
-      this.refreshFailStreak = 0;
-      Logger.info(TAG, `refresh ok token=${normalized} locale=${parsed.locale} channel=${result.channel}`);
+      // 整链确认无页（上游撤了页面）：保留旧缓存继续展示，不计入失败连击
+      Logger.info(TAG, `refresh miss token=${token} keep cache candidates=${candidates.join(',')}`);
     }).catch((error: Error) => {
       this.refreshFailStreak++;
-      Logger.warn(TAG, `refresh fail token=${normalized} count=${this.refreshFailStreak} msg=${error.message}`);
+      Logger.warn(TAG, `refresh fail token=${token} count=${this.refreshFailStreak} msg=${error.message}`);
     });
   }
 
-  // ---------------------------------------------------------------- 取数链
+  /** 刷新路径的单候选结论：只走网络，不读盘、不写负缓存（负缓存只描述「首次查询无页」） */
+  private async refreshCandidate(candidate: string): Promise<TldrCandidateOutcome> {
+    const fetched: TldrFetchResult = await this.fetchChain(candidate);
+    if (fetched.outcome === TldrFetchOutcome.HIT) {
+      return TldrService.outcome(TLDR_OUTCOME_HIT, fetched.markdown, fetched.locale,
+        TLDR_ORIGIN_NETWORK, fetched.channel);
+    }
+    if (fetched.outcome === TldrFetchOutcome.ALL_NOT_FOUND) {
+      return TldrService.outcome(TLDR_OUTCOME_NOT_FOUND);
+    }
+    return TldrService.outcome(TLDR_OUTCOME_FAILED);
+  }
+
+  // ---------------------------------------------------------------- 单候选取数链
 
   /**
-   * 双渠道 × 回落路径的顺序抓取。
+   * 双渠道 × 回落路径的顺序抓取（单候选）。
    *
    * 渠道优先、路径次之（TldrConstants.TLDR_CHANNELS 的注释）：jsDelivr 健康时一条路径
    * 命中就结束；整渠道不可达时才切下一渠道，切换时打 G7 的 fallback 行。
    *
-   * 404 与网络失败分开记账：**只有全部尝试都是 404** 才是确凿的「没有这一页」
-   * （走 G9 负缓存）；混入过网络失败时按 F1 处理 —— 瞬时断网不能把一个 token
-   * 毒化成 24h 的「无此页」。
+   * 404 与网络失败分开记账：**只有全部尝试都是 404** 才是确凿的「没有这一页」；
+   * 混入过网络失败时按 F1 处理 —— 瞬时断网不能把一个候选毒化成 24h 的「无此页」。
    */
   private async fetchChain(normalized: string): Promise<TldrFetchResult> {
     const result: TldrFetchResult = new TldrFetchResult();
@@ -347,19 +428,33 @@ export class TldrService {
     return this.filesDir() + '/' + TLDR_CACHE_ROOT;
   }
 
-  private readDisk(normalized: string): TldrDiskEntry | null {
+  /** 候选是否在 24h 负缓存内；是则返回写入时刻（内存优先，其次落盘标记并回填内存） */
+  private negFreshAt(candidate: string): number | null {
+    const memory: number | undefined = this.negCache.get(candidate);
+    if (memory !== undefined) {
+      return Date.now() - memory < TLDR_NEG_TTL_MS ? memory : null;
+    }
+    const diskAt: number | null = this.readNegDisk(candidate);
+    if (diskAt !== null && Date.now() - diskAt < TLDR_NEG_TTL_MS) {
+      this.negCache.set(candidate, diskAt);
+      return diskAt;
+    }
+    return null;
+  }
+
+  private readDisk(candidate: string): TldrDiskEntry | null {
     const root: string = this.rootDir();
     if (root.length === 0) {
       return null;
     }
     const locales: string[] = [TLDR_LOCALE_ZH, TLDR_LOCALE_EN];
     for (const locale of locales) {
-      const markdown: string | null = TldrService.readFile(root + '/' + locale + '/' + normalized + '.md');
+      const markdown: string | null = TldrService.readFile(root + '/' + locale + '/' + candidate + '.md');
       if (markdown === null) {
         continue;
       }
       const metaRaw: string | null = TldrService.readFile(
-        root + '/' + locale + '/' + normalized + TLDR_META_SUFFIX);
+        root + '/' + locale + '/' + candidate + TLDR_META_SUFFIX);
       if (metaRaw === null) {
         continue;
       }
@@ -382,7 +477,8 @@ export class TldrService {
     return null;
   }
 
-  private writeDisk(normalized: string, markdown: string, channel: string, locale: string): void {
+  /** 写盘（键 = 命中的候选页名，内容 = 原始 markdown）。先正文后 meta：meta 是提交点（见类注释） */
+  private writeDisk(candidate: string, markdown: string, locale: string, channel: string): void {
     const root: string = this.rootDir();
     if (root.length === 0) {
       return;
@@ -395,21 +491,20 @@ export class TldrService {
     meta.fetchedAt = Date.now();
     meta.channel = channel;
     meta.locale = locale;
-    // 先正文后 meta：meta 是提交点（见类注释）
-    const wroteBody: boolean = TldrService.writeFile(dir + '/' + normalized + '.md', markdown);
-    const wroteMeta: boolean = TldrService.writeFile(dir + '/' + normalized + TLDR_META_SUFFIX,
+    const wroteBody: boolean = TldrService.writeFile(dir + '/' + candidate + '.md', markdown);
+    const wroteMeta: boolean = TldrService.writeFile(dir + '/' + candidate + TLDR_META_SUFFIX,
       JSON.stringify(meta));
     if (!wroteBody || !wroteMeta) {
-      Logger.warn(TAG, `disk write incomplete token=${normalized} body=${wroteBody} meta=${wroteMeta}`);
+      Logger.warn(TAG, `disk write incomplete candidate=${candidate} body=${wroteBody} meta=${wroteMeta}`);
     }
   }
 
-  private readNegDisk(normalized: string): number | null {
+  private readNegDisk(candidate: string): number | null {
     const root: string = this.rootDir();
     if (root.length === 0) {
       return null;
     }
-    const raw: string | null = TldrService.readFile(root + '/' + normalized + TLDR_NEG_SUFFIX);
+    const raw: string | null = TldrService.readFile(root + '/' + candidate + TLDR_NEG_SUFFIX);
     if (raw === null) {
       return null;
     }
@@ -421,7 +516,7 @@ export class TldrService {
     }
   }
 
-  private writeNegDisk(normalized: string, at: number): void {
+  private writeNegDisk(candidate: string, at: number): void {
     const root: string = this.rootDir();
     if (root.length === 0) {
       return;
@@ -431,30 +526,17 @@ export class TldrService {
     }
     const meta: TldrNegMeta = new TldrNegMeta();
     meta.fetchedAt = at;
-    TldrService.writeFile(root + '/' + normalized + TLDR_NEG_SUFFIX, JSON.stringify(meta));
+    TldrService.writeFile(root + '/' + candidate + TLDR_NEG_SUFFIX, JSON.stringify(meta));
   }
 
-  /** 删除某 token 的正缓存（语言目录下 md + meta）。负缓存标记保留 */
-  private deleteCached(normalized: string, locale: string): void {
+  /** 删除某候选的正缓存（语言目录下 md + meta）。负缓存标记保留 */
+  private deleteCached(candidate: string, locale: string): void {
     const dir: string = this.rootDir() + '/' + locale;
-    TldrService.unlinkQuietly(dir + '/' + normalized + '.md');
-    TldrService.unlinkQuietly(dir + '/' + normalized + TLDR_META_SUFFIX);
+    TldrService.unlinkQuietly(dir + '/' + candidate + '.md');
+    TldrService.unlinkQuietly(dir + '/' + candidate + TLDR_META_SUFFIX);
   }
 
   // ---------------------------------------------------------------- 文件原子
-
-  /**
-   * token 能否安全地当文件名。tldr 页名是小写字母数字与 `-_.@+`；
-   * 路由参数里的 token 不可信，路径穿越（`..`、分隔符）在这里被挡死。
-   * 不通过的 token 仍可走内存与网络，只是不落盘。
-   */
-  private static isCacheableToken(token: string): boolean {
-    if (token.length === 0 || token.length > 100 || token.indexOf('..') >= 0 ||
-      token.indexOf('/') >= 0 || token.indexOf('\\') >= 0) {
-      return false;
-    }
-    return /^[a-z0-9@._+-]+$/.test(token);
-  }
 
   private static ensureDir(dir: string): boolean {
     try {
@@ -530,7 +612,7 @@ export class TldrService {
     return head.replace(/[\r\n]+/g, ' ');
   }
 
-  /** 渠道 × 回落路径的完整尝试表。顺序约定见 TLDR_CHANNELS 注释 */
+  /** 渠道 × 回落路径的完整尝试表（单候选）。顺序约定见 TLDR_CHANNELS 注释 */
   private static buildAttempts(normalized: string): TldrAttempt[] {
     const attempts: TldrAttempt[] = [];
     for (const channel of TLDR_CHANNELS) {
@@ -546,5 +628,16 @@ export class TldrService {
       }
     }
     return attempts;
+  }
+
+  private static outcome(kind: string, markdown: string = '', locale: string = '',
+    origin: string = '', channel: string = ''): TldrCandidateOutcome {
+    const outcome: TldrCandidateOutcome = new TldrCandidateOutcome();
+    outcome.kind = kind;
+    outcome.markdown = markdown;
+    outcome.locale = locale;
+    outcome.origin = origin;
+    outcome.channel = channel;
+    return outcome;
   }
 }

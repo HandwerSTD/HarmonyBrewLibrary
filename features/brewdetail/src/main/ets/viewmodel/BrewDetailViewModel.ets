@@ -86,7 +86,6 @@ export class BrewDetailViewModel {
   public load(param: BrewDetailParams, state: BrewDetailState): void {
     this.setStatus(state, LoadingStatus.LOADING);
     this.loadSiblings(param, state);
-    this.loadTldr(param, state);
     // 先用已有快照（内存优先、其次盘上）同步算一次安装状态：快照命中时按钮首帧就是对的，
     // 不等详情请求，也不等 brew 命令。详情页自己的网络取数不受这条路径影响。
     this.refreshInstallState(state);
@@ -98,6 +97,10 @@ export class BrewDetailViewModel {
       this.setStatus(state, LoadingStatus.SUCCESS);
       // tap 只在详情数据里有，所以安装状态与按钮可执行性要等数据落地后再算一次
       this.refreshInstallState(state);
+      // tldr 候选链需要「提供的命令」清单（executables 只在详情数据里有，
+      // spec 2026-11-22 §3.1）—— 详情成功后再发起。详情失败时整页本就是错误态，
+      // tldr 分区不可见，不需要取数。
+      this.loadTldr(param, state);
       Logger.info(TAG, `load success, kind=${param.kind} token=${param.token}`);
     }).catch((error: Error) => {
       if (error instanceof BrewDocAbsentError) {
@@ -261,7 +264,9 @@ export class BrewDetailViewModel {
    * tldr 用法示例（spec 2026-11-22）。与 siblings 同一套「独立请求 + 失败静默」惯例：
    *
    * - 只对 formula 取（G2：tldr 只覆盖命令行工具，cask 详情页整区不出现，连请求都不发）；
-   * - `TldrService.get()` 从不 reject（内部已把 404/断网/解析失败全收敛成 null），
+   * - 候选名链 = [token, 剥 @version 后缀, …executables]（服务层构建，命中即停），
+   *   ripgrep→rg、python@3.12→python、gnupg→gpg 这类命名错位由链修复；
+   * - `TldrService.get()` 从不 reject（内部已把整链无页/断网/解析失败全收敛成 null），
    *   这里的 catch 只是兜住非预期异常 —— 无论哪条路，失败都保持 `hasTldr=false`，
    *   分区不渲染、零提示（G6）；
    * - 数据到达时就地赋值插入（spec §4.2），并带 300ms 淡入转场（G15）——
@@ -271,11 +276,12 @@ export class BrewDetailViewModel {
     if (param.kind !== BrewKind.FORMULA || param.token.trim().length === 0) {
       return;
     }
-    TldrService.getInstance().get(param.token).then((page: TldrPage | null) => {
+    TldrService.getInstance().get(param.token, state.data.executables).then((page: TldrPage | null) => {
       // 空示例页与无页同口径：只有真正可渲染的示例才值得占一个分区
       if (page !== null && page.examples.length > 0) {
         BrewDetailViewModel.applyTldrWithTransition(state, page);
-        Logger.info(TAG, `tldr ready, kind=${param.kind} token=${param.token} locale=${page.locale}`);
+        Logger.info(TAG, `tldr ready, kind=${param.kind} token=${param.token} locale=${page.locale} ` +
+          `candidate=${page.command}`);
       }
     }).catch((error: Error) => {
       Logger.warn(TAG, `tldr load failed. reason=${error.message}`);

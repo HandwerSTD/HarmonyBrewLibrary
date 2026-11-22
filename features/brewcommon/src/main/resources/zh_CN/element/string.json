@@ -615,6 +615,10 @@
     {
       "name": "brew_cmd_title_tldr",
       "value": "执行示例：%s"
+    },
+    {
+      "name": "brew_tldr_command_hint",
+      "value": "%s 提供的命令是 %s"
     }
   ]
 }

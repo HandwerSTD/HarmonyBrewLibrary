@@ -50,6 +50,16 @@ export struct BrewTldrSectionView {
         .width('100%')
         .margin({ bottom: $r('sys.float.padding_level6') })
 
+      // 命名提示行（spec §4.1）：命中页名 ≠ 包名时教用户一句「提供的命令是什么」——
+      // ripgrep 的页是 rg、python@3.12 的页是 python，候选链命中后这里把对应关系点破
+      if (this.page.command.toLowerCase() !== this.token.toLowerCase()) {
+        Text($r('app.string.brew_tldr_command_hint', this.token, this.page.command))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .margin({ bottom: $r('sys.float.padding_level6') })
+      }
+
       if (this.page.summary.length > 0) {
         Text(this.page.summary)
           .fontSize($r('sys.float.Body_M'))

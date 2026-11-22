@@ -74,6 +74,7 @@ if (FETCH) {
 // ---- 加载真源码（拷贝 + 断言式单行 import 改写）----
 const dir = join(tmpdir(), `brew-tldr-${Date.now()}`);
 let P;
+let TldrCandidateOutcome;
 try {
   mkdirSync(dir, { recursive: true });
   const modelSrc = readFileSync(join(COMMON_ETS, 'model/TldrPage.ets'), 'utf8');
@@ -85,7 +86,7 @@ try {
   writeFileSync(join(dir, 'TldrPage.mts'), modelSrc);
   writeFileSync(join(dir, 'TldrParser.mts'), parserSrc.replace(IMPORT_LINE,
     `import { TldrExample, TldrPage } from './TldrPage.mts';`));
-  ({ TldrParser: P } = await import(join(dir, 'TldrParser.mts')));
+  ({ TldrParser: P, TldrCandidateOutcome } = await import(join(dir, 'TldrParser.mts')));
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
@@ -105,7 +106,7 @@ let sampledExamples = 0;
 for (const sample of SAMPLES) {
   assert.ok(existsSync(samplePath(sample)), `缺少快照 ${samplePath(sample)}（跑一次 --fetch 生成）`);
   const markdown = readFileSync(samplePath(sample), 'utf8');
-  const page = P.parse(markdown, sample.token, sample.locale);
+  const page = P.parse(markdown, [sample.token], sample.locale);
   ok(page !== null, `${sample.token}(${sample.locale}) 解析成功`);
   eq(page.command, sample.token, `${sample.token} 标题与 token 匹配`);
   eq(page.locale, sample.locale, `${sample.token} locale 透传`);
@@ -144,7 +145,7 @@ console.log(`抽样通过：${SAMPLES.length} 页 / ${sampledExamples} 条示例
     '',
     '`demo --ping`',
   ].join('\n');
-  const page = P.parse(markdown, 'demo', 'en');
+  const page = P.parse(markdown, ['demo'], 'en');
   ok(page !== null, '构造：基础页可解析');
   eq(page.summary, 'Download things.', '构造：More information 行被丢弃、说明段只剩正文');
   eq(page.examples.length, 2, '构造：两条示例');
@@ -170,7 +171,7 @@ console.log(`抽样通过：${SAMPLES.length} 页 / ${sampledExamples} 条示例
     '',
     '`multi --go`',
   ].join('\n');
-  const page = P.parse(markdown, 'multi', 'en');
+  const page = P.parse(markdown, ['multi'], 'en');
   ok(page !== null, '构造：多行说明页可解析');
   eq(page.examples.length, 1, '构造：多行说明仍是一条示例');
   eq(page.examples[0].desc, 'Do something complicated\nwith a wrapped description:',
@@ -186,12 +187,12 @@ console.log(`抽样通过：${SAMPLES.length} 页 / ${sampledExamples} 条示例
     '> Only a description.',
     '> No examples here.',
   ].join('\n');
-  const page = P.parse(markdown, 'empty', 'en');
+  const page = P.parse(markdown, ['empty'], 'en');
   ok(page !== null, '构造：无示例页解析通过（不崩、不误判标题）');
   eq(page.examples.length, 0, '构造：无示例页 examples 为空');
   eq(page.command, 'empty', '构造：无示例页标题仍被校验');
   eq(page.summary, 'Only a description.\nNo examples here.', '构造：无示例页说明段完整');
-  ok(page !== null && P.parse(markdown, 'other', 'en') === null,
+  ok(page !== null && P.parse(markdown, ['other'], 'en') === null,
     '构造：无示例页 + token 不匹配 → null（F6）');
 }
 
@@ -209,9 +210,9 @@ console.log(`抽样通过：${SAMPLES.length} 页 / ${sampledExamples} 条示例
     '',
     '`wget {{https://example.com/foo}}`',
   ].join('\n');
-  const page = P.parse(markdown, 'wget', 'zh');
+  const page = P.parse(markdown, ['wget'], 'zh');
   ok(page === null, '构造：中文页标题与 token 不匹配 → null（F6，防御抓错页）');
-  const matched = P.parse(markdown, '中文页', 'zh');
+  const matched = P.parse(markdown, ['中文页'], 'zh');
   ok(matched !== null, '构造：中文页按标题匹配解析成功（token 为页名）');
   eq(matched.summary, '从网络上下载文件。\n支持 HTTP，HTTPS 和 FTP。',
     '构造：中文页的另请参阅 / 更多信息行被丢弃');
@@ -233,7 +234,7 @@ console.log(`抽样通过：${SAMPLES.length} 页 / ${sampledExamples} 条示例
     '  --other',
     '```',
   ].join('\n');
-  const page = P.parse(fenced, 'fenced', 'en');
+  const page = P.parse(fenced, ['fenced'], 'en');
   ok(page !== null && page.examples.length === 1, '构造：围栏代码块作为兼容分支可解析');
   eq(page.examples[0].code, 'fenced --flag \\\n  --other', '构造：围栏内多行原样保留');
   ok(page.examples[0].hasPlaceholder === false, '构造：围栏示例无占位符');
@@ -247,10 +248,71 @@ console.log(`抽样通过：${SAMPLES.length} 页 / ${sampledExamples} 条示例
 
 // ---- 失败结构（F3 / F6）----
 {
-  ok(P.parse('', 'wget', 'zh') === null, '构造：空 markdown → null（F3）');
-  ok(P.parse('没有标题行\n\n`wget x`', 'wget', 'zh') === null, '构造：无标题行 → null（F3）');
-  ok(P.parse('# other\n\n> 描述\n\n`wget x`', 'wget', 'zh') === null,
+  ok(P.parse('', ['wget'], 'zh') === null, '构造：空 markdown → null（F3）');
+  ok(P.parse('没有标题行\n\n`wget x`', ['wget'], 'zh') === null, '构造：无标题行 → null（F3）');
+  ok(P.parse('# other\n\n> 描述\n\n`wget x`', ['wget'], 'zh') === null,
     '构造：标题与 token 不匹配 → null（F6）');
+}
+
+// ---- 候选名链（spec §3.1 命名错位修复）----
+{
+  // buildCandidates：executables 追加 / @version 剥离 / 小写去重保序 / 非法字符过滤
+  eq(JSON.stringify(P.buildCandidates('ripgrep', ['rg'])), JSON.stringify(['ripgrep', 'rg']),
+    '候选链：executables 追加（ripgrep→rg）');
+  eq(JSON.stringify(P.buildCandidates('python@3.12', [])), JSON.stringify(['python@3.12', 'python']),
+    '候选链：@version 剥离（python@3.12→python）');
+  eq(JSON.stringify(P.buildCandidates('openssl@3', [])), JSON.stringify(['openssl@3', 'openssl']),
+    '候选链：@version 剥离（openssl@3→openssl）');
+  eq(JSON.stringify(P.buildCandidates('RipGrep', ['RG', 'ripgrep'])),
+    JSON.stringify(['ripgrep', 'rg']), '候选链：小写归一 + 去重保序（RG 与 rg 归一后去重）');
+  eq(JSON.stringify(P.buildCandidates('node', ['node'])), JSON.stringify(['node']),
+    '候选链：token 与 executables 去重');
+  eq(P.buildCandidates('a/b', []).length, 0, '候选链：路径分隔符被过滤');
+  eq(P.buildCandidates('wget', ['../etc/passwd']).length, 1, '候选链：穿越候选被过滤、token 保留');
+  eq(P.buildCandidates('', []).length, 0, '候选链：空 token');
+
+  // 标题校验放宽为「标题 = 任一候选」（F6 不松：对不上任何候选仍是 null）
+  const rgMarkdown = '# rg\n\n> Search recursively.\n\n- Search a pattern recursively:\n\n`rg {{pattern}}`\n';
+  const page = P.parse(rgMarkdown, ['ripgrep', 'rg'], 'en');
+  ok(page !== null, '候选链：页名 rg 对链上任一候选匹配（ripgrep→rg 修复）');
+  eq(page.command, 'rg', '候选链：页面携带真实页名（教学提示行用）');
+  ok(P.parse(rgMarkdown, ['ripgrep'], 'en') === null, '候选链：只有 token 一个候选时 rg 页仍被拒（F6 不松）');
+  ok(page.examples[0].hasPlaceholder, '候选链：命中页示例含占位符（链上解析不放宽 G4 口径）');
+
+  // 命中即停：首候选 404 第二候选命中，且不再请求后续（resolver 调用计数断言）
+  let calls = 0;
+  const outcomeOf = (kind, markdown, locale) => {
+    const outcome = new TldrCandidateOutcome();
+    outcome.kind = kind;
+    outcome.markdown = markdown;
+    outcome.locale = locale;
+    outcome.origin = 'network';
+    outcome.channel = 'jsdelivr';
+    return outcome;
+  };
+  const hit = await P.resolveChain(['ripgrep', 'rg', 'third'], async (candidate) => {
+    calls++;
+    return candidate === 'rg' ? outcomeOf('hit', rgMarkdown, 'en') : outcomeOf('not_found');
+  });
+  eq(hit.status, 'hit', '候选链：第二候选命中');
+  eq(hit.candidate, 'rg', '候选链：命中候选正确');
+  eq(calls, 2, '候选链：命中即停（首候选 404 不毒化整链，后续候选不再请求）');
+  eq(hit.page.examples.length, 1, '候选链：命中页解析完整');
+  eq(hit.hitOrigin, 'network', '候选链：来源标记透传（落盘决策用）');
+
+  // 网络失败立即终止整链（不写负缓存的决策在取数层；纯层只负责不再请求后续候选）
+  let failedCalls = 0;
+  const aborted = await P.resolveChain(['a', 'b', 'c'], async (candidate) => {
+    failedCalls++;
+    return candidate === 'a' ? outcomeOf('failed') : outcomeOf('not_found');
+  });
+  eq(aborted.status, 'failed', '候选链：网络失败终止整链（F1）');
+  eq(failedCalls, 1, '候选链：失败后不继续请求候选');
+
+  // 全部候选确凿无页 → all_not_found（整链隐藏）
+  const allMiss = await P.resolveChain(['x', 'y'], async () => outcomeOf('not_found'));
+  eq(allMiss.status, 'all_not_found', '候选链：整链无页（全候选 404）');
+  eq(allMiss.page, null, '候选链：整链无页不产出页面');
 }
 
 console.log(`OK: TldrParser 检查通过，${n} 条断言`);
