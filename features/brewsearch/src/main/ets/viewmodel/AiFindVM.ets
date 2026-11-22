@@ -11,6 +11,7 @@ import {
   AiToolCandidate,
   AiToolResult,
   AiTasks,
+  AiSettingsStore,
   BrewKind,
 } from '@ohos/brewcommon';
 import type { AiTaskWord, BrewSearchEntry } from '@ohos/brewcommon';
@@ -114,7 +115,13 @@ export class AiFindVM {
 
   /** 是否已配置到能发 AI 请求（Key + 配置齐全）。UI 入口的引导文案按它分流。 */
   public isConfigured(): boolean {
-    return AiTasks.providerModelKey().indexOf('_') > 0;
+    if (!AiSettingsStore.hasApiKey()) {
+      return false;
+    }
+    // provider_model 形如 `deepseek_deepseek-chat`；没配置时是 `deepseek_`（model 为空），
+    // 此时发请求也会 E1，直接走词表省一次注定失败的网络等待。
+    const key: string = AiTasks.providerModelKey();
+    return key.indexOf('_') > 0 && !key.endsWith('_');
   }
 
   private static wordlistRows(intent: string): AiFindRow[] {
