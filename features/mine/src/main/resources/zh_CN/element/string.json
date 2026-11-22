@@ -367,6 +367,10 @@
     {
       "name": "mine_refresh_failed",
       "value": "读不到本机包"
+    },
+    {
+      "name": "ai_privacy_note",
+      "value": "AI 功能会把包元数据与命令错误文本发送给你配置的模型服务商（如 DeepSeek）；不包含账号、设备标识等身份信息。API Key 仅加密存储在本机。"
     }
   ]
 }

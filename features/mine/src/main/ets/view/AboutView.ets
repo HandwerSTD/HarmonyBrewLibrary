@@ -49,6 +49,17 @@ export struct AboutView {
         })
 
         Column() {
+          // 隐私披露（spec §9：发送给 provider 的内容 = 包元数据 + 错误文本，不含用户身份）
+          Text($r('app.string.ai_privacy_note'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .fontWeight(FontWeight.Regular)
+            .fontSize($r('sys.float.Body_S'))
+            .width('100%')
+            .padding({
+              left: 8,
+              right: 8,
+              bottom: 8,
+            })
           if (MineConstant.SHOW_REGISTRATION_NO) {
             Text($r('app.string.copyright1'))
               .fontWeight(FontWeight.Medium)
