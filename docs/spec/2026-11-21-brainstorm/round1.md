@@ -2,7 +2,7 @@
 
 > 日期：2026-11-21。状态：已整理归档，供评审 / 立项参考。
 > 本文档是第一轮头脑风暴的**收敛记录**：一轮初始提案 → 需求方逐条修正 → 保留集。
-> 后续轮次写入同目录 `round2.md`、`round3.md`…，否决项在 §3 累积，防止重提。
+> 后续轮次写入同目录 `round2.md`、`round3.md`…；被否决项自 2026-11-22 起统一记录于 `rejected.md`，各轮文档只保留最新有效状态。
 > 口径约定：事实以代码与实测笔记为准（引用处标路径）；外部事实标注来源链接。
 
 ---
@@ -21,7 +21,7 @@ BrewLibrary 是鸿蒙生态首个 Homebrew 客户端：上游全量目录（16,3
 | 本机命令执行通道 | `features/pcnative`（NAPI + Shell）、`BrewCli` / `BrewCommandRunner` | 批量安装队列、Doctor / vulns GUI、AI 报错诊断的执行底座 |
 | Harmonybrew 日下载量 | `HarmonybrewStats`（`/stats/stats-YYYYMMDD.json`，30+60=90 天窗口，逐日落盘） | 榜单已在用；趋势线 / 新适配速递的免费数据源 |
 | 双方言目录 | 上游 fullsync 索引（`brew_meta_index`，token → desc）+ Harmonybrew `catalog.tsv`（JWS，ETag 条件请求可靠） | 适配状态引擎 join 的两端 |
-| 本机已装包数据 | `BrewInstalledLoader`（`brew info --json=v2 --installed`） | 迁移工作台的导出侧 |
+| 本机已装包数据 | `BrewInstalledLoader`（`brew info --json=v2 --installed`） | B′ 工作台的导出侧 |
 | 端侧搜索引擎 | `BrewSearchEngine`（16k token + desc 全量索引，零依赖纯函数） | 自然语言找包的排序兜底 |
 | 分类词表 | `BrewTaxonomy`（lexicon + tokens 策展） | AI 讲解 / 推荐的 grounding 素材 |
 
@@ -68,19 +68,13 @@ HiShell 的 `trust.json` 在 `/data/storage/el2/base/...`；应用进程 26 项 
   [heise 报道](https://www.heise.de/en/news/Homebrew-7-for-macOS-released-Catalina-support-gone-Intel-to-follow-11452780.html)。
 
 **生态位推论**：官方 GUI 不存在于鸿蒙。BrewLibrary 是该平台上的对位物——功能面可以对齐
-（Doctor / 依赖树 / vulns），且拥有 BrewUI 没有也不需要有的鸿蒙独有物（适配引擎、迁移工作台）。
+（Doctor / 依赖树 / vulns），且拥有 BrewUI 没有也不需要有的鸿蒙独有物（适配引擎、开局与多机工作台）。
 
 ---
 
-## 3. 已否决方向（不要再提）
+## 3. 已否决方向
 
-| # | 方向 | 否决理由 | 备注 |
-|---|---|---|---|
-| 1 | 催适配 / 生态贡献闭环（一键提 issue / PR、催上游适配） | Harmonybrew 早期基本不接受外部贡献（需求方） | 「新进了什么」可作只读展示，见 C1 |
-| 2 | Tap 市场 + `brew trust` GUI 化 | 沙箱 brew 与系统 brew 双环境不通（§2.2 实测）；当前 tap 数量少，属伪命题（需求方） | — |
-| 3 | brew services 服务面板 | 没有用户把鸿蒙 PC 当家庭服务器（需求方） | `serviceSupported` 字段维持详情页现状 |
-| 4 | 跨端到手机（手机浏览、安装到 PC） | 有意义但不大：「谁会在手机上查看 homebrew」（需求方） | — |
-| 5 | 「鸿蒙热度榜」作为新功能 | 已实现（§2.1），不是待做项 | 后续只做体验增量（C2 / C3） |
+全部否决项及其理由已集中记录于 **`rejected.md`**（含提出轮次、否决日期与理由），本节不再保留清单。
 
 ---
 
@@ -100,21 +94,22 @@ HiShell 的 `trust.json` 在 `/data/storage/el2/base/...`；应用进程 26 项 
 - **展示**：列表行 / 详情页适配徽章 + 「只看鸿蒙可装」筛选 chip。
 - **风险**：Harmonybrew core 规模持续增长（4,761 是 2026-09 口径），join 结果要带数据日期戳。
 
-### 4.2 B · Mac → 鸿蒙迁移工作台（依赖 A，主推）
+### 4.2 B′ · 开局与多机工作台（依赖 A，主推）
 
-**一句话**：「把你的 Mac 工具链搬到鸿蒙 PC」——只有这个平台存在、也只有这个 App 能做的场景
-（需要双目录 join + 执行通道，两者都有）。
+**一句话**：「把这台新电脑武装到能干活」——开局是每一台新机器都会发生的常态事件，随鸿蒙 PC 出货重复出现；不依赖任何「换平台」故事。
 
-> **2026-11-22 裁定**：「Mac 迁移用户群」前提不成立（`round6.md` §1）。B 的管线
-> （解析 → 适配标注 → 勾选 → 批量队列）存活，重构为 **B′ 开局与多机工作台**
-> （`round6.md` §3）；Mac 相关内容降级为展望。
+三条输入路径，共用同一条「适配标注（A）→ 勾选 → 批量安装队列」管线：
 
-- **导入**：粘贴 Mac `brew bundle dump` 输出 → 解析 `brew "..."` / `cask "..."` 行（纯文本，
-  零依赖）→ 适配态逐条标注（用 A）→ 勾选进**批量安装队列**（现有执行 Sheet 从单命令升级为
-  队列：逐个执行、进度、失败续跑）。
+| 路径 | 场景 | 数据来源 |
+|---|---|---|
+| ① 策展开局套装 | 新机器从零配环境：「前端开局」「服务端开局」「AI 工具开局」…… | 策展 + 真实下载量排序（C4 供数）+ A 标注 |
+| ② Brewfile 导入 | 团队标准化（新人拿一份 Brewfile 复现环境）/ 同事分享 / 自己的另一台机器 | 纯文本解析 `brew "..."` / `cask "..."` 行（零依赖） |
+| ③ 远程主机直连 | **（展望，见 `rejected.md` §2）** 服务器 / 第二台 PC / 旧 Mac | 远程通道若未来落地，仅是同一管线多一种输入 |
+
 - **导出**：`brew info --json=v2 --installed` 数据已在手（`BrewInstalledLoader`），反向生成
-  Brewfile 写入应用认领的 `Download/<bundleName>/`——备份、分享、团队标准化
-  （新人拿一份 Brewfile 复现环境）。
+  Brewfile 写入应用认领的 `Download/<bundleName>/`——备份、分享、团队标准化。
+- **批量安装队列**：现有执行 Sheet 从单命令升级为队列：逐个执行、进度、失败续跑；
+  **队列落盘为数据而非内存态**（为未来任何前端触发同一队列留门）。
 
 ### 4.3 C · Discover 打磨（应用重点，真增量）
 
@@ -129,14 +124,14 @@ HiShell 的 `trust.json` 在 `/data/storage/el2/base/...`；应用进程 26 项 
 
 | # | 点子 | 关键设计 | 实现路径 |
 |---|---|---|---|
-| D1 | **AI 讲解包**：详情页中文讲解「这是干嘛的、装完怎么用、适不适合你、caveats 有什么坑」（吸收第一轮「装后引导」） | grounding 严格限定包元数据（desc / caveats / dependencies / homepage）；标注「AI 生成」；按 token 缓存（沿用 `brew_live_data` 的 TTL 模式） | 系统小艺 / 云侧 LLM（走现有 `BrewHttp`） |
+| D1 | **AI 讲解包**：详情页中文讲解「这是干嘛的、装完怎么用、适不适合你、caveats 有什么坑」（吸收第一轮「装后引导」） | grounding 严格限定包元数据（desc / caveats / dependencies / homepage）；标注「AI 生成」；按 token 缓存（沿用 `brew_live_data` 的 TTL 模式） | BYOK（用户自带 API Key，走现有 `BrewHttp`）+ 确定性降级（结构化详情 / tldr） |
 | D2 | **自然语言找包**：「我想批量压缩图片」→ imagemagick / ffmpeg | **AI 出候选、词表出排序**：LLM 只做意图 → token 候选，交给现有 `BrewSearchEngine` 打分，幻觉被引擎兜住 | 同上；语料（16k token + desc）已在端上 |
 | D3 | **AI 报错诊断**：执行 Sheet 失败时把 brew stderr 原文交给 AI 解读成用户语言 | 在现有失败态处理之上加一层「AI 解读」入口，不替代失败分类 | 同上；失败输出已在执行链路里 |
 
 ### 4.5 E · BrewUI 生态位对标（叙事 + 两个可落地功能）
 
 - **叙事**（答辩 / 评审用）：「BrewUI 只存在于 macOS 26+；鸿蒙上的对位物是 BrewLibrary」——
-  功能面对齐清单 + 鸿蒙独有物（A / B）。
+  功能面对齐清单 + 鸿蒙独有物（A / B′）。
 - **Doctor GUI**：`brew doctor` 输出结构化成「问题-影响-修复动作」卡片，每卡带一键修复
   （经 `BrewCli` 执行）——对齐 BrewUI 的 Doctor 集成。
 - **vulns 安全面板**：Homebrew 7.0 的 advisory 数据库是 **OSV 格式、CC0 许可**，可直接消费做
@@ -152,7 +147,7 @@ HiShell 的 `trust.json` 在 `/data/storage/el2/base/...`；应用进程 26 项 
 | 创新点 | 强度 | 成本 | 依赖 / 备注 |
 |---|---|---|---|
 | A 适配状态引擎 | ★★★★★ | 中 | 地基；依赖缺口求解做懒加载 |
-| B 迁移工作台 | ★★★★★ | 中 | 依赖 A；批量队列是执行 Sheet 的自然升级 |
+| B′ 开局与多机工作台 | ★★★★★ | 中 | 依赖 A；批量队列是执行 Sheet 的自然升级 |
 | D1 AI 讲解包 | ★★★★ | 低-中 | AI 热点里最稳的，grounding 好做 |
 | C1 新适配速递 | ★★★★ | 低 | 纯端侧 diff，性价比最高 |
 | D2 自然语言找包 | ★★★★ | 中 | AI 候选 + 现有引擎排序 |
@@ -162,7 +157,7 @@ HiShell 的 `trust.json` 在 `/data/storage/el2/base/...`；应用进程 26 项 
 | D3 AI 报错诊断 | ★★★ | 低-中 | 执行闭环纵深 |
 | C3 双榜对比 | ★★ | 中 | 低优先级 |
 
-**推荐组合**：A + B 打包做主菜（鸿蒙独有问题域）；C1 + D1 做快赢（一个纯端侧零请求、
+**推荐组合**：A + B′ 打包做主菜（鸿蒙独有问题域）；C1 + D1 做快赢（一个纯端侧零请求、
 一个蹭 AI 热点）；E 做叙事（官方 GUI 只在 macOS 26+，鸿蒙上的对位物是我们）。
 
 ---
@@ -170,8 +165,7 @@ HiShell 的 `trust.json` 在 `/data/storage/el2/base/...`；应用进程 26 项 
 ## 6. 下一步与遗留
 
 1. 任一方向可展开为正式 spec（`docs/superpowers/specs/` 格式：数据流、失败态分级、验证判据）；
-   A / B 建议合并为一份（迁移工作台消费适配引擎的输出）。
+   A / B′ 建议合并为一份（工作台消费适配引擎的输出）。
 2. E 的 vulns 覆盖度实测可先行——设备上一条命令的事，结论直接决定是否立项。
-3. 第一轮提出、本轮未展开讨论的：**深链安装协议**（`brewlibrary://install/<token>`，
-   社区教程一键安装）——留待后续轮次表态。
-4. 后续轮次写入本目录，否决项沿用 §3 表格累积；本文档 §2 的事实修正对后续轮次长期有效。
+3. 深链安装协议已在 round2 §2.6 表态支持立项；协议 v1 冻结文档待立项时补（见 round2 §4）。
+4. 否决项统一记录于 `rejected.md`；本文档 §2 的事实修正对后续轮次长期有效。
