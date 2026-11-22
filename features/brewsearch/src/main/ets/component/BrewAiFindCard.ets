@@ -57,7 +57,8 @@ export struct BrewAiFindCard {
 
   private errorText(): ResourceStr {
     if (this.state.errorKind === AiErrorKind.E4_BAD_FORMAT) {
-      return $r('app.string.ai_error_e4');
+      return this.state.errorTruncated ? $r('app.string.ai_error_e4_truncated') :
+        $r('app.string.ai_error_e4');
     }
     if (this.state.errorKind === AiErrorKind.E5_BLOCKED) {
       return $r('app.string.ai_error_e5');

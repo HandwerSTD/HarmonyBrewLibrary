@@ -80,12 +80,13 @@ export class AiExplainCard {
   public scenarios: string[] = [];
   /** 注意与坑 ≤3（caveats 中文化 + 风险点） */
   public caveats: string[] = [];
-  /** 上手三步（固定 3 条；不足 3 条的响应判 E4） */
+  /** 上手步骤 2–3 条（spec §3.2 兼容性修复 ③：部分模型习惯输出两条，放宽后不再误判 E4） */
   public steps: string[] = [];
 
   public isValid(): boolean {
     return this.summary.trim().length > 0 && this.scenarios.length > 0 &&
-      this.scenarios.length <= 3 && this.caveats.length <= 3 && this.steps.length === 3;
+      this.scenarios.length <= 3 && this.caveats.length <= 3 && this.steps.length >= 2 &&
+      this.steps.length <= 3;
   }
 }
 

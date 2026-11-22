@@ -767,6 +767,10 @@
     {
       "name": "ai_provider_custom",
       "value": "Custom endpoint"
+    },
+    {
+      "name": "ai_error_e4_truncated",
+      "value": "Output was truncated, please retry"
     }
   ]
 }

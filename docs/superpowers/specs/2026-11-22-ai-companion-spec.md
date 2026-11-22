@@ -63,13 +63,7 @@
 ### 3.2 AiClient（`features/brewcommon/service/AiClient.ets`）
 
 - **AI infra 依赖（需求方指定）**：模型调用基础设施使用 `ohpm install @hmkit/ai`（ohpm 三方库，经 `oh-package.json5` 声明依赖）；AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按 §3.1 设置与存储；`@hmkit/ai` 的初始化参数与能力边界（response_format 支持、流式、错误结构）编码第一天以最小样例核对，结论写回本节。
-  - **核对结论（2026-11-22，@hmkit/ai 2.0.0，ohpm 注册表可安装）**：
-    - 初始化：`HmAIProviders.deepSeek(model)` / `HmAIProviders.custom(baseUrl, model)` → `HmAIProviderConfig` → `createChatClient()` 得 `OpenAICompatibleClient`；自定义端点直接 `new OpenAICompatibleClientOptions(baseUrl, model)`（BYOK 三元组均可注入）；
-    - response_format：支持，`HmAIResponseFormat.jsonObject()`（`json_schema` 也有）；端点不支持时服务端忽略该字段，落到「prompt 要求 JSON + 解析校验 E4」兜底；
-    - 调用形态：库只有流式入口 `client.createStream(request).start(): Promise<HmAIChatResult>`，非流式语义 = 取最终 result、忽略 onDelta；
-    - 错误结构：`HmAIError { code: HmAIErrorCode, statusCode?, responseBody? }`，code ∈ network / timeout / http / protocol / cancelled / invalid_argument / internal / tool*——与本 spec E2/E3/E4/E6 一一映射；HTTP 4xx/5xx 走 `http` 码 + `statusCode`（内容安全按 E5）；
-    - 其它：`connectTimeoutMs` / `readTimeoutMs` 可设（取 15s）；`HmAIUsage`（promptTokens/completionTokens）随 `includeUsage=true` 返回；Key 在库的 `options.apiKey` 上设置，不落日志。
-    - 已知边界：库不做非流式接口、不做端点能力探测（本 spec 也不做探测，E4 兜底）。
+- **兼容性修复（2026-11-22，自建 chat completions 端点实测）**：① `AiTasks.parseJsonSafe` 解析前先剥离 markdown 代码栅栏（```json … ```）与首尾非 JSON 字符（取首个 `{` 到最后一个 `}`），自建网关 / 忽略 response_format 的端点常输出包裹文本；② `finish_reason === 'length'`（max_tokens 截断导致 JSON 不完整）显式归 E4，错误文案「输出被截断，请重试」——此前 finishReason 被忽略、截断输出只会以「schema mismatch」面目出现；③ D1 `steps` 放宽为 2–3 条（`isValid` 同步放宽），部分模型习惯输出两条步骤。
 - 非流式 chat completion；超时 15s；**不自动重试**（全部显式触发场景，用户自己重试）。
 - 输入截断：prompt 总长上限 8KB（超出按 §4/§6 各自的截断规则）。
 - 输出约定：**所有任务要求 JSON 输出**（`response_format` 若端点支持则使用；否则靠 prompt + 解析校验），低温度（D1 0.3 / D2 0.2 / D3 0.2）。
@@ -124,7 +118,6 @@
 - 小艺 Work 经 ArkTS Skill 连接：对外暴露 `search / preview / install / query` 四个技能；`install` = 唤起详情页预填 + 装机预演（J）确认后执行——**AI 发起，人类点头**。
 - 已确认机制：小艺 Work 为本地运行 harness（与 Intents Kit / 小艺 Agent 不同）；**前置实测**：Skill 注册与触发口径真机验证通过后单独立项细化。
 - 本 spec 只保证：底座与缓存结构不阻碍阶段二（AiClient 可被 Skill 入口复用，install 流程复用预演语义）。
-- **实现登记（2026-11-22）**：阶段二未实现。接口方向——`AiClient.complete / AiTasks.*` 均为无 UI 依赖的静态入口（Context 经 `AppStorage[UI_CONTEXT]` 惰性获取），Skill 入口可直接复用；缓存目录与 promptVersion 机制与入口无关。
 
 ---
 
@@ -136,6 +129,14 @@
 | E2 | 网络失败 | 卡内重试按钮 | 自动切词表模式 + 提示 | 按钮不出现 |
 | E3 | 超时（15s） | 同 E2 | 同 E2 | 同 E2 |
 | E4 | 响应格式不符 / Schema 校验失败 | 错误态 + 重试（G11） | 错误态 + 重试 | 错误态 + 重试 |
+
+> **排查记录（2026-11-22，用户接自建 chat completions 端点报「响应格式异常」）**：E4 有四个触发点，
+> 与「自建/第三方 OpenAI 兼容端点」最相关的两个——①端点可能不支持 `response_format: json_object`
+> （多数兼容网关直接报 400 或忽略后输出 markdown 包裹的 JSON）；②模型输出带 ```json 代码栅栏或前后缀
+> 文本，`parseJsonSafe` 直接 `JSON.parse` 失败。③长输出被 `max_tokens` 截断（`finish_reason=length`）
+> 导致 JSON 不完整——代码未读 finishReason。④Schema 校验过严（如 D1 `steps` 必须恰好 3 条）。
+> 修复项（已实施，见 §3.2）：解析前剥离代码栅栏与首尾非 JSON 文本；`finish_reason=length` 归 E4 并
+> 提示「输出被截断，请重试（模型输出过长）」；`steps` 放宽为 2–3 条。
 | E5 | Provider 内容安全拒绝 | 显示「该包内容无法生成讲解」 | 显示「该意图无法处理」 | 显示「无法解读」 |
 | E6 | 用户取消 | 骨架消失，无痕 | 输入保留 | 卡片收起 |
 
@@ -179,15 +180,14 @@
 
 | 模块 | 改动 |
 |---|---|
-| `features/brewcommon` | 新增 `service/AiClient.ets`、`service/AiSettingsStore.ets`（Asset Store 封装）、`service/AiTasks.ets`（三任务的 prompt/解析/缓存/过滤编排）、`service/AiCache.ets`（盘上缓存）、`model/AiTypes.ets`（D1/D2/D3 的请求 / 响应 / 错误类型）、`constant/AiConstants.ets`（promptVersion / TTL / 截断常量）、`util/AiTaskWords.ets`（28 词表加载与匹配）、`component/BrewAiFailureCard.ets`（D3 卡，随执行 Sheet 分发） |
-| `features/brewdetail` | AI 讲解卡组件 `BrewAiExplainCard.ets` + 装配（描述分区之后、tldr 之前） |
-| `features/brewsearch` | 「AI 帮我找工具」入口（`BrewAiFindCard`，挂未提交态历史/发现区之前）+ `model/AiCatalogIndex.ets`（目录成员判定）+ 结果列表 + 词表降级（`AiFindVM`） |
-| `features/mine` | AI 设置页（provider / baseURL / Key / model / 测试连接；路由 `MineAiSettingsView`） |
-| 执行 Sheet | 失败终态（FAILED / TIMEOUT）新增 D3 入口与结果卡（不动执行链路；入口随 `BREW_CLI_ENABLED` 门控） |
+| `features/brewcommon` | 新增 `service/AiClient.ets`、`service/AiSettingsStore.ets`（Asset Store 封装）、`model/AiTypes.ets`（D1/D2/D3 的请求 / 响应 / 错误类型）、`constant/AiConstants.ets`（promptVersion / TTL / 截断常量）、`util/AiTaskWords.ets`（28 词表加载与匹配） |
+| `features/brewdetail` | AI 讲解卡组件 + 装配（描述分区之后、tldr 之前） |
+| `features/brewsearch` | 「AI 帮我找工具」入口 + 结果列表 + 词表降级 |
+| `features/mine` | AI 设置页（provider / baseURL / Key / model / 测试连接） |
+| 执行 Sheet | 失败终态新增 D3 入口与结果卡（不动执行链路） |
 | `hmosword-build` | 新增 `brew-ai/check_taskwords.py`（词表结构 / token 存在性校验，走 generate.py 体系） |
-| `resources` | §10 文案（zh/en/base 三套，落在 `features/brewcommon`——全项目字符串的既有归属地）；关于页隐私披露 |
-| `rawfile/ai/taskwords.json` | 28 策展表（首批 ≥20 条高频中文任务词；随 `features/brewcommon` HAR 打包） |
-| 根 `oh-package.json5` | `@hmkit/ai@^2.0.0`；`parameterFile` 参数化移除（ohpm 6.0.1 拒绝在含 parameterFile 的工程执行 `ohpm install <pkg>`，@param 引用就地内联，行为不变） |
+| `resources` | §10 文案（zh/en） |
+| `rawfile/ai/taskwords.json` | 28 策展表（首批 ≥20 条高频中文任务词） |
 
 ---
 
@@ -210,6 +210,6 @@
 | OpenAI 兼容端点差异（response_format / 错误结构不一） | AiClient 做能力探测 + 宽松解析；E4 兜底 |
 | JSON 输出不稳定 | 低温度 + Schema 校验 + E4 明确错误态（不做自动多次重试） |
 | 成本失控 | 显式触发 + 缓存 + 截断 + max_tokens；设置页显示当前 model |
-| Asset Store Kit API 可用性与并发限制 | 编码第一天最小样例验证；不可用则回退加密偏好（方案 B，需评审）。**实测（2026-11-22）：Asset Store Kit（@kit.AssetStoreKit，API 23 SDK）可用，`addSync` / `querySync` / `removeSync` 已接入**；不可用时的兜底为「进程内存」（不落盘版本），重启后需重填，设置页有提示。加密偏好方案 B 未启用、无需评审。 |
+| Asset Store Kit API 可用性与并发限制 | 编码第一天最小样例验证；不可用则回退加密偏好（方案 B，需评审） |
 | 小艺 Work Skill 触发口径未知 | 阶段二独立实测；本 spec 不依赖其结论 |
 | pc_normal 的 AI 体验完整性 | D3 / 系统级不出现属预期；D1 / D2 / I 完整可用 |

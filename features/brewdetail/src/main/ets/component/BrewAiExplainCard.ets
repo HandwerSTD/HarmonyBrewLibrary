@@ -41,6 +41,8 @@ export struct BrewAiExplainCard {
   @State private card: AiExplainCard | null = null;
   @State private loading: boolean = false;
   @State private errorKind: AiErrorKind | null = null;
+  /** E4 细分：输出被 max_tokens 截断（finishReason=length）时用专门文案。 */
+  @State private errorTruncated: boolean = false;
   /** E4/E2/E3 重试入口的显隐由 errorKind 决定；这里只是触发重渲染的计数器 */
   @State private attempt: number = 0;
 
@@ -50,6 +52,7 @@ export struct BrewAiExplainCard {
     }
     this.loading = true;
     this.errorKind = null;
+    this.errorTruncated = false;
     this.attempt++;
     AiTasks.explain(this.input, (refreshed: AiExplainCard) => {
       // stale-while-revalidate 的后台刷新回调：新内容无感替换（G10）
@@ -64,6 +67,7 @@ export struct BrewAiExplainCard {
       .catch((error: AiError) => {
         this.loading = false;
         this.errorKind = error instanceof AiError ? error.kind : AiErrorKind.E2_NETWORK;
+        this.errorTruncated = error instanceof AiError && error.message.indexOf('reason=truncated') >= 0;
       });
   }
 
@@ -72,7 +76,8 @@ export struct BrewAiExplainCard {
       return $r('app.string.ai_error_e1');
     }
     if (this.errorKind === AiErrorKind.E4_BAD_FORMAT) {
-      return $r('app.string.ai_error_e4');
+      return this.errorTruncated ? $r('app.string.ai_error_e4_truncated') :
+        $r('app.string.ai_error_e4');
     }
     if (this.errorKind === AiErrorKind.E5_BLOCKED) {
       return $r('app.string.ai_error_e5');

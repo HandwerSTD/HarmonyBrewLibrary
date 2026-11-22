@@ -35,7 +35,7 @@ import {
 } from '../model/AiTypes';
 import { AiCache, AiCacheReadResult } from './AiCache';
 import { AiClient } from './AiClient';
-import type { AiClientTask } from './AiClient';
+import type { AiClientTask, AiCompletion as AiCompletion2 } from './AiClient';
 import { AiSettingsStore } from './AiSettingsStore';
 import { AiTaskWords as AiTaskWordsStatic, AiTaskWord } from '../util/AiTaskWords';
 
@@ -105,7 +105,7 @@ export class AiTasks {
     return AiClient.complete(task).then((completion) => {
       const card: AiExplainCard | null = AiTasks.parseExplain(completion.content);
       if (card === null) {
-        throw new AiError(AiErrorKind.E4_BAD_FORMAT, 'd1 schema mismatch');
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT, `d1 reason=${e4ReasonOf(completion)}`);
       }
       AiCache.write('d1', providerKey, input.token, AI_PROMPT_VERSION_D1, completion.model,
         JSON.stringify(card));
@@ -150,7 +150,8 @@ export class AiTasks {
       card.summary = typeof obj['summary'] === 'string' ? obj['summary'] as string : '';
       card.scenarios = stringArrayOf(obj['scenarios'], 3);
       card.caveats = stringArrayOf(obj['caveats'], 3);
-      card.steps = stringArrayOf(obj['steps'], 6);
+      // steps 上限 3（isValid 收 2–3 条）；解析层 6 是给「超限即格式不符」判据留的余量口径不变
+      card.steps = stringArrayOf(obj['steps'], 3);
       if (!card.isValid()) {
         return null;
       }
@@ -188,7 +189,7 @@ export class AiTasks {
       const result: AiToolResult | null = AiTasks.filterAndRank(completion.content, entries,
         input.intent);
       if (result === null) {
-        throw new AiError(AiErrorKind.E4_BAD_FORMAT, 'd2 schema mismatch');
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT, `d2 reason=${e4ReasonOf(completion)}`);
       }
       AiCache.write('d2', providerKey, cacheKey, AI_PROMPT_VERSION_D2, completion.model,
         JSON.stringify(completion.content));
@@ -331,7 +332,7 @@ export class AiTasks {
     return AiClient.complete(task).then((completion) => {
       const card: AiFailureCard | null = AiTasks.parseFailure(completion.content);
       if (card === null) {
-        throw new AiError(AiErrorKind.E4_BAD_FORMAT, 'd3 schema mismatch');
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT, `d3 reason=${e4ReasonOf(completion)}`);
       }
       Logger.info(TAG, `d3 ok latency=${completion.latencyMs}`);
       return card;
@@ -418,6 +419,12 @@ export class AiTasks {
 
 // ------------------------------------------------------- 模块级工具函数
 
+/** E4 的 reason 判定（spec §8 排查记录 ④）：finishReason=length 即截断，其余走 schema。 */
+function e4ReasonOf(completion: AiCompletion2): string {
+  return completion.finishReason === 'length' ? 'truncated' : 'schema';
+}
+
+
 /** 意图 → 缓存 key 的 slug（非字母数字折 `-`；中文意图在 AI 模式也能成为合法文件名段）。 */
 function slugOf(text: string): string {
   let out: string = '';
@@ -431,18 +438,70 @@ function slugOf(text: string): string {
 }
 
 /**
+ * 剥离 provider 输出里的非 JSON 包裹（spec §3.2 兼容性修复 ①）。
+ *
+ * 自建/第三方 OpenAI 兼容端点常忽略 `response_format: json_object`，输出带
+ * ```` ```json ```` 代码栅栏或「好的，以下是结果：」之类前后缀文本。策略：
+ *   1. 先剥 markdown 代码栅栏（```json …``` / ``` …```）；
+ *   2. 再取首个 `{` 到最后一个 `}` 的子串（前后缀文本一并剥掉）。
+ * 都不奏效时原样返回，让 JSON.parse 自己报错（走 E4 通用路径）。
+ */
+function stripJsonWrapping(text: string): string {
+  let out: string = text.trim();
+  const fenceStart: number = out.indexOf('```');
+  if (fenceStart >= 0) {
+    // 跳过栅栏行（```json / ```）
+    const lineBreak: number = out.indexOf('\n', fenceStart);
+    if (lineBreak > fenceStart) {
+      out = out.substring(lineBreak + 1);
+    }
+    const fenceEnd: number = out.lastIndexOf('```');
+    if (fenceEnd >= 0) {
+      out = out.substring(0, fenceEnd);
+    }
+    out = out.trim();
+  }
+  const braceStart: number = out.indexOf('{');
+  const braceEnd: number = out.lastIndexOf('}');
+  if (braceStart >= 0 && braceEnd > braceStart) {
+    return out.substring(braceStart, braceEnd + 1);
+  }
+  return out;
+}
+
+/**
  * JSON 解析 + 对象级校验的统一壳：解析失败 / 类型不符返回 null（调用方抛 E4）。
  * `cast` 返回 null = Schema 校验不过。
+ * `reason` 由调用方传入做日志区分（fence=栅栏剥离后恢复 / schema=字段校验不过）。
  */
 function parseJsonSafe<T>(text: string, cast: (obj: Record<string, Object>) => T | null): T | null {
+  let body: string = text;
   try {
-    const parsed: Object = JSON.parse(text) as Object;
+    const direct: Object = JSON.parse(body) as Object;
+    if (direct !== null && direct !== undefined) {
+      const casted: T | null = cast(direct as Record<string, Object>);
+      if (casted === null) {
+        Logger.warn(TAG, `json schema mismatch, reason=schema, len=${body.length}`);
+      }
+      return casted;
+    }
+  } catch (err) {
+    // 直接 parse 失败才走剥离路径；成功路径零开销
+  }
+  body = stripJsonWrapping(text);
+  try {
+    const parsed: Object = JSON.parse(body) as Object;
     if (parsed === null || parsed === undefined) {
+      Logger.warn(TAG, `json parse failed, reason=fence, len=${body.length}`);
       return null;
     }
-    return cast(parsed as Record<string, Object>);
+    const casted: T | null = cast(parsed as Record<string, Object>);
+    if (casted === null) {
+      Logger.warn(TAG, `json schema mismatch, reason=schema, len=${body.length}`);
+    }
+    return casted;
   } catch (err) {
-    Logger.warn(TAG, `json parse failed, len=${text.length}`);
+    Logger.warn(TAG, `json parse failed, reason=fence, len=${body.length}`);
     return null;
   }
 }

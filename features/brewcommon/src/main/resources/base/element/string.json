@@ -771,6 +771,10 @@
     {
       "name": "ai_provider_custom",
       "value": "自定义端点"
+    },
+    {
+      "name": "ai_error_e4_truncated",
+      "value": "输出被截断，请重试"
     }
   ]
 }

@@ -33,6 +33,11 @@ export class AiCompletion {
   public promptTokens: number = 0;
   public completionTokens: number = 0;
   public latencyMs: number = 0;
+  /**
+   * provider 的 finish_reason 原文（stop / length / content_filter / …）。
+   * `length` = max_tokens 截断——对 JSON 输出意味着正文不完整，任务层读它抛 E4(truncated)。
+   */
+  public finishReason: string = '';
 }
 
 /**
@@ -107,12 +112,14 @@ export class AiClient {
       out.content = result.content;
       out.model = result.model.length > 0 ? result.model : config.model;
       out.latencyMs = latency;
+      out.finishReason = result.finishReason;
       if (result.usage !== undefined) {
         out.promptTokens = result.usage.promptTokens;
         out.completionTokens = result.usage.completionTokens;
       }
       Logger.info(TAG, `complete ok model=${out.model} latency=${latency} ` +
-        `tokens=${out.promptTokens}/${out.completionTokens} chars=${out.content.length}`);
+        `finish=${out.finishReason} tokens=${out.promptTokens}/${out.completionTokens} ` +
+        `chars=${out.content.length}`);
       return out;
     } catch (err) {
       throw AiClient.classify(err, Date.now() - startedAt);
