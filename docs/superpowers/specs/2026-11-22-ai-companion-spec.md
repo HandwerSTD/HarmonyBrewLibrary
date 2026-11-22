@@ -62,6 +62,7 @@
 
 ### 3.2 AiClient（`features/brewcommon/service/AiClient.ets`）
 
+- **AI infra 依赖（需求方指定）**：模型调用基础设施使用 `ohpm install @hmkit/ai`（ohpm 三方库，经 `oh-package.json5` 声明依赖）；AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按 §3.1 设置与存储；`@hmkit/ai` 的初始化参数与能力边界（response_format 支持、流式、错误结构）编码第一天以最小样例核对，结论写回本节。
 - 非流式 chat completion；超时 15s；**不自动重试**（全部显式触发场景，用户自己重试）。
 - 输入截断：prompt 总长上限 8KB（超出按 §4/§6 各自的截断规则）。
 - 输出约定：**所有任务要求 JSON 输出**（`response_format` 若端点支持则使用；否则靠 prompt + 解析校验），低温度（D1 0.3 / D2 0.2 / D3 0.2）。
