@@ -2,7 +2,7 @@
   "modelVersion": "5.0.0",
   "description": "Please describe the basic information.",
   "dependencies": {
-    "@hmkit/ai": "^2.0.0"
+    "@hmkit/ai": "file:./features/hmkit-ai"
   },
   "devDependencies": {
     "@ohos/hypium": "1.0.19",
