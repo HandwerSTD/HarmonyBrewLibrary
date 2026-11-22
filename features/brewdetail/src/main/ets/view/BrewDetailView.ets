@@ -12,8 +12,10 @@ import {
   GlobalInfoModel,
   LoadingFailedView,
   LoadingStatus,
+  Logger,
   NoNetworkView,
   PageEnum,
+  ResourceUtil,
   StatePlaceholderKind,
   StatePlaceholderView,
   StatusBarColorType,
@@ -40,6 +42,8 @@ import {
   brewTitleBarStyle,
 } from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } from '@ohos/brewcommon';
+import { AiExplainInput } from '@ohos/brewcommon';
+import { BrewAiExplainCard } from '../component/BrewAiExplainCard';
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
 import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
@@ -136,6 +140,52 @@ export struct BrewDetailView {
       categoryKey: item.categoryKey,
     };
     this.detailState.pathStack?.pushPath({ name: PageEnum.BREW_DETAIL_VIEW, param: params }, true);
+  }
+
+  /**
+   * D1 讲解卡的 grounding 输入（spec §4：只用既有详情数据）。
+   * dependencies 从归一化分区里取「依赖」行的原文平铺，避免二次遍历 detail 结构。
+   */
+  private aiExplainInput(): AiExplainInput {
+    const input: AiExplainInput = new AiExplainInput();
+    input.token = this.detailState.data.name;
+    input.kind = this.kind === BrewKind.CASK ? 'cask' : 'formula';
+    input.desc = this.detailState.data.desc;
+    input.caveats = this.detailState.data.caveats;
+    this.detailState.data.sections.forEach((section: BrewInfoSection) => {
+      if (section.rows.length === 0) {
+        return;
+      }
+      const firstLabel: ResourceStr = section.rows[0].label;
+      // 依赖分区的行首标签是「依赖」；用资源比对太绕，退而求其次：取依赖分区的全部行值拼平。
+      // 判定用 section 的第一行 label === 依赖行（资源引用相等只在同资源时成立）。
+      if (firstLabel === $r('app.string.brew_label_dependencies')) {
+        section.rows.forEach((row: BrewInfoRow) => {
+          input.dependencies.push(this.resourceText(row.value));
+        });
+      }
+    });
+    return input;
+  }
+
+  /** ResourceStr → 文本（动态字符串直接用；资源走 ResourceUtil）。 */
+  private resourceText(value: ResourceStr): string {
+    if (typeof value === 'string') {
+      return value as string;
+    }
+    try {
+      const ctx: Context | undefined =
+        this.getUIContext().getHostContext() as Context;
+      return ResourceUtil.getResourceString(ctx, value as Resource);
+    } catch (error) {
+      return '';
+    }
+  }
+
+  /** E1 引导：跳「我的 - 设置 - AI 设置」（页面栈从详情页回退到「我的」再 push 不现实，
+   * 直接 push 到 AI 设置路由——它注册在 mine 模块的 routerMap，全局可达）。 */
+  private openAiSettings(): void {
+    this.detailState.pathStack?.pushPath({ name: PageEnum.MINE_AI_SETTINGS_VIEW });
   }
 
   /** 失败/无网/未找到时的重试。必须重新发请求 —— 只重置标志位的话按钮点了没反应。
@@ -292,6 +342,14 @@ export struct BrewDetailView {
         ForEach(this.detailState.data.sections, (section: BrewInfoSection) => {
           BrewInfoSectionView({ section: section })
         }, (section: BrewInfoSection, index: number) => `section_${index}`)
+
+        // AI 讲解卡（spec §4：描述分区之后、用法示例之前；显式触发，不自动消耗）
+        BrewAiExplainCard({
+          input: this.aiExplainInput(),
+          onConfigureKey: () => {
+            this.openAiSettings();
+          },
+        })
 
         // 8 安装提示（caveats）
         if (this.detailState.data.caveats) {

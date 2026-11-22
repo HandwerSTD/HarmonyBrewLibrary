@@ -23,6 +23,8 @@ export enum PageEnum {
   COMPONENT_DETAIL_VIEW = 'ComponentDetailView',
   MINE_VIEW = 'MineView',
   MINE_SETTING_VIEW = 'MineSettingsView',
+  /** AI 设置页（spec：AI Companion 底座，「我的 - 设置」与详情页 E1 引导共用） */
+  MINE_AI_SETTINGS_VIEW = 'MineAiSettingsView',
   MINE_PACKAGES_VIEW = 'MinePackagesView',
   BREW_SOURCE_SETTING_VIEW = 'BrewSourceSettingView',
   BREW_SOURCE_EDIT_VIEW = 'BrewSourceEditView',

@@ -591,6 +591,178 @@
     {
       "name": "brew_cmd_bad_name",
       "value": "包名不合法"
+    },
+    {
+      "name": "ai_settings_title",
+      "value": "AI 设置"
+    },
+    {
+      "name": "ai_settings_provider",
+      "value": "服务商"
+    },
+    {
+      "name": "ai_settings_baseurl",
+      "value": "接口地址"
+    },
+    {
+      "name": "ai_settings_model",
+      "value": "模型"
+    },
+    {
+      "name": "ai_settings_key",
+      "value": "API Key"
+    },
+    {
+      "name": "ai_settings_key_hint",
+      "value": "仅在设备本地加密存储，不会进入日志或缓存文件"
+    },
+    {
+      "name": "ai_settings_key_saved",
+      "value": "Key 已保存"
+    },
+    {
+      "name": "ai_settings_key_memory_only",
+      "value": "系统安全存储不可用，Key 仅本次会话有效"
+    },
+    {
+      "name": "ai_settings_key_clear",
+      "value": "清除 Key"
+    },
+    {
+      "name": "ai_settings_test",
+      "value": "测试连接"
+    },
+    {
+      "name": "ai_settings_testing",
+      "value": "测试中…"
+    },
+    {
+      "name": "ai_settings_test_ok",
+      "value": "连接成功"
+    },
+    {
+      "name": "ai_settings_test_ok_detail",
+      "value": "连接成功 · %s · %d ms"
+    },
+    {
+      "name": "ai_settings_save",
+      "value": "保存"
+    },
+    {
+      "name": "ai_settings_saved",
+      "value": "已保存"
+    },
+    {
+      "name": "ai_settings_invalid",
+      "value": "请先完整填写接口地址与模型名"
+    },
+    {
+      "name": "ai_d1_button",
+      "value": "AI 讲解"
+    },
+    {
+      "name": "ai_d1_loading",
+      "value": "AI 讲解生成中…"
+    },
+    {
+      "name": "ai_d1_retry",
+      "value": "重试"
+    },
+    {
+      "name": "ai_d1_regen",
+      "value": "重新生成"
+    },
+    {
+      "name": "ai_d1_badge",
+      "value": "AI 生成 · 仅供参考"
+    },
+    {
+      "name": "ai_d1_section_scenarios",
+      "value": "适用场景"
+    },
+    {
+      "name": "ai_d1_section_caveats",
+      "value": "注意与坑"
+    },
+    {
+      "name": "ai_d1_section_steps",
+      "value": "上手三步"
+    },
+    {
+      "name": "ai_d2_entry",
+      "value": "AI 帮我找工具"
+    },
+    {
+      "name": "ai_d2_hint",
+      "value": "描述你想做的事，例如：批量压缩图片"
+    },
+    {
+      "name": "ai_d2_search",
+      "value": "找工具"
+    },
+    {
+      "name": "ai_d2_fallback_notice",
+      "value": "AI 未配置，已切换离线词表"
+    },
+    {
+      "name": "ai_d2_empty",
+      "value": "没有找到匹配的工具"
+    },
+    {
+      "name": "ai_d2_empty_hint",
+      "value": "换个说法再试，例如「我想批量压缩图片」"
+    },
+    {
+      "name": "ai_d2_badge",
+      "value": "AI 提名 · 本地目录排序"
+    },
+    {
+      "name": "ai_d3_button",
+      "value": "AI 解读失败原因"
+    },
+    {
+      "name": "ai_d3_loading",
+      "value": "AI 解读生成中…"
+    },
+    {
+      "name": "ai_d3_badge",
+      "value": "AI 解读仅供参考"
+    },
+    {
+      "name": "ai_d3_section_what",
+      "value": "发生了什么"
+    },
+    {
+      "name": "ai_d3_section_causes",
+      "value": "可能原因"
+    },
+    {
+      "name": "ai_d3_section_next",
+      "value": "下一步"
+    },
+    {
+      "name": "ai_error_e1",
+      "value": "未配置 AI Key"
+    },
+    {
+      "name": "ai_error_e1_action",
+      "value": "去配置"
+    },
+    {
+      "name": "ai_error_e2",
+      "value": "网络不可用，请稍后重试"
+    },
+    {
+      "name": "ai_error_e3",
+      "value": "请求超时，请稍后重试"
+    },
+    {
+      "name": "ai_error_e4",
+      "value": "响应格式异常，请重试"
+    },
+    {
+      "name": "ai_error_e5",
+      "value": "该内容无法生成讲解"
     }
   ]
 }
