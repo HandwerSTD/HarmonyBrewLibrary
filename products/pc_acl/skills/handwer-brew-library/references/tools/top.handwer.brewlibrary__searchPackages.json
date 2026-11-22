@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "bundleName": "top.handwer.brewlibrary",
+  "toolName": "searchPackages",
+  "pluginType": "Device",
+  "description": "按关键词查找 Harmonybrew 软件包目录（Homebrew formula/cask）。query 为用途描述或包名片段；返回最匹配的前 5 条（name/kind/desc）。目录未就绪时返回 ERR_INTERNAL；找不到匹配时返回空 rows，不编造包名。",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "搜索关键词，可以是用途描述（如\"下载视频\"）或包名片段（如\"wget\"）。"
+      }
+    },
+    "required": ["query"]
+  },
+  "deviceCommand": {
+    "template": {
+      "header": {
+        "namespace": "Common",
+        "name": "ActionAndResult"
+      },
+      "payload": {
+        "cardParam": {},
+        "executeParam": {
+          "executeMode": "foreground",
+          "intentName": "searchPackages",
+          "bundleName": "top.handwer.brewlibrary",
+          "dimension": "",
+          "needUnlock": true,
+          "actionResponse": true,
+          "timeOut": 30,
+          "intentParam": {
+            "query": "#{arguments.query}"
+          },
+          "achieveType": "INTENT"
+        },
+        "responses": [
+          {
+            "resultCode": "",
+            "displayText": "",
+            "ttsText": ""
+          }
+        ],
+        "needUploadResult": true,
+        "noHalfPage": false,
+        "pageControlRelated": false
+      }
+    }
+  }
+}

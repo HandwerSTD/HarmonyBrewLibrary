@@ -8,7 +8,7 @@
  *
  * 运行：node hmosword-build/brew-skill/check_skill_contract.mjs
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert';
@@ -41,6 +41,34 @@ assert(md.includes('argv.length === 1'), 'SKILL.md 缺 argv.length === 1 检查�
 assert(md.includes('参数传递格式错误'), 'SKILL.md 缺「参数传递格式错误」自动重试判定锚点');
 assert(md.includes('## 返回结果与错误处理'), 'SKILL.md 缺「返回结果与错误处理」段');
 assert(md.includes('## 运行条件与业务约定'), 'SKILL.md 缺「运行条件与业务约定」段');
+
+// ---- 1.6 云端 invoke 工具注册件（references/tools，A 通道）----
+const appJson5 = readFileSync(join(ROOT, 'AppScope', 'app.json5'), 'utf8');
+const bundleMatch = appJson5.match(/"bundleName":\s*"([^"]+)"/);
+assert(bundleMatch, 'AppScope/app.json5 缺 bundleName');
+const BUNDLE = bundleMatch[1];
+const toolsDir = join(SKILL_DIR, 'references', 'tools');
+for (const fn of FNS) {
+  const toolPath = join(toolsDir, BUNDLE + '__' + fn + '.json');
+  assert(existsSync(toolPath), '缺 invoke 工具注册件: ' + BUNDLE + '__' + fn + '.json');
+  const tool = JSON.parse(readFileSync(toolPath, 'utf8'));
+  assert.strictEqual(tool.toolName, fn, fn + ' 工具注册件 toolName 不符');
+  assert.strictEqual(tool.bundleName, BUNDLE, fn + ' 工具注册件 bundleName 不符');
+  assert.strictEqual(tool.pluginType, 'Device', fn + ' 工具注册件 pluginType 应为 Device');
+  assert(tool.description && tool.description.length > 20, fn + ' 工具注册件 description 过短');
+  const execParam = tool.deviceCommand.template.payload.executeParam;
+  assert.strictEqual(execParam.intentName, fn, fn + ' intentName 必须等于 functionName（A/B 汇合同一脚本）');
+  assert.strictEqual(execParam.bundleName, BUNDLE, fn + ' executeParam.bundleName 不符');
+  assert.strictEqual(execParam.achieveType, 'INTENT', fn + ' achieveType 应为 INTENT');
+  const required = (tool.arguments && tool.arguments.required) || [];
+  for (const key of required) {
+    assert.strictEqual(execParam.intentParam[key], '#{arguments.' + key + '}',
+      fn + ' intentParam 缺占位符 #{arguments.' + key + '}');
+  }
+}
+assert(md.includes('方式 A') && /invoke/.test(md), 'SKILL.md 缺 A 通道（invoke）路由');
+assert(md.includes('先选 A 或 B'), 'SKILL.md 缺 A/B 选择表');
+assert(md.includes(BUNDLE), 'SKILL.md 应写明应用标识 ' + BUNDLE);
 
 // ---- 2. module.json5 注册 ----
 assert(/"skillProfiles"[\s\S]*"name":\s*"handwer-brew-library"/.test(moduleJson5),

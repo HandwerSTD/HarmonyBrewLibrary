@@ -56,7 +56,7 @@
 | Q1 | 真机 OS 版本与小艺 Work 可用性：OS 是否 ≥ Skill 要求的设备版本？小艺 Work 入口与 Agent 触发是否可用？ | 不满足 → 32 停在 spec，标记「平台门未过」，不排期（L 版本时光机同款规矩） |
 | Q2 | 工具链：本机 DevEco/devecocli 是否有 API 26 SDK；`compatibleSdkVersion/targetSdkVersion` 升 26 后双 product 构建、存量代码是否报错 | 决定升版代价（G2/G12 的范围） |
 | Q3 | Skill 脚本能否 import 跨模块包（`@ohos/brewcommon` 等）：官方示例为模块内相对路径，本项目业务全在 feature 模块 | 不可用则兜底：pc_acl 内写转发薄层 |
-| Q4 | Skill 导入链路（**裁决：不上云端、无 invoke 工具注册**）：HAP 上传后设备侧的注册与「小艺可见性」如何验证；真实生产样本的三件套（SKILL.md + scripts + skillProfiles）即全部产物 | 决定验证路径 |
+| Q4 | Skill 导入与路由验证：invoke 工具注册后设备侧能否路由到脚本（判据 = `[skill]` 日志落地）；不落地则回退意图框架方案；exec-cli 通道的可用性另探 | 决定验证路径 |
 
 ### 3.2 目录与注册（Q3 放行后）
 
@@ -73,7 +73,8 @@ products/pc_acl/
 `BrewSkill.ets` 只做三件事：按 Schema 前置校验 argv（白名单枚举二次校验）、调用 `BrewSkillBridge`（§3.4）、按契约构造 `ExecuteResult` 并经唯一的 `report()` 出口回包。**业务逻辑一律不进脚本**。
 
 对照真实生产样本（`biandan-assistant`，2026-11-22 需求方提供）后的契约加固与裁决：
-- **仅 B 通道**：本技能不上云端、不做 invoke 工具注册——样本里的 `references/tools/*.json`（云端小艺 invoke 的 deviceCommand 模板）不适用，不补。
+- **A/B 双通道**（裁决演进：2026-11-22 首轮真机实测 exec-cli 未通 → 激活云端 invoke）：A = `references/tools/<bundleName>__<toolName>.json` 注册件（云端 invoke 工具，deviceCommand 模板 `achieveType: INTENT`）；B = exec-cli/ohos-arkTSScript，两者可用时优先 B。
+- **不进意图框架**：样本 SKILL.md 明写「所有函数、A 和 B 都遵守同一个要求：ETS 只接收一个 JSON 对象字符串」——A 与 B 汇合到同一脚本入口，`intentName` 即 `functionName`，`intentParam` 占位符替换后整体序列化成那一个字符串送进 ETS；设备侧代理框架按 bundleName+intentName 路由到已注册技能（`skillManager` 文档：代理框架查询的就是技能）。**验证判据：invoke 调用后 `[skill]` 日志落地**；若不落地，回退意图框架方案（InsightIntentExecutor / 装饰器），记为未决。
 - **argv 单 JSON 字符串约定**：SKILL.md 教 harness 先 `JSON.stringify` 再转义 `\"`，脚本端「直接解析 → 失败还原 `\"` 重试一次」双形态兼容；argv 形态错误的 errMsg 带「参数传递格式错误」锚点，SKILL.md 据此指示自动压参重试一次（业务字段缺失与 NOT_FOUND 不自动重试）。
 - **跨模块编译已被样本证明**：样本脚本直接 import 多个跨模块包，探针 Q3 的风险基本排除；本技能的常量本地副本仍是刻意的保守设计（契约检查脚本核对不漂移）。
 
@@ -147,7 +148,8 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 
 | 文件 | 改动 |
 | --- | --- |
-| `products/pc_acl/skills/handwer-brew-library/SKILL.md` | 声明契约（§3.3 全文） |
+| `products/pc_acl/skills/handwer-brew-library/SKILL.md` | 声明契约（§3.3 全文）：触发场景 / A-B 调用路由 / 错误重试纪律 / 四能力 args 与返回 Schema |
+| `products/pc_acl/skills/handwer-brew-library/references/tools/top.handwer.brewlibrary__<fn>.json` ×4 | A 通道 invoke 工具注册件：arguments Schema 与场景同源，deviceCommand 模板 `achieveType: INTENT`、`intentName` = functionName（照生产样本格式） |
 | `products/pc_acl/skills/handwer-brew-library/scripts/BrewSkill.ets` | 四能力薄适配 + 唯一 report 出口 |
 | `products/pc_acl/src/main/module.json5` | `skillProfiles` 注册（Q3 结论决定 srcEntries 写法）；无新增权限 |
 | `products/pc_acl/src/main/ets/skill/BrewSkillBridge.ets` | 只读业务出口（headless）：目录检索 / 盘上快照 / dry-run / 冷启动目录就绪 |

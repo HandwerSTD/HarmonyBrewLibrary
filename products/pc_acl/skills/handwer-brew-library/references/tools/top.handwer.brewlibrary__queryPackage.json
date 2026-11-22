@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "bundleName": "top.handwer.brewlibrary",
+  "toolName": "queryPackage",
+  "pluginType": "Device",
+  "description": "查询软件包的目录信息与本机安装状态。token 为目录中存在的包名；返回 kind/desc 与冻结口径的安装状态（installed/version/latestVersion/outdated/asOf，asOf 为快照时刻 epoch 毫秒，0 表示从未读取过本机包）。不执行任何命令，不编造状态。",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string",
+        "description": "软件包名，如 wget、ffmpeg。必须是目录里存在的名字；不确定时先用 searchPackages 查。"
+      }
+    },
+    "required": ["token"]
+  },
+  "deviceCommand": {
+    "template": {
+      "header": {
+        "namespace": "Common",
+        "name": "ActionAndResult"
+      },
+      "payload": {
+        "cardParam": {},
+        "executeParam": {
+          "executeMode": "foreground",
+          "intentName": "queryPackage",
+          "bundleName": "top.handwer.brewlibrary",
+          "dimension": "",
+          "needUnlock": true,
+          "actionResponse": true,
+          "timeOut": 30,
+          "intentParam": {
+            "token": "#{arguments.token}"
+          },
+          "achieveType": "INTENT"
+        },
+        "responses": [
+          {
+            "resultCode": "",
+            "displayText": "",
+            "ttsText": ""
+          }
+        ],
+        "needUploadResult": true,
+        "noHalfPage": false,
+        "pageControlRelated": false
+      }
+    }
+  }
+}

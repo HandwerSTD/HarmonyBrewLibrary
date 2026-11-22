@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "bundleName": "top.handwer.brewlibrary",
+  "toolName": "requestInstall",
+  "pluginType": "Device",
+  "description": "发起安装软件包：只预演不执行。返回与 previewInstall 同一份 dry-run 清单，status 为 needs_confirmation；由助手把清单转述给用户并引导其在 Harmonybrew 应用内打开包详情页亲手点安装。绝不直接执行安装、升级或卸载；目录中不存在的包名返回 ERR_NOT_FOUND。",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string",
+        "description": "用户想安装的软件包名；不确定时先用 searchPackages 确认。"
+      }
+    },
+    "required": ["token"]
+  },
+  "deviceCommand": {
+    "template": {
+      "header": {
+        "namespace": "Common",
+        "name": "ActionAndResult"
+      },
+      "payload": {
+        "cardParam": {},
+        "executeParam": {
+          "executeMode": "foreground",
+          "intentName": "requestInstall",
+          "bundleName": "top.handwer.brewlibrary",
+          "dimension": "",
+          "needUnlock": true,
+          "actionResponse": true,
+          "timeOut": 180,
+          "intentParam": {
+            "token": "#{arguments.token}"
+          },
+          "achieveType": "INTENT"
+        },
+        "responses": [
+          {
+            "resultCode": "",
+            "displayText": "",
+            "ttsText": ""
+          }
+        ],
+        "needUploadResult": true,
+        "noHalfPage": false,
+        "pageControlRelated": false
+      }
+    }
+  }
+}
