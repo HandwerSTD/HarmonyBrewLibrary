@@ -367,6 +367,14 @@
     {
       "name": "mine_refresh_failed",
       "value": "Could not read local packages"
+    },
+    {
+      "name": "statement",
+      "value": "Statement"
+    },
+    {
+      "name": "statement_content",
+      "value": "This application is an independent third-party client. It is not affiliated with, endorsed by, or officially connected to Homebrew, Harmonybrew, or AtomGit in any way. All trademarks, names, and related rights mentioned in this application belong to their respective owners. Package information shown in this application is fetched from publicly available community repositories and is for reference only. If there is any infringement, please contact us and it will be handled promptly."
     }
   ]
 }

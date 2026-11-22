@@ -16,6 +16,11 @@
       "buildFunction": "AboutViewBuilder"
     },
     {
+      "name": "StatementView",
+      "pageSourceFile": "src/main/ets/view/StatementView.ets",
+      "buildFunction": "StatementViewBuilder"
+    },
+    {
       "name": "MinePackagesView",
       "pageSourceFile": "src/main/ets/view/MinePackagesView.ets",
       "buildFunction": "MinePackagesViewBuilder"

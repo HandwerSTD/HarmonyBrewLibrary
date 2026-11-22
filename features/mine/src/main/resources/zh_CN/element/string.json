@@ -367,6 +367,14 @@
     {
       "name": "mine_refresh_failed",
       "value": "读不到本机包"
+    },
+    {
+      "name": "statement",
+      "value": "声明"
+    },
+    {
+      "name": "statement_content",
+      "value": "本应用为独立的第三方客户端，与 Homebrew、Harmonybrew、AtomGit 均无隶属、授权或官方合作关系，相关名称及商标权利归其各自所有者所有。应用内展示的软件包信息来自公开的社区仓库，仅供参考；如有侵权，请与我们联系，我们将及时处理。"
     }
   ]
 }

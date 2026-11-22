@@ -81,8 +81,6 @@ export struct AboutItemCard {
     }
     .width('100%')
     .height($r('app.float.about_item_card_height'))
-    .borderRadius($r('sys.float.corner_radius_level7'))
-    .backgroundColor($r('sys.color.comp_background_list_card'))
     .justifyContent(FlexAlign.SpaceBetween)
     .alignItems(VerticalAlign.Center)
     .padding({

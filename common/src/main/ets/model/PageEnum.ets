@@ -26,6 +26,8 @@ export enum PageEnum {
   MINE_PACKAGES_VIEW = 'MinePackagesView',
   BREW_SOURCE_SETTING_VIEW = 'BrewSourceSettingView',
   BREW_SOURCE_EDIT_VIEW = 'BrewSourceEditView',
+  /** 「关于」页内的「声明」页 */
+  STATEMENT_VIEW = 'StatementView',
   // Homebrew 应用市场
   BREW_FORMULA_LIST_VIEW = 'BrewFormulaListView',
   BREW_CASK_LIST_VIEW = 'BrewCaskListView',
