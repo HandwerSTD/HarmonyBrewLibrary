@@ -25,6 +25,7 @@ import {
   isBrewCommandEnded,
 } from '../model/BrewCommandModels';
 import { BrewCommandGenerator } from '../util/BrewCommandGenerator';
+import { TldrParser } from '../util/TldrParser';
 import { BrewAnsiParser, BrewTextSegment } from '../util/BrewAnsi';
 import { BrewCli } from './BrewCli';
 // 与 BrewInstalledLoader 互相 import 是有意的：读取路径要问「现在有没有写命令在执行」（spec §6.2 规则 5），
@@ -57,8 +58,14 @@ export class BrewCommandRunner {
    *
    * 检查顺序固定为「可用性 -> 参数 -> 忙」：可用性与参数不成立时弹的提示比「已有命令在执行」
    * 更有用，先判忙会把「这个包根本装不了」也报成忙。
+   *
+   * `request.rawCommand` 非空时走原始命令分支（tldr 示例一键执行）：
+   * 不经过 brew（命令本身不是 brew 的参数），能力闸只剩「应用开了执行通道 + 通道可用」。
    */
   public start(request: BrewCommandRequest): BrewCommandStartResult {
+    if (request.rawCommand.length > 0) {
+      return this.startRawCommand(request);
+    }
     if (!BrewCli.isEnabled() || !BrewCli.isReady()) {
       Logger.warn(TAG, `start rejected reason=unavailable args=${request.args}`);
       return BrewCommandStartResult.UNAVAILABLE;
@@ -80,6 +87,42 @@ export class BrewCommandRunner {
       commandLine, BREW_COMMAND_TIMEOUT_MS, BrewCli.workingDirectory());
     if (taskId <= 0) {
       Logger.warn(TAG, `start rejected reason=start_failed args=${request.args}`);
+      return BrewCommandStartResult.UNAVAILABLE;
+    }
+    this.begin(request, taskId);
+    return BrewCommandStartResult.STARTED;
+  }
+
+  /**
+   * 原始命令分支：tldr 示例原文一键执行（spec 2026-11-22 §4.1）。
+   *
+   * 与 brew 分支共用同一个状态机 / 轮询 / Sheet / 中断（**不新建执行通道**），
+   * 差异只有三处：
+   *   1. 能力闸是 `BrewCli.isEnabled()`（pc_normal 关闸，G10 的兜底）+ 通道可用；
+   *      不探测 brew 路径 —— 原始命令不需要 brew 存在。
+   *   2. 安全闸是 `TldrParser.isExecutable`（非空且无 `{{占位符}}`，G4 的通道侧兜底；
+   *      UI 侧已经只给无占位符示例出「执行」按钮，这里是最后一道）。
+   *   3. 命令行是原文本身，不走 `BrewCli.commandLine()` 的 brew 前缀拼装。
+   * 工作目录沿用 `BrewCli.workingDirectory()`：brew 的前缀目录可读可写，而应用进程的
+   * 默认目录 `/` 不可读（见 brew-cache-ownership.md「附带一条坑」），任何分支都不能在那儿起子进程。
+   */
+  private startRawCommand(request: BrewCommandRequest): BrewCommandStartResult {
+    if (!BrewCli.isEnabled() || !ShellUtils.available()) {
+      Logger.warn(TAG, `start rejected reason=unavailable raw=${request.rawCommand}`);
+      return BrewCommandStartResult.UNAVAILABLE;
+    }
+    if (!TldrParser.isExecutable(request.rawCommand)) {
+      Logger.warn(TAG, `start rejected reason=bad_args raw=${request.rawCommand}`);
+      return BrewCommandStartResult.BAD_ARGS;
+    }
+    if (this.isRunning()) {
+      Logger.info(TAG, `busy args=${request.args} running=${this.state.args}`);
+      return BrewCommandStartResult.BUSY;
+    }
+    const taskId: number = ShellUtils.startStream(request.rawCommand,
+      BREW_COMMAND_TIMEOUT_MS, BrewCli.workingDirectory());
+    if (taskId <= 0) {
+      Logger.warn(TAG, `start rejected reason=start_failed raw=${request.rawCommand}`);
       return BrewCommandStartResult.UNAVAILABLE;
     }
     this.begin(request, taskId);

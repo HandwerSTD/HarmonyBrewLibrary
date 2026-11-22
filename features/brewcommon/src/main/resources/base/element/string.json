@@ -591,6 +591,30 @@
     {
       "name": "brew_cmd_bad_name",
       "value": "Package name is not valid"
+    },
+    {
+      "name": "brew_tldr_section_title",
+      "value": "Usage examples"
+    },
+    {
+      "name": "brew_tldr_copy",
+      "value": "Copy"
+    },
+    {
+      "name": "brew_tldr_copied",
+      "value": "Copied"
+    },
+    {
+      "name": "brew_tldr_run",
+      "value": "Run"
+    },
+    {
+      "name": "brew_tldr_attribution",
+      "value": "Examples from tldr-pages (CC BY 4.0)"
+    },
+    {
+      "name": "brew_cmd_title_tldr",
+      "value": "Run example: %s"
     }
   ]
 }

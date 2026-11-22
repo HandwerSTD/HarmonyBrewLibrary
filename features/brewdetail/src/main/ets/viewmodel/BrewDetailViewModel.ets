@@ -19,6 +19,7 @@ import {
   BrewKind,
   BrewSourceStore,
   BREW_DIALECT_HARMONYBREW,
+  TldrService,
 } from '@ohos/brewcommon';
 import type {
   BrewCaskDetail,
@@ -27,6 +28,7 @@ import type {
   BrewInfoPageData,
   BrewInstalledPackage,
   BrewPackageItem,
+  TldrPage,
 } from '@ohos/brewcommon';
 import { BrewDetailState, BrewInstallState } from './BrewDetailState';
 
@@ -77,6 +79,7 @@ export class BrewDetailViewModel {
   public load(param: BrewDetailParams, state: BrewDetailState): void {
     this.setStatus(state, LoadingStatus.LOADING);
     this.loadSiblings(param, state);
+    this.loadTldr(param, state);
     // 先用已有快照（内存优先、其次盘上）同步算一次安装状态：快照命中时按钮首帧就是对的，
     // 不等详情请求，也不等 brew 命令。详情页自己的网络取数不受这条路径影响。
     this.refreshInstallState(state);
@@ -244,6 +247,32 @@ export class BrewDetailViewModel {
       state.siblings = items;
     }).catch(() => {
       state.siblings = [];
+    });
+  }
+
+  /**
+   * tldr 用法示例（spec 2026-11-22）。与 siblings 同一套「独立请求 + 失败静默」惯例：
+   *
+   * - 只对 formula 取（G2：tldr 只覆盖命令行工具，cask 详情页整区不出现，连请求都不发）；
+   * - `TldrService.get()` 从不 reject（内部已把 404/断网/解析失败全收敛成 null），
+   *   这里的 catch 只是兜住非预期异常 —— 无论哪条路，失败都保持 `hasTldr=false`，
+   *   分区不渲染、零提示（G6）；
+   * - 数据到达时就地赋值插入（spec §4.2），不预留高度 —— 与 siblings 的异步插入
+   *   是同一条既有惯例，页面其余分区照常。
+   */
+  private loadTldr(param: BrewDetailParams, state: BrewDetailState): void {
+    if (param.kind !== BrewKind.FORMULA || param.token.trim().length === 0) {
+      return;
+    }
+    TldrService.getInstance().get(param.token).then((page: TldrPage | null) => {
+      // 空示例页与无页同口径：只有真正可渲染的示例才值得占一个分区
+      if (page !== null && page.examples.length > 0) {
+        state.tldrPage = page;
+        state.hasTldr = true;
+        Logger.info(TAG, `tldr ready, kind=${param.kind} token=${param.token} locale=${page.locale}`);
+      }
+    }).catch((error: Error) => {
+      Logger.warn(TAG, `tldr load failed. reason=${error.message}`);
     });
   }
 }

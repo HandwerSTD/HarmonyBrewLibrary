@@ -13,7 +13,9 @@
  * limitations under the License.
  */
 
-import { BundleInfoData, CommonConstants, ResourceUtil, StorageKey } from '@ohos/common';
+import { common } from '@kit.AbilityKit';
+import { BundleInfoData, CommonConstants, Logger, ResourceUtil, StorageKey } from '@ohos/common';
+import { TLDR_REPO_URL } from '@ohos/brewcommon';
 import { AboutItemCard } from '../component/AboutItemCard';
 import { MineConstant } from '../constant/CommonConstants';
 import { AboutVM, ViewRegistrationInfoEvent } from '../viewmodel/AboutVM';
@@ -25,6 +27,19 @@ export struct AboutView {
   @StorageProp(StorageKey.BUNDLE_INFO) bundleInfo?: BundleInfoData =
     AppStorage.get<BundleInfoData>(StorageKey.BUNDLE_INFO);
   @Consume('appIconDescriptor') drawableDescriptor: DrawableDescriptor;
+
+  /** 署名行跳转 tldr-pages 仓库（CC BY 4.0 的署名指向）。宿主拿不到时静默结束 */
+  private openTldrRepo(): void {
+    const host: Context | undefined = this.getUIContext().getHostContext();
+    if (host === undefined) {
+      Logger.warn('[AboutView]', 'openTldrRepo skipped, host context unavailable');
+      return;
+    }
+    const ability: common.UIAbilityContext = host as common.UIAbilityContext;
+    ability.openLink(TLDR_REPO_URL).catch((error: Error) => {
+      Logger.warn('[AboutView]', `openTldrRepo failed, msg=${error.message}`);
+    });
+  }
 
   build() {
     NavDestination() {
@@ -41,6 +56,32 @@ export struct AboutView {
             .margin({ top: $r('sys.float.padding_level4') })
           AboutItemCard()
             .margin({ top: $r('sys.float.padding_level16') })
+          // 第三方内容署名（tldr 用法示例，CC BY 4.0 —— spec 2026-11-22 §6/G11）。
+          // 与包详情页分区底部的署名行同源（同一个 string key），点击打开 tldr-pages 仓库。
+          Row() {
+            Text($r('app.string.brew_tldr_attribution'))
+              .fontWeight(FontWeight.Regular)
+              .fontColor($r('sys.color.font_secondary'))
+              .fontSize($r('sys.float.Body_S'))
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor([$r('sys.color.icon_fourth')])
+              .margin({ left: $r('sys.float.padding_level2') })
+          }
+          .width('100%')
+          .height($r('app.float.about_item_card_height'))
+          .borderRadius($r('sys.float.corner_radius_level7'))
+          .backgroundColor($r('sys.color.comp_background_list_card'))
+          .justifyContent(FlexAlign.Start)
+          .alignItems(VerticalAlign.Center)
+          .padding({
+            left: $r('sys.float.padding_level6'),
+            right: $r('sys.float.padding_level6'),
+          })
+          .margin({ top: $r('sys.float.padding_level6') })
+          .onClick(() => {
+            this.openTldrRepo();
+          })
         }
         .margin({ top: $r('sys.float.padding_level8') })
         .padding({

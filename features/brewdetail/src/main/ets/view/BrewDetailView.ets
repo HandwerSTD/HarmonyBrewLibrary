@@ -43,6 +43,7 @@ import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } 
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
 import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
+import { BrewTldrSectionView } from '../component/BrewTldrSectionView';
 import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
 
@@ -302,6 +303,14 @@ export struct BrewDetailView {
             .padding($r('sys.float.padding_level6'))
             .backgroundColor($r('sys.color.comp_background_list_card'))
             .borderRadius($r('sys.float.corner_radius_level8'))
+        }
+
+        // 8.5 用法示例（tldr，spec 2026-11-22）—— 装在 caveats 之后（与「装后要做的事」
+        // 相邻形成说明书聚拢，spec §4.1）。tldr 只覆盖命令行工具：cask 不装配（G2）。
+        // 数据异步到达时就地插入（spec §4.2），与 siblings 的异步插入是同一惯例；
+        // hasTldr 为假（无页 / 断网 / 解析失败）时整区不渲染、零提示（G6）。
+        if (this.kind === BrewKind.FORMULA && this.detailState.hasTldr) {
+          BrewTldrSectionView({ token: this.detailState.params.token, page: this.detailState.tldrPage })
         }
 
         // 10 同分类其他包

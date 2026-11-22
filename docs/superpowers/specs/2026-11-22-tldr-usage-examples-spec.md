@@ -65,6 +65,14 @@
 ```
 
 - **路径结构实测先行**：tldr 仓库语言目录的确切命名（`pages.zh/` 下的平台子目录）与分支名（main）在编码第一天用 3 个探针请求核对（wget / curl / ffmpeg），核对结果写回本节。
+
+- **探针记录（2026-11-22 实测，已据此校准实现）**：
+  - **渠道 A（jsDelivr）可用**：`https://cdn.jsdelivr.net/gh/tldr-pages/tldr@main/pages.zh/common/wget.md` → `HTTP 200`（1380B）；`ffmpeg.md`（1762B）、`curl.md`、`yt-dlp.md`（1871B）均 200——`pages.zh/common/<token>.md` 的路径结构与 `@main` 分支名**实测成立**（`@master` 同样被 jsDelivr 解析为 200，不能据此判定默认分支；GitHub API 因限流 403，未能从仓库侧直接确认，以 `@main` 全部命中为准）。
+  - **中文平台子目录不止 common**：`pages.zh/linux/apt.md`、`pages.zh/osx/open.md` 均 200。v1 取数链仍按 §3.1 的「zh/common → en/common → en/linux → en/osx」执行（zh 的 linux/osx 命中留给 v2 扩链，不在本次范围）。
+  - **渠道 B（GitHub raw）本网络不可达**：`raw.githubusercontent.com` 连发 3 次均 `Connection reset by peer`（HTTP 000）；`api.github.com` 可达但匿名限流 403。**渠道 B 的成功路径与 404 行为本轮未观测**，回落代码按 spec 照常保留——它是否生效随部署网络而定，不能引用本轮结果断言其可用或不可用。
+  - **404 行为（jsDelivr 实测）**：`HTTP 404` + `text/plain` 93 字节正文 `Couldn't find the requested file /pages.zh/common/<token>.md in tldr-pages/tldr.`，响应头 `Cache-Control: no-cache, no-store, must-revalidate`——**CDN 不做负缓存，24h 负缓存必须由本地自己实现**（G9 依据）。正文不含 `#` 标题，解析器标题校验（F6）构成第二道防线。
+  - **页面格式与 §3.2 原假设有一处差异**：示例命令**不是 ``` 围栏代码块**，而是**独占一行的单反引号内联代码**（`` `命令` ``，上下各一空行）；`{{占位符}}` 原样保留在命令文本内，包裹占位符的引号（如 `yt-dlp "{{...}}"`）在花括号**外**、属命令原文的一部分；说明行以 `- ` 开头（可跨行）；`> ` 引用组为页首说明，其中「另请参阅 / See also」「更多信息 / More information」行按 §3.2「其他内容丢弃」。解析器按实测格式实现，并把围栏代码块作为防御性兼容分支（§3.2 已同步修正）。
+  - **token↔页面名不对齐实例（佐证 v1 不做别名表）**：`ripgrep` 无中文页（404），英文 `pages/common/ripgrep.md` 亦 404——tldr 页名是 `rg`。该 token 走负缓存、分区隐藏，正是 §3.1「未命中即隐藏」的预期行为。
 - **token ↔ 页面名映射（v1）**：精确匹配 `<token>`（小写）；未命中即隐藏。已知的不对齐（如 gnupg → gpg、openssl@3 → openssl）v1 不做别名表，进负缓存；v2 若命中率不足再加策展别名表（走 `generate.py` 校验体系）。
 - **目录约定**：`filesDir/brew_live/tldr/<locale>/<token>.md` + `<token>.meta.json`（fetchedAt / channel / locale）；归属登记进 `BrewCacheAdmin`（统一清理），**不随 CacheEpoch（浏览源切换）清理**——tldr 与浏览源无关。
 
@@ -74,7 +82,7 @@
 |---|---|
 | `# <command>` 标题行 | 校验与 token 匹配（不匹配整页丢弃，防御抓错页） |
 | `>` 引用行 | 连续引用合并为「说明段」 |
-| `- <说明>：` + 紧随的 ``` 代码块 | 一个示例项 `{desc, code}`；`code` 内 `{{...}}` 占位符原样保留并高亮样式，`hasPlaceholder = /{{.+?}}/.test(code)` |
+| `- <说明>：` + 紧随的代码行 | 一个示例项 `{desc, code}`。**实测（§3.1 探针）命令是独占一行的单反引号内联代码**（`` `命令` ``），解析器以它为主格式、``` 围栏代码块为防御性兼容；`code` 内 `{{...}}` 占位符原样保留并高亮样式，`hasPlaceholder = /{{.+?}}/.test(code)` |
 | 其他内容（More information 链接行等） | 丢弃 |
 
 解析器为纯函数（输入 markdown 字符串 → 输出 TldrPage | null），**可执行检查脚本** `hmosword-build/brew-tldr/check_tldr_parser.mjs` 承担回归（对齐 `brew-search` 检查脚本的做法）。
