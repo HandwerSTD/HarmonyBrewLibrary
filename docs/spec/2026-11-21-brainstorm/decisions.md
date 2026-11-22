@@ -70,8 +70,9 @@ S1 拖拽导入（25）/ S2 独立执行窗（26）/ S3 命令面板（27）/
 - **2026-11-22 终裁**：删 22 P 溯源卡与食品安全节（无意义）、移除 30 生涯报告彩蛋；愿景页升为主线四（跨设备软件包同步，鸿蒙多设备能力承载，libssh 维持愿景）；**`motivation.md` v2 成文**——三主线 + AI 技术章结构定稿。
 - **2026-11-22 motivation v3 定稿**（需求方五条修订）：开场改为场景叙事（论坛提问 + 作者五段自述：不知道软件包 / 看不懂 / 不敢更新 / 懒得管 / 双机）；删「一次安静的继承」舞台段；删口径与数字论证、删「为什么是现在 / 为什么令人信服 / 为什么是我们」；主线二与技术章合并为 **AI Companion**（功能平铺，无方法论与防御表）。
 - **2026-11-22 spec 编制完成**（按既有 superpowers spec 十节骨架：目标判据 / 现状 / 数据流 / 失败态分级 / 验证）：
-  - **I**：`docs/superpowers/specs/2026-11-22-tldr-usage-examples-spec.md`（G1–G13；双渠道抓取 / zh→en 回落 / 负缓存 / stale-while-revalidate / CC BY 4.0 合规 / 无占位符才可执行）；
-  - **D**：`docs/superpowers/specs/2026-11-22-ai-companion-spec.md`（G1–G14；BYOK 底座 + D1/D2/D3 三件 + 28 词表降级 + 阶段二 32 登记；AI 生成的命令永不一键执行）。
+  - **I**：`docs/superpowers/specs/2026-11-22-tldr-usage-examples-spec.md`（G1–G13；双渠道抓取 / zh→en 回落 / 负缓存 / stale-while-revalidate / CC BY 4.0 合规 / 无占位符才可执行）；实现由 parallel worktree `feature/ai-companion-tldr` 承担：702dcfb（全量实现，双 product 构建通过，检查脚本 1111 断言绿）→ 1c1a143（扁平化 + 移至「提供的命令」之后，按真机反馈）。真机验证清单（G1–G11 真机项 + 20 token 命中率）待需求方执行。
+  - **D**：`docs/superpowers/specs/2026-11-22-ai-companion-spec.md`（G1–G14；BYOK 底座 + D1/D2/D3 三件 + 28 词表降级 + 阶段二 32 登记；AI 生成的命令永不一键执行）。**已实现**：worktree `feature/ai-companion-agent`（子代理 14 提交 / 41 文件 +4,155 行 / 双 product 构建全绿 / AI 模块 lint 0 error）；@hmkit/ai 2.0.0 为 AI infra；Asset Store Kit 存 Key（不可用时进程内存兜底）；parameterFile 因 ohpm 6.0.1 限制移除（@param 内联）。**待真机验证**：G1 Key 审计 / G2 latency / G3 秒开 / G4 grounding 抽检 / G5 幻觉过滤 / G8 断网矩阵 / G12 pc_normal / TTL 与 promptVersion 日志；合并主仓待需求方验收后进行。
+- **2026-11-22 命名错位修复立项（候选名链）**：实测 20 常见包精确命中 60%，4 个知名工具命名错位（ripgrep→rg 等）+ @version 后缀全 miss。修复 = 规则一（剥 @version）+ 规则二（executables 候选，零策展）+ 规则三（别名 JSON，缓，等命中率数据）；命中页名 ≠ 包名时加「提供的命令是 X」教学提示行。已派 impl-tldr（转场动画任务之后接力，分两个 commit）。
 
 ---
 

@@ -62,6 +62,8 @@
 
 ### 3.2 AiClient（`features/brewcommon/service/AiClient.ets`）
 
+- **AI infra 依赖（需求方指定）**：模型调用基础设施使用 `ohpm install @hmkit/ai`（ohpm 三方库，经 `oh-package.json5` 声明依赖）；AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按 §3.1 设置与存储；`@hmkit/ai` 的初始化参数与能力边界（response_format 支持、流式、错误结构）编码第一天以最小样例核对，结论写回本节。
+- **兼容性修复（2026-11-22，自建 chat completions 端点实测）**：① `AiTasks.parseJsonSafe` 解析前先剥离 markdown 代码栅栏（```json … ```）与首尾非 JSON 字符（取首个 `{` 到最后一个 `}`），自建网关 / 忽略 response_format 的端点常输出包裹文本；② `finish_reason === 'length'`（max_tokens 截断导致 JSON 不完整）显式归 E4，错误文案「输出被截断，请重试」——此前 finishReason 被忽略、截断输出只会以「schema mismatch」面目出现；③ D1 `steps` 放宽为 2–3 条（`isValid` 同步放宽），部分模型习惯输出两条步骤。
 - 非流式 chat completion；超时 15s；**不自动重试**（全部显式触发场景，用户自己重试）。
 - 输入截断：prompt 总长上限 8KB（超出按 §4/§6 各自的截断规则）。
 - 输出约定：**所有任务要求 JSON 输出**（`response_format` 若端点支持则使用；否则靠 prompt + 解析校验），低温度（D1 0.3 / D2 0.2 / D3 0.2）。
@@ -127,6 +129,14 @@
 | E2 | 网络失败 | 卡内重试按钮 | 自动切词表模式 + 提示 | 按钮不出现 |
 | E3 | 超时（15s） | 同 E2 | 同 E2 | 同 E2 |
 | E4 | 响应格式不符 / Schema 校验失败 | 错误态 + 重试（G11） | 错误态 + 重试 | 错误态 + 重试 |
+
+> **排查记录（2026-11-22，用户接自建 chat completions 端点报「响应格式异常」）**：E4 有四个触发点，
+> 与「自建/第三方 OpenAI 兼容端点」最相关的两个——①端点可能不支持 `response_format: json_object`
+> （多数兼容网关直接报 400 或忽略后输出 markdown 包裹的 JSON）；②模型输出带 ```json 代码栅栏或前后缀
+> 文本，`parseJsonSafe` 直接 `JSON.parse` 失败。③长输出被 `max_tokens` 截断（`finish_reason=length`）
+> 导致 JSON 不完整——代码未读 finishReason。④Schema 校验过严（如 D1 `steps` 必须恰好 3 条）。
+> 修复项（已实施，见 §3.2）：解析前剥离代码栅栏与首尾非 JSON 文本；`finish_reason=length` 归 E4 并
+> 提示「输出被截断，请重试（模型输出过长）」；`steps` 放宽为 2–3 条。
 | E5 | Provider 内容安全拒绝 | 显示「该包内容无法生成讲解」 | 显示「该意图无法处理」 | 显示「无法解读」 |
 | E6 | 用户取消 | 骨架消失，无痕 | 输入保留 | 卡片收起 |
 
