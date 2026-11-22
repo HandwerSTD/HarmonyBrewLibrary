@@ -26,6 +26,7 @@ import {
   BREW_ACTION_BUTTON_BOTTOM_EXTRA,
   BREW_ACTION_BUTTON_HEIGHT,
   BREW_ACTION_BAR_HEIGHT,
+  BREW_SECTION_KEY_EXECUTABLES,
   BrewCommandRunner,
   BrewCommandStartResult,
   BrewCommandState,
@@ -289,12 +290,24 @@ export struct BrewDetailView {
         // 3 元信息
         BrewDetailMetaBar({ rows: this.detailState.data.meta })
 
-        // 4/5/6/7/11 各分区（数据驱动；空分区不会出现在数组里）
+        // 4/5/6/7/11 各分区（数据驱动；空分区不会出现在数组里）。
+        // tldr「用法示例」装在「提供的命令」正下游：该分区 formula 独有（cask 路径不创建，
+        // G2 在数据层成立），用 section.key 识别而不是魔法下标 —— 分区集合是
+        // 「空分区不创建」的，下标会随包数据漂移，key 不会。
         ForEach(this.detailState.data.sections, (section: BrewInfoSection) => {
-          BrewInfoSectionView({ section: section })
+          // tldr 与宿主分区之间保持与页面其它卡片相同的间距节奏（外层 Column 的
+          // space 只作用于本 wrapper 之外，wrapper 内部要自己给；space 是构造参数）
+          Column({ space: $r('sys.float.padding_level8') }) {
+            BrewInfoSectionView({ section: section })
+            if (section.key === BREW_SECTION_KEY_EXECUTABLES && this.kind === BrewKind.FORMULA &&
+              this.detailState.hasTldr) {
+              BrewTldrSectionView({ token: this.detailState.params.token, page: this.detailState.tldrPage })
+            }
+          }
+          .width('100%')
         }, (section: BrewInfoSection, index: number) => `section_${index}`)
 
-        // 8 安装提示（caveats）
+        // 8 安装提示（caveats）—— 位置与顺序不变
         if (this.detailState.data.caveats) {
           Text(this.detailState.data.caveats)
             .fontSize($r('sys.float.Body_M'))
@@ -303,14 +316,6 @@ export struct BrewDetailView {
             .padding($r('sys.float.padding_level6'))
             .backgroundColor($r('sys.color.comp_background_list_card'))
             .borderRadius($r('sys.float.corner_radius_level8'))
-        }
-
-        // 8.5 用法示例（tldr，spec 2026-11-22）—— 装在 caveats 之后（与「装后要做的事」
-        // 相邻形成说明书聚拢，spec §4.1）。tldr 只覆盖命令行工具：cask 不装配（G2）。
-        // 数据异步到达时就地插入（spec §4.2），与 siblings 的异步插入是同一惯例；
-        // hasTldr 为假（无页 / 断网 / 解析失败）时整区不渲染、零提示（G6）。
-        if (this.kind === BrewKind.FORMULA && this.detailState.hasTldr) {
-          BrewTldrSectionView({ token: this.detailState.params.token, page: this.detailState.tldrPage })
         }
 
         // 10 同分类其他包

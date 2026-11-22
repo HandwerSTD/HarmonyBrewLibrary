@@ -61,7 +61,7 @@ export class BrewDetailState {
   /** 同分类其他包，独立加载，失败时保持为空 */
   public siblings: BrewPackageItem[] = [];
   /**
-   * tldr 用法示例页（caveats 之后的「用法示例」分区，spec 2026-11-22）。
+   * tldr 用法示例页（「提供的命令」分区正下方的「用法示例」分区，spec 2026-11-22）。
    *
    * 与 `lifecycle` 同一条约束：ArkUI 的 `if` 不给属性表达式做联合类型收窄，
    * 所以这里放**恒非 null** 的实例 + `hasTldr` 开关，页面写

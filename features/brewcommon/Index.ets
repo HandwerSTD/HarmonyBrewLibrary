@@ -26,6 +26,7 @@ export { BrewDiscoverBoardKey } from './src/main/ets/model/BrewModels';
 
 // 详情页展示数据（已归一化）。UI 需要 new 出来做兜底，所以是值导出。
 export {
+  BREW_SECTION_KEY_EXECUTABLES,
   BrewInfoPageData,
   BrewInfoRow,
   BrewInfoSection,

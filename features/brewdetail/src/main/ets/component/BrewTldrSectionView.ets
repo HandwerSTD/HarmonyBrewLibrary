@@ -22,11 +22,17 @@ const COPIED_RESET_MS: number = 2500;
 /**
  * 详情页的「用法示例」分区（tldr，spec 2026-11-22）。
  *
- * **本组件从不渲染空态**：`hasTldr` 为假时页面根本不会装配它（G6：无数据静默隐藏，
- * 无数据不是错误态）；cask 详情页连 tldr 请求都不发，分区也不会出现（G2）。
- * 因此 build 里假定 `page.examples` 非空 —— 这个前提由 VM 的装配条件保证。
+ * **位置**：「提供的命令」分区正下方 —— 由页面按 `section.key` 装配（formula 独有，
+ * cask 详情页整区不出现，G2）。数据异步到达时就地插入（spec §4.2）。
  *
- * 结构（spec §4.1）：分区标题 → 说明段（可选）→ 示例卡片列表 → 署名行。
+ * **视觉**：扁平列表 —— 外层容器是分区卡（comp_background_list_card，与详情页其它分区
+ * 一致），示例之间用 `Divider` 分隔，示例自身不再套独立卡片底色（避免「卡片套卡片」）。
+ * 命令行保留一条 tertiary 灰条承载等宽文本，与「安装命令」卡片的命令行同款。
+ *
+ * **本组件从不渲染空态**：`hasTldr` 为假时页面根本不会装配它（G6：无数据静默隐藏，
+ * 无数据不是错误态），因此 build 里假定 `page.examples` 非空 —— 由 VM 的装配条件保证。
+ *
+ * 结构（spec §4.1）：分区标题 → 说明段（可选）→ 扁平示例列表 → 署名行。
  * 「执行」把示例原文送进既有的执行 Sheet（BrewCommandRunner 单例承载，
  * 流式输出 / 中断 / 退出码全部复用），不做任何改写或参数猜测。
  */
@@ -53,7 +59,16 @@ export struct BrewTldrSectionView {
       }
 
       ForEach(this.page.examples, (example: TldrExample, index: number) => {
-        BrewTldrExampleCard({ token: this.token, example: example })
+        Column() {
+          if (index > 0) {
+            Divider()
+              .strokeWidth('1px')
+              .color($r('sys.color.comp_background_tertiary'))
+              .margin({ top: $r('sys.float.padding_level6'), bottom: $r('sys.float.padding_level6') })
+          }
+          BrewTldrExampleCard({ token: this.token, example: example })
+        }
+        .width('100%')
       }, (example: TldrExample, index: number) => `tldr_example_${index}`)
 
       // 署名行（G11）：固定文案，点击打开 tldr-pages 仓库。tldr 内容 CC BY 4.0，署名是分发条件
@@ -69,7 +84,7 @@ export struct BrewTldrSectionView {
       .width('100%')
       .justifyContent(FlexAlign.Start)
       .alignItems(VerticalAlign.Center)
-      .margin({ top: $r('sys.float.padding_level4') })
+      .margin({ top: $r('sys.float.padding_level6') })
       .onClick(() => {
         this.openRepo();
       })
@@ -96,7 +111,8 @@ export struct BrewTldrSectionView {
 }
 
 /**
- * 一张示例卡：说明行 + 等宽命令块（占位符高亮）+ 行尾操作。
+ * 一条示例（**扁平**：无自己的卡片底色与圆角，分隔由父级的 Divider 承担）：
+ * 说明行 + 等宽命令灰条（占位符高亮）+ 行尾操作。
  *
  * 占位符高亮是**展示层唯一**的加工：`Span` 序列来自 `TldrParser.splitCodeSegments`，
  * 全部段拼接与 `code` 逐字一致 —— 所以「渲染的命令文本」就是原文，复制（G3）与
@@ -124,7 +140,7 @@ struct BrewTldrExampleCard {
         .width('100%')
         .margin({ bottom: $r('sys.float.padding_level4') })
 
-      // 命令块：等宽字体 + 占位符高亮（spec §4.1）。复制走下面的专用按钮（G3），
+      // 命令灰条：等宽字体 + 占位符高亮（spec §4.1）。复制走下面的专用按钮（G3），
       // 不依赖文本选择（`Text.selectable` 在本 SDK 档位不可用，编译已实测）
       Column() {
         Text() {
@@ -174,11 +190,8 @@ struct BrewTldrExampleCard {
       .borderRadius($r('sys.float.corner_radius_level6'))
       .backgroundColor($r('sys.color.comp_background_tertiary'))
     }
+    .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding($r('sys.float.padding_level4'))
-    .borderRadius($r('sys.float.corner_radius_level6'))
-    .backgroundColor($r('sys.color.comp_background_secondary'))
-    .margin({ bottom: $r('sys.float.padding_level4') })
   }
 
   /** 「执行」的显示条件（G4 + G10）：无占位符，且本版本开了执行通道 */

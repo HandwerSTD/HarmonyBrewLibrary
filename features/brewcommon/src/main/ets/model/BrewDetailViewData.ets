@@ -36,12 +36,22 @@ export class BrewInfoRow {
 export class BrewInfoSection {
   public title: ResourceStr;
   public rows: BrewInfoRow[];
+  /**
+   * 分区标识（默认空串）。**只给需要被 UI 按名字装配的分区设置**：
+   * 详情页把 tldr「用法示例」分区装在「提供的命令」正下方（2026-11-22 tldr spec），
+   * 靠它识别目标分区，而不是靠 sections 里的魔法下标 —— 分区集合是「空分区不创建」的，
+   * 下标会随包的数据漂移，名字不会。
+   */
+  public key: string = '';
 
   public constructor(title: ResourceStr, rows: BrewInfoRow[]) {
     this.title = title;
     this.rows = rows;
   }
 }
+
+/** BrewInfoSection.key 的取值。目前只有「提供的命令」需要被按名装配 */
+export const BREW_SECTION_KEY_EXECUTABLES: string = 'executables';
 
 /** 生命周期提示（废弃 / 停用）。命中任何一个才创建。 */
 export class BrewLifecycleNotice {
