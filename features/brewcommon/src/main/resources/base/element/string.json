@@ -795,14 +795,6 @@
     {
       "name": "ai_error_e5_detail",
       "value": "请求被拒绝（%s）"
-    },
-    {
-      "name": "ai_settings_non_streaming",
-      "value": "兼容模式（非流式）"
-    },
-    {
-      "name": "ai_settings_non_streaming_hint",
-      "value": "端点报「响应格式异常」且日志见 protocol 错误时打开；改走一次非流式请求"
     }
   ]
 }

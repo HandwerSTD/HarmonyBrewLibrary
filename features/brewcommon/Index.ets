@@ -292,7 +292,6 @@ export {
   AI_DEEPSEEK_BASE_URL,
   AI_DEEPSEEK_DEFAULT_MODEL,
   AI_ASSET_ALIAS_API_KEY,
-  AI_PREFS_KEY_NON_STREAMING,
 } from './src/main/ets/constant/AiConstants';
 export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
 

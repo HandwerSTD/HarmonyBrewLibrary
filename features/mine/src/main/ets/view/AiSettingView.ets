@@ -12,7 +12,6 @@ import {
   AiSettingInitEvent,
   AiSettingKeyClearEvent,
   AiSettingKeySaveEvent,
-  AiSettingNonStreamingEvent,
   AiSettingProviderEvent,
   AiSettingSaveEvent,
   AiSettingTestEvent,
@@ -170,32 +169,6 @@ export struct AiSettingView {
         .onChange((value: string) => {
           this.state.editingKey = value;
         })
-
-      // 兼容模式（非流式）：仅自定义端点显示。流式 decoder 对 usage=null 的端点
-      // 会炸出 protocol 错误（spec §8 排查记录），打开后走一次非流式 POST。
-      if (this.state.editingProvider === AI_PROVIDER_CUSTOM) {
-        Row({ space: 8 }) {
-          Column({ space: 2 }) {
-            Text($r('app.string.ai_settings_non_streaming'))
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_primary'))
-            Text($r('app.string.ai_settings_non_streaming_hint'))
-              .fontSize($r('sys.float.Body_S'))
-              .fontColor($r('sys.color.font_tertiary'))
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
-
-          Toggle({ type: ToggleType.Switch, isOn: this.state.editingNonStreaming })
-            .selectedColor($r('sys.color.ohos_id_color_emphasize'))
-            .onChange((isOn: boolean) => {
-              AiSettingVM.getInstance().sendEvent(new AiSettingNonStreamingEvent(isOn));
-            })
-        }
-        .width(CommonConstants.FULL_PERCENT)
-        .margin({ top: 12 })
-        .alignItems(VerticalAlign.Center)
-      }
 
       Row({ space: 8 }) {
         Button($r('app.string.ai_settings_save'))
