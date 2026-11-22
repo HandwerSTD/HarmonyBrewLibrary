@@ -763,6 +763,14 @@
     {
       "name": "ai_error_e5",
       "value": "该内容无法生成讲解"
+    },
+    {
+      "name": "ai_provider_deepseek",
+      "value": "DeepSeek"
+    },
+    {
+      "name": "ai_provider_custom",
+      "value": "自定义端点"
     }
   ]
 }

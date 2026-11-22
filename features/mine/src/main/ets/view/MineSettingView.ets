@@ -48,6 +48,18 @@ struct MineSettingView {
             })
             ListItem() {
               HmosListItem({
+                title: $r('app.string.ai_settings_title'),
+                handleClickAction: () => {
+                  this.pathStack.pushPath({ name: PageEnum.MINE_AI_SETTINGS_VIEW });
+                }
+              })
+            }
+            .padding({
+              left: $r('sys.float.padding_level2'),
+              right: $r('sys.float.padding_level2'),
+            })
+            ListItem() {
+              HmosListItem({
                 title: $r('app.string.about'),
                 handleClickAction: () => {
                   this.pathStack.pushPath({ name: 'AboutView' });

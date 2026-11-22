@@ -759,6 +759,14 @@
     {
       "name": "ai_error_e5",
       "value": "This content cannot be explained"
+    },
+    {
+      "name": "ai_provider_deepseek",
+      "value": "DeepSeek"
+    },
+    {
+      "name": "ai_provider_custom",
+      "value": "Custom endpoint"
     }
   ]
 }
