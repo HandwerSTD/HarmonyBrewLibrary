@@ -20,14 +20,16 @@ import {
 import {
   BREW_CHIP_BAR_HEIGHT,
   BrewChipBar,
+  BrewKind,
   BrewPackageRow,
   brewTitleBarStyle,
   brewTitleBarTotalHeight,
 } from '@ohos/brewcommon';
-// 本文件里 `BrewDetailParams` 与 `BrewPackageItem` 都只作类型标注（BrewPackageItem 的实例
-// 由 `BrewSearchRow` 带着来），所以两个都走 `import type`。
-import type { BrewDetailParams, BrewPackageItem } from '@ohos/brewcommon';
+import type { BrewDetailParams } from '@ohos/brewcommon';
+// BrewPackageItem 是值导出（AI 找工具的结果行要 new 它）。
+import { BrewPackageItem } from '@ohos/brewcommon';
 import { BrewSearchRow, BrewSearchRowSource } from '../model/BrewSearchRowSource';
+import { BrewAiFindCard } from '../component/BrewAiFindCard';
 import { BrewSearchState } from '../viewmodel/BrewSearchState';
 import { BrewSearchVM } from '../viewmodel/BrewSearchVM';
 import { BrewSearchSuggestions } from '../component/BrewSearchSuggestions';
@@ -237,6 +239,27 @@ export struct BrewSearchResultView {
   }
 
   /**
+   * AI 找工具的结果行 → 详情页。kind 由目录索引判定（AiFindRow 带）。
+   * id 用 tokenId 决定性哈希（与列表页/详情页路由同一套 id 口径）。
+   */
+  private openAiFindDetail(token: string, kind: string): void {
+    const item: BrewPackageItem = new BrewPackageItem();
+    item.token = token;
+    item.subTitle = token;
+    const kindValue: BrewKind = kind === 'cask' ? BrewKind.CASK : BrewKind.FORMULA;
+    this.searchPageContext.openPage({
+      routerName: PageEnum.BREW_DETAIL_VIEW,
+      param: {
+        kind: kindValue,
+        title: token,
+        id: 0,
+        token: token,
+        categoryKey: '',
+      } as BrewDetailParams,
+    }, true);
+  }
+
+  /**
    * 输入框行（标题栏 `bottomBuilder` 的第一行）。
    *
    * **内缩写在包一层的 `Row` 的 `padding` 上**，不是写在 `BrewSearchBar` 上：
@@ -414,6 +437,13 @@ export struct BrewSearchResultView {
           this.IndexPendingBuilder();
         }
         if (this.showingSuggestions()) {
+          // AI 帮我找工具（spec §5）：挂在历史/发现之前，显式触发、不阻塞主搜索
+          BrewAiFindCard({
+            openDetail: (token: string, kind: string) => {
+              this.openAiFindDetail(token, kind);
+            },
+          })
+            .margin({ bottom: $r('sys.float.padding_level8') })
           BrewSearchSuggestions({
             pickWord: (word: string) => {
               // 关键字只有本页一个写者：直接填入并立刻搜

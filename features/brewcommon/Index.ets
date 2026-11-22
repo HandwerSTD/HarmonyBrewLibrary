@@ -72,7 +72,9 @@ export {
   BREW_SEARCH_SCORE_WORD,
 } from './src/main/ets/model/BrewSearchEngine';
 
-export type { BrewSearchEntry, BrewSearchHit } from './src/main/ets/model/BrewSearchEngine';
+export type { BrewSearchHit } from './src/main/ets/model/BrewSearchEngine';
+// BrewSearchEntry 是值导出（AI 找工具的目录索引要 new 它），与 BrewSearchHit 分开。
+export { BrewSearchEntry } from './src/main/ets/model/BrewSearchEngine';
 
 // ---------------------------------------------------------------- 常量
 
@@ -112,6 +114,10 @@ export { BrewMetaSync } from './src/main/ets/service/BrewMetaSync';
 export type { DescShardOutcome } from './src/main/ets/service/BrewMetaSync';
 
 export { BrewCommandGenerator } from './src/main/ets/util/BrewCommandGenerator';
+
+// tokenId（token → 稳定 id 的决定性哈希）是路由与缓存键的公共口径，
+// AI 找工具的结果行也要走同一套 id，所以从 brewcommon 导出。
+export { BrewBrowseBuilder } from './src/main/ets/service/BrewBrowseBuilder';
 
 // 设备上的 brew 调用口径：路径发现、环境前缀、命令行拼装。读取与执行共用同一份。
 export { BrewCli } from './src/main/ets/service/BrewCli';
