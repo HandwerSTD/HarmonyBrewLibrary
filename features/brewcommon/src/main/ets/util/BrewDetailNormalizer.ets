@@ -11,6 +11,7 @@ import type {
   BrewRequirement,
 } from '../model/BrewModels';
 import {
+  BREW_SECTION_KEY_EXECUTABLES,
   BrewInfoPageData,
   BrewInfoRow,
   BrewInfoSection,
@@ -49,11 +50,16 @@ export class BrewDetailNormalizer {
     data.lifecycle = BrewDetailNormalizer.lifecycleOf(detail);
     data.hasLifecycle = detail.deprecated || detail.disabled;
 
-    // 4 提供的命令
+    // 4 提供的命令。原始清单单独留给 tldr 候选名链（spec §3.1）；key 供详情页把
+    // tldr「用法示例」装配在它正下方（formula 独有，cask 路径不创建这个分区，
+    // 所以 G2 在数据层就成立）
     if (detail.executables.length > 0) {
-      data.sections.push(new BrewInfoSection(
+      data.executables = detail.executables;
+      const executables: BrewInfoSection = new BrewInfoSection(
         $r('app.string.brew_label_executables'),
-        [new BrewInfoRow($r('app.string.brew_label_executables'), detail.executables.join(', '))]));
+        [new BrewInfoRow($r('app.string.brew_label_executables'), detail.executables.join(', '))]);
+      executables.key = BREW_SECTION_KEY_EXECUTABLES;
+      data.sections.push(executables);
     }
 
     // 5 兼容性与要求

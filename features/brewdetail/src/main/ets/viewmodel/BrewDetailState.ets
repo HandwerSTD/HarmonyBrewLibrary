@@ -3,7 +3,7 @@
  */
 
 import { LoadingModel } from '@ohos/common';
-import { BrewInfoPageData, BrewKind, BrewPackageItem } from '@ohos/brewcommon';
+import { BrewInfoPageData, BrewKind, BrewPackageItem, TldrPage } from '@ohos/brewcommon';
 import type { BrewDetailParams } from '@ohos/brewcommon';
 
 /**
@@ -60,4 +60,16 @@ export class BrewDetailState {
   public commandHiddenWarned: boolean = false;
   /** 同分类其他包，独立加载，失败时保持为空 */
   public siblings: BrewPackageItem[] = [];
+  /**
+   * tldr 用法示例页（「提供的命令」分区正下方的「用法示例」分区，spec 2026-11-22）。
+   *
+   * 与 `lifecycle` 同一条约束：ArkUI 的 `if` 不给属性表达式做联合类型收窄，
+   * 所以这里放**恒非 null** 的实例 + `hasTldr` 开关，页面写
+   * `if (hasTldr) { BrewTldrSectionView({ page: tldrPage }) }` 才过类型检查。
+   *
+   * tldr 是异步到达的增强层（spec §4.2）：数据到达前 `hasTldr=false`，分区不渲染、
+   * 不占位；取数失败（无页/断网/解析失败）也落在这里 —— 保持 false，零错误提示（G6）。
+   */
+  public tldrPage: TldrPage = new TldrPage();
+  public hasTldr: boolean = false;
 }

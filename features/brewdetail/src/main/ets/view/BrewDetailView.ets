@@ -26,6 +26,7 @@ import {
   BREW_ACTION_BUTTON_BOTTOM_EXTRA,
   BREW_ACTION_BUTTON_HEIGHT,
   BREW_ACTION_BAR_HEIGHT,
+  BREW_SECTION_KEY_EXECUTABLES,
   BrewCommandRunner,
   BrewCommandStartResult,
   BrewCommandState,
@@ -43,6 +44,7 @@ import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } 
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
 import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
+import { BrewTldrSectionView } from '../component/BrewTldrSectionView';
 import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
 
@@ -288,12 +290,28 @@ export struct BrewDetailView {
         // 3 元信息
         BrewDetailMetaBar({ rows: this.detailState.data.meta })
 
-        // 4/5/6/7/11 各分区（数据驱动；空分区不会出现在数组里）
+        // 4/5/6/7/11 各分区（数据驱动；空分区不会出现在数组里）。
+        // tldr「用法示例」装在「提供的命令」正下游：该分区 formula 独有（cask 路径不创建，
+        // G2 在数据层成立），用 section.key 识别而不是魔法下标 —— 分区集合是
+        // 「空分区不创建」的，下标会随包数据漂移，key 不会。
         ForEach(this.detailState.data.sections, (section: BrewInfoSection) => {
-          BrewInfoSectionView({ section: section })
+          // tldr 与宿主分区之间保持与页面其它卡片相同的间距节奏（外层 Column 的
+          // space 只作用于本 wrapper 之外，wrapper 内部要自己给；space 是构造参数）
+          Column({ space: $r('sys.float.padding_level8') }) {
+            BrewInfoSectionView({ section: section })
+            if (section.key === BREW_SECTION_KEY_EXECUTABLES && this.kind === BrewKind.FORMULA &&
+              this.detailState.hasTldr) {
+              // 插入转场（G15）：淡入 + 轻微上移，消掉「数据到达瞬间闪现」的突兀感。
+              // 移除侧走同一效果的默认（对称），不单独配消失动画。
+              BrewTldrSectionView({ token: this.detailState.params.token, page: this.detailState.tldrPage })
+                .transition(TransitionEffect.OPACITY.animation({ duration: 300, curve: Curve.Friction })
+                  .combine(TransitionEffect.translate({ y: 12 })))
+            }
+          }
+          .width('100%')
         }, (section: BrewInfoSection, index: number) => `section_${index}`)
 
-        // 8 安装提示（caveats）
+        // 8 安装提示（caveats）—— 位置与顺序不变
         if (this.detailState.data.caveats) {
           Text(this.detailState.data.caveats)
             .fontSize($r('sys.float.Body_M'))

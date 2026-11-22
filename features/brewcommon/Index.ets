@@ -26,6 +26,7 @@ export { BrewDiscoverBoardKey } from './src/main/ets/model/BrewModels';
 
 // 详情页展示数据（已归一化）。UI 需要 new 出来做兜底，所以是值导出。
 export {
+  BREW_SECTION_KEY_EXECUTABLES,
   BrewInfoPageData,
   BrewInfoRow,
   BrewInfoSection,
@@ -167,6 +168,22 @@ export {
 export { BrewLoadLog } from './src/main/ets/util/BrewLoadLog';
 
 export { BrewDetailNormalizer } from './src/main/ets/util/BrewDetailNormalizer';
+
+// ---------------------------------------------------------------- tldr 用法示例
+
+// tldr 取数层：内存/落盘缓存（TTL 14 天 + stale-while-revalidate）、双渠道抓取、24h 负缓存。
+// 详情页的「用法示例」分区是它的唯一 UI 消费者（specs/2026-11-22-tldr-usage-examples-spec.md）。
+export { TldrService } from './src/main/ets/service/TldrService';
+
+// tldr 解析器（纯函数）。BrewCommandRunner 的原始命令安全闸与检查脚本共用它。
+export { TldrParser } from './src/main/ets/util/TldrParser';
+export type { TldrCodeSegment } from './src/main/ets/util/TldrParser';
+
+// tldr 展示模型。UI 需要 new 出来做兜底（BrewDetailState），所以是值导出。
+export { TldrExample, TldrPage } from './src/main/ets/model/TldrPage';
+
+// 署名行跳转目标（G11）。详情页组件要用它 openLink，单独导出常量而不是整个常量模块。
+export { TLDR_REPO_URL } from './src/main/ets/constant/TldrConstants';
 
 // ---------------------------------------------------------------- 共享 UI 原子
 

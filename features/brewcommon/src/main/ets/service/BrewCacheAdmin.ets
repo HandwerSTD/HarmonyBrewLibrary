@@ -3,10 +3,13 @@
  */
 
 import { preferences } from '@kit.ArkData';
+import { fileIo } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { Logger } from '@ohos/common';
+import { Logger, StorageKey } from '@ohos/common';
+import { TLDR_CACHE_ROOT } from '../constant/TldrConstants';
 import { BrewSource, BrewSourceCacheStats } from '../model/BrewSourceModels';
 import { objKeys } from '../util/objkeys';
+import { TldrService } from './TldrService';
 import { BrewCacheEpoch } from './BrewCacheEpoch';
 import { BrewCatalogFile } from './BrewCatalogFile';
 import { BrewService } from './BrewService';
@@ -122,6 +125,14 @@ export class BrewCacheAdmin {
       // 而 `BrewCacheEpoch` 只能挡住同一会话内的在途写入，跨不了进程。
       // `persistNow` 同时会作废该源的句柄（所以下面不再需要 `releaseFor`）。
       BrewSourcePrefs.persistNow(sourceId);
+      // tldr 用法示例缓存随「一键清理」一起清（spec 2026-11-22 §9.4）。
+      // 它与浏览源无关，所以这里清的是**唯一**的清理入口：清任意源、改源 URL
+      // 触发的 clear 都会带走它；而 CacheEpoch 的切源重启路径**不**经过本方法，
+      // tldr 缓存在换源后保留 —— 这正是它刻意不进世代号体系的原因。
+      // 先重置内存副本再删盘：与上面 BrewService/BrewTable 的顺序同理，
+      // 避免内存里的旧页在清盘后又被写回（或直接命中旧值）。
+      TldrService.getInstance().resetMemory();
+      BrewCacheAdmin.deleteTldrFiles();
       // 通知放在清盘完成之后：订阅者收到通知会立刻读盘，早一步通知就会把还没被
       // 清掉的旧内容重新装进内存副本，用户看到「清了但列表还在」。
       if (isActive) {
@@ -130,6 +141,40 @@ export class BrewCacheAdmin {
       Logger.info(TAG, `clear id=${sourceId} active=${isActive} epoch=${before}→${after} done`);
       return Promise.resolve();
     });
+  }
+
+  /**
+   * 只清 tldr 用法示例缓存（目录 + 内存副本）。
+   *
+   * 独立入口的意义：`clear(sourceId)` 是按源的维护操作，tldr 没有按源的归属；
+   * 调用方（未来若加「只清 tldr」入口）不需要为此触发任何源的状态推进。
+   * 目前唯一的实际调用方就是 `clear()` 本身（统一清理语义）。
+   */
+  public static clearTldr(): Promise<void> {
+    return BrewCacheAdmin.enqueue(() => {
+      TldrService.getInstance().resetMemory();
+      BrewCacheAdmin.deleteTldrFiles();
+      return Promise.resolve();
+    });
+  }
+
+  /** 删除 tldr 缓存目录（`filesDir/brew_live/tldr`）。目录不存在时静默结束 */
+  private static deleteTldrFiles(): void {
+    const uiContext: UIContext | undefined = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
+    const host: Context | undefined = uiContext === undefined ? undefined : uiContext.getHostContext();
+    if (host === undefined) {
+      return;
+    }
+    const dir: string = host.filesDir + '/' + TLDR_CACHE_ROOT;
+    try {
+      if (fileIo.accessSync(dir)) {
+        fileIo.rmdirSync(dir);
+        Logger.info(TAG, `tldr cache cleared dir=${dir}`);
+      }
+    } catch (error) {
+      const e: BusinessError = error as BusinessError;
+      Logger.warn(TAG, `tldr cache clear failed, code=${e.code}, msg=${e.message}`);
+    }
   }
 
   /** 删除某源的整个 store。builtin 与会话激活源会被拒绝 */

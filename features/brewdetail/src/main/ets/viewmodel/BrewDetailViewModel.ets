@@ -3,7 +3,14 @@
  */
 
 import type { BusinessError } from '@kit.BasicServicesKit';
-import { LoadingModel, LoadingStatus, Logger, RequestErrorCode, Toast } from '@ohos/common';
+import {
+  LoadingModel,
+  LoadingStatus,
+  Logger,
+  RequestErrorCode,
+  StorageKey,
+  Toast,
+} from '@ohos/common';
 import {
   BrewCaskModel,
   BrewCli,
@@ -19,6 +26,7 @@ import {
   BrewKind,
   BrewSourceStore,
   BREW_DIALECT_HARMONYBREW,
+  TldrService,
 } from '@ohos/brewcommon';
 import type {
   BrewCaskDetail,
@@ -27,6 +35,7 @@ import type {
   BrewInfoPageData,
   BrewInstalledPackage,
   BrewPackageItem,
+  TldrPage,
 } from '@ohos/brewcommon';
 import { BrewDetailState, BrewInstallState } from './BrewDetailState';
 
@@ -88,6 +97,10 @@ export class BrewDetailViewModel {
       this.setStatus(state, LoadingStatus.SUCCESS);
       // tap 只在详情数据里有，所以安装状态与按钮可执行性要等数据落地后再算一次
       this.refreshInstallState(state);
+      // tldr 候选链需要「提供的命令」清单（executables 只在详情数据里有，
+      // spec 2026-11-22 §3.1）—— 详情成功后再发起。详情失败时整页本就是错误态，
+      // tldr 分区不可见，不需要取数。
+      this.loadTldr(param, state);
       Logger.info(TAG, `load success, kind=${param.kind} token=${param.token}`);
     }).catch((error: Error) => {
       if (error instanceof BrewDocAbsentError) {
@@ -245,5 +258,54 @@ export class BrewDetailViewModel {
     }).catch(() => {
       state.siblings = [];
     });
+  }
+
+  /**
+   * tldr 用法示例（spec 2026-11-22）。与 siblings 同一套「独立请求 + 失败静默」惯例：
+   *
+   * - 只对 formula 取（G2：tldr 只覆盖命令行工具，cask 详情页整区不出现，连请求都不发）；
+   * - 候选名链 = [token, 剥 @version 后缀, …executables]（服务层构建，命中即停），
+   *   ripgrep→rg、python@3.12→python、gnupg→gpg 这类命名错位由链修复；
+   * - `TldrService.get()` 从不 reject（内部已把整链无页/断网/解析失败全收敛成 null），
+   *   这里的 catch 只是兜住非预期异常 —— 无论哪条路，失败都保持 `hasTldr=false`，
+   *   分区不渲染、零提示（G6）；
+   * - 数据到达时就地赋值插入（spec §4.2），并带 300ms 淡入转场（G15）——
+   *   缓存命中与临时拉取走**同一条**落地路径，视觉一致性优先。
+   */
+  private loadTldr(param: BrewDetailParams, state: BrewDetailState): void {
+    if (param.kind !== BrewKind.FORMULA || param.token.trim().length === 0) {
+      return;
+    }
+    TldrService.getInstance().get(param.token, state.data.executables).then((page: TldrPage | null) => {
+      // 空示例页与无页同口径：只有真正可渲染的示例才值得占一个分区
+      if (page !== null && page.examples.length > 0) {
+        BrewDetailViewModel.applyTldrWithTransition(state, page);
+        Logger.info(TAG, `tldr ready, kind=${param.kind} token=${param.token} locale=${page.locale} ` +
+          `candidate=${page.command}`);
+      }
+    }).catch((error: Error) => {
+      Logger.warn(TAG, `tldr load failed. reason=${error.message}`);
+    });
+  }
+
+  /**
+   * tldr 数据落 state，带插入转场（G15）。
+   *
+   * `animateTo` 包住赋值：分区插入与下方内容的重排一起按 300ms 走
+   * （视图侧另有 `TransitionEffect` 控制新分区自己的淡入+上移，见 BrewDetailView）。
+   * UIContext 从 AppStorage 取（与 TldrService 同款取法）—— **拿不到时直接赋值不动画**：
+   * 转场是展示层锦上添花，任何环境下都不能因为它崩或卡住数据（G6 的兜底口径）。
+   */
+  private static applyTldrWithTransition(state: BrewDetailState, page: TldrPage): void {
+    const apply: () => void = () => {
+      state.tldrPage = page;
+      state.hasTldr = true;
+    };
+    const uiContext: UIContext | undefined = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
+    if (uiContext === undefined) {
+      apply();
+      return;
+    }
+    uiContext.animateTo({ duration: 300, curve: Curve.Friction }, apply);
   }
 }

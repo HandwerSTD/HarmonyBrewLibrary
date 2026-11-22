@@ -25,7 +25,10 @@
                 <!--policyitem type="compatibility" name="GPL-2.0+" path="abc/.*" desc="Process that runs independently, invoked by the X process."/-->
                 <!--policyitem type="license" name="LGPL" path="abc/.*" desc="Dynamically linked by module X"/-->
                 <!--policyitem type="copyright" name="xxx" path="abc/.*" rule="may" group="defaultGroup" filefilter="copyrightPolicyFilter" desc="Developed by X Company"/-->
-                <policyitem type="license" name="CC-BY-4.0" path=".*" rule="may" group="defaultGroup" filefilter="defaultPolicyFilter" desc="License for documents"/>
+                <!-- tldr 用法示例内容在运行时从 tldr-pages 仓库抓取（spec 2026-11-22），
+                     不随包分发文件本体；许可 CC BY 4.0，署名由包详情页分区底部与关于页的
+                     固定署名行承担，点击直达 https://github.com/tldr-pages/tldr -->
+                <policyitem type="license" name="CC-BY-4.0" path=".*" rule="may" group="defaultGroup" filefilter="defaultPolicyFilter" desc="License for documents and third-party content fetched at runtime: tldr-pages (https://github.com/tldr-pages/tldr), CC BY 4.0, attribution shown in app (detail page and About page)"/>
             </policy>
         </policylist>
         <filefilterlist>

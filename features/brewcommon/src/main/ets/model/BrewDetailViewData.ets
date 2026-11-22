@@ -36,12 +36,22 @@ export class BrewInfoRow {
 export class BrewInfoSection {
   public title: ResourceStr;
   public rows: BrewInfoRow[];
+  /**
+   * 分区标识（默认空串）。**只给需要被 UI 按名字装配的分区设置**：
+   * 详情页把 tldr「用法示例」分区装在「提供的命令」正下方（2026-11-22 tldr spec），
+   * 靠它识别目标分区，而不是靠 sections 里的魔法下标 —— 分区集合是「空分区不创建」的，
+   * 下标会随包的数据漂移，名字不会。
+   */
+  public key: string = '';
 
   public constructor(title: ResourceStr, rows: BrewInfoRow[]) {
     this.title = title;
     this.rows = rows;
   }
 }
+
+/** BrewInfoSection.key 的取值。目前只有「提供的命令」需要被按名装配 */
+export const BREW_SECTION_KEY_EXECUTABLES: string = 'executables';
 
 /** 生命周期提示（废弃 / 停用）。命中任何一个才创建。 */
 export class BrewLifecycleNotice {
@@ -78,6 +88,14 @@ export class BrewInfoPageData {
   public tap: string = '';
   /** 安装命令，如 brew install zsh */
   public installCommand: string = '';
+  /**
+   * 「提供的命令」原始清单（formula 独有，cask 为空）。
+   *
+   * 分区 rows 里已有逗号拼接的展示值，但那是**展示字符串**；tldr 候选名链
+   * （spec 2026-11-22 §3.1，命名错位修复）需要逐个的原始命令名参与候选构建，
+   * 所以原始清单单独留一份 —— 两处同源于 normalizer 的一次赋值，不会漂移。
+   */
+  public executables: string[] = [];
   /** 顶部元信息：版本 / 许可 / 安装量 / 分类排名 —— 渲染成一行小块 */
   public meta: BrewInfoRow[] = [];
   /** 中部各分区 */

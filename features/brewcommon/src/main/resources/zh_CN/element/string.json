@@ -591,6 +591,34 @@
     {
       "name": "brew_cmd_bad_name",
       "value": "包名不合法"
+    },
+    {
+      "name": "brew_tldr_section_title",
+      "value": "用法示例"
+    },
+    {
+      "name": "brew_tldr_copy",
+      "value": "复制"
+    },
+    {
+      "name": "brew_tldr_copied",
+      "value": "已复制"
+    },
+    {
+      "name": "brew_tldr_run",
+      "value": "执行"
+    },
+    {
+      "name": "brew_tldr_attribution",
+      "value": "示例来自 tldr-pages（CC BY 4.0）"
+    },
+    {
+      "name": "brew_cmd_title_tldr",
+      "value": "执行示例：%s"
+    },
+    {
+      "name": "brew_tldr_command_hint",
+      "value": "%s 提供的命令是 %s"
     }
   ]
 }

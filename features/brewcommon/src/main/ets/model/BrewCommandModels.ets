@@ -164,6 +164,16 @@ export class BrewCommandRequest {
   public command: string;
   /** 传给 brew 的参数部分 */
   public args: string;
+  /**
+   * 原始命令模式：非空时 `BrewCommandRunner.start()` 把它**原样**交给执行通道
+   * （tldr 示例原文一键执行，spec 2026-11-22 §4.1），不再拼 brew 前缀、不走包名校验，
+   * 安全闸改为 `TldrParser.isExecutable`（无占位符）。
+   *
+   * 为空时行为与原先完全一致 —— 走 `BrewCli.commandLine(args)`。
+   * `command` / `args` 在原始模式下同放命令原文：Sheet 首行显示原文，
+   * `state.args` 参与忙闲判定（`isRunningArgs`）。
+   */
+  public rawCommand: string = '';
 
   public constructor(title: ResourceStr, command: string, args: string) {
     this.title = title;
