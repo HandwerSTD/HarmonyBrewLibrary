@@ -76,7 +76,7 @@ export class AiSettingsSnapshot {
 export class AiExplainCard {
   /** 定位一句话 */
   public summary: string = '';
-  /** 适用场景 ≤3 */
+  /** 适用场景 ≤3（空字段原则：模型可输出 []，此时 UI 不渲染该分区） */
   public scenarios: string[] = [];
   /** 注意与坑 ≤3（caveats 中文化 + 风险点） */
   public caveats: string[] = [];
@@ -84,9 +84,10 @@ export class AiExplainCard {
   public steps: string[] = [];
 
   public isValid(): boolean {
-    return this.summary.trim().length > 0 && this.scenarios.length > 0 &&
-      this.scenarios.length <= 3 && this.caveats.length <= 3 && this.steps.length >= 2 &&
-      this.steps.length <= 3;
+    // scenarios 允许 0（spec §4 空字段原则：包没有场景信息时 D1_SYSTEM 允许输出 []，
+    // 这里若仍强制 >0 会被误判成 E4 schema mismatch）。summary 必填不变。
+    return this.summary.trim().length > 0 && this.scenarios.length <= 3 &&
+      this.caveats.length <= 3 && this.steps.length >= 2 && this.steps.length <= 3;
   }
 }
 

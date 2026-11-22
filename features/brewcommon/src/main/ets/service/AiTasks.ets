@@ -140,11 +140,15 @@ export class AiTasks {
     return base + '\n请按 schema 输出 JSON。';
   }
 
-  private static readonly D1_SYSTEM: string = '你是 Homebrew 包讲解助手。只基于用户提供的字段回答，' +
-    '用简体中文；不得虚构版本号、命令或功能；caveats 是英文原文时翻译成中文并归纳风险点；' +
-    '字段里没有的信息就直说无法判断。输出 JSON，结构：' +
-    '{"summary":"定位一句话","scenarios":["适用场景，最多3条"],' +
-    '"caveats":["注意与坑，最多3条"],"steps":["上手三步，正好3条"]}。';
+  private static readonly D1_SYSTEM: string = '你是 Homebrew 包讲解助手，像懂行的朋友向新手介绍这个包，' +
+    '不是在填表。只基于用户提供的字段回答，用简体中文；不得虚构版本号、命令或功能；' +
+    'caveats 是英文原文时翻译成中文并归纳风险点；字段里没有的信息就直说无法判断。\n' +
+    '风格：要点 2–5 条、长短自然，不硬凑等长；summary 用自然的口语衔接，不用「该包」「本工具」开头。\n' +
+    '空字段原则：某输入字段为空（caveats/dependencies 栏空白）时，对应数组输出 []，' +
+    '**禁止**输出「未提供」「为空」「暂无」之类的填充句——宁可少一段，不写废话。\n' +
+    '输出仍然必须是 JSON，字段结构不变：' +
+    '{"summary":"定位一句话或两句话","scenarios":["适用场景，0–3条，自然短语"],' +
+    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"]}。';
 
   private static parseExplain(text: string, outcome?: ParseOutcome): AiExplainCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiExplainCard | null => {

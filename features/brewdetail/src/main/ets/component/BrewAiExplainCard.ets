@@ -132,13 +132,18 @@ export struct BrewAiExplainCard {
       }
 
       // ---------- 讲解卡正文 ----------
+      // 渲染基调（spec §4）：像一段讲解，不是一张表——分区标题弱化成轻量引导词，
+      // 分区从属靠字重/颜色不靠框；**空数组分区整体不渲染**（空字段不显示原则，
+      // 不渲染任何「暂无」占位）。steps 保留编号与复制（G13）。
       if (this.card !== null) {
-        Column({ space: 8 }) {
-          Text(this.card.summary)
-            .fontSize($r('sys.float.Body_M'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
+        Column({ space: 12 }) {
+          if (this.card.summary.length > 0) {
+            Text(this.card.summary)
+              .fontSize($r('sys.float.Body_M'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('sys.color.font_primary'))
+              .width('100%')
+          }
 
           if (this.card.scenarios.length > 0) {
             this.SectionTitle($r('app.string.ai_d1_section_scenarios'))
@@ -208,29 +213,23 @@ export struct BrewAiExplainCard {
     .alignItems(HorizontalAlign.Start)
   }
 
+  /** 分区标题：弱化的引导词（ tertiary 色 + 正常字重），不与正文争层级。 */
   @Builder
   SectionTitle(label: ResourceStr) {
     Text(label)
       .fontSize($r('sys.float.Body_S'))
-      .fontWeight(FontWeight.Medium)
-      .fontColor($r('sys.color.font_secondary'))
+      .fontWeight(FontWeight.Normal)
+      .fontColor($r('sys.color.font_tertiary'))
       .width('100%')
-      .margin({ top: 4 })
   }
 
+  /** 要点行：缩进无符号，靠留白与缩进表达从属（去掉「填表」的 · 前缀）。 */
   @Builder
   Bullet(text: string) {
-    Row() {
-      Text('·')
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .margin({ right: 6 })
-      Text(text)
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_primary'))
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Top)
+    Text(text)
+      .fontSize($r('sys.float.Body_M'))
+      .fontColor($r('sys.color.font_primary'))
+      .width('100%')
+      .padding({ left: 10 })
   }
 }

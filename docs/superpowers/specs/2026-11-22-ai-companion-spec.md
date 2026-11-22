@@ -102,6 +102,9 @@
 - **输出 JSON**：`{定位一句话, 适用场景[≤3], 注意与坑[≤3]（caveats 中文化 + 风险点）, 上手三步[3]}`。
 - **prompt 约束**：system 声明——中文、仅基于提供的字段、不得虚构版本号 / 命令 / 功能、无法判断就直说。
 - **渲染**：结构化卡（标题 + 四段），底部「AI 生成 · 仅供参考」角标 + 重新生成按钮；缓存命中直接渲染（G3）。
+  - **空字段不显示原则**：某数组为空则对应分区整体不渲染，**不渲染任何「暂无 / 未提供」占位**（prompt 侧同步要求模型输出 []，宁缺勿凑）；
+  - **渲染基调**：像一段讲解、不是一张表——分区标题是弱化引导词（Normal 字重 + tertiary 色），要点行无符号、靠缩进表达从属；
+  - 校验配套：`AiExplainCard.isValid()` 中 summary 必填，scenarios 放宽为 0–3（空字段原则下模型可输出 []），caveats ≤3、steps 2–3 不变。
 - **失败**：E1 → 引导进 AI 设置；E2/E3/E4 → 卡内重试按钮；任何失败不阻塞详情页其它分区。
 
 ---
@@ -187,6 +190,7 @@
 | `ai_settings_provider` | 服务商 |
 | `ai_settings_key` | API Key |
 | `ai_settings_test` | 测试连接 |
+| `ai_settings_test_ok_detail` | 连接成功 · %s · %d ms（带参资源；**禁止模板字符串内插 `$r()`**——Resource 对象会 toString 成 `[object Object]`） |
 | `ai_d1_button` | AI 讲解 |
 | `ai_d1_badge` | AI 生成 · 仅供参考 |
 | `ai_d2_entry` | AI 帮我找工具 |
