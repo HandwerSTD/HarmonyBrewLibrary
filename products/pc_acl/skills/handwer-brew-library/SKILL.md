@@ -14,25 +14,38 @@ description: >-
 `requestInstall`（发起安装，只预演不执行）四项能力。本技能只提供设备侧
 exec-cli（ohos-arkTSScript）通道，由设备上的小艺 Work 直接调用应用内脚本。
 
-## 调用方式（exec-cli / ohos-arkTSScript）
+## 调用方式（小艺 Work 的 exec → ohos-arktsscript）
+
+> **先读这里（重要）**：应用安装后，系统会把 skill 与 ArkTS script 解出并暴露给
+> `ohos-arktsscript` 这个工具；小艺 Work 用自己的 `exec` 工具调用它，即完成应用接入。
+> 但系统**不会把本 SKILL.md 的文本暴露给小艺 Work**，小艺 Work 也**不能安装本地 skill**——
+> 所以使用前必须把整份 SKILL.md 发到小艺 Work 对话框里让它读完，它才能写出正确的调用。
+
+**已实测成功的调用形态（照抄，只换 functionName 与 args）**：
+
+```text
+exec(
+  command: "ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'searchPackages' --args '{\"query\":\"python\"}'",
+  timeout_ms: 60000
+)
+```
 
 **第一步：先把全部业务参数压成一个字符串。** 构造业务参数对象，执行一次
 `JSON.stringify(params)` 得到 `payload`，作为**唯一**参数传入（`argv.length === 1`，
 argv[0] 是可解析的 JSON 对象字符串）。禁止把字段拆成多个位置参数，禁止 `Object.values`。
 
-**第二步：exec-cli 命令行中把内部双引号转义为 `\"`。** 即把 `"` 写成 `\"`，再将完整内容
-作为 `--args` 的唯一参数。本技能的 ETS 入口会先尝试直接解析，失败后再将收到的 `\"`
-还原为 `"` 并解析，两种形态都接受。
+**第二步：把内部双引号转义为 `\"`。** 即把 `"` 写成 `\"`，再将完整内容放进 `--args`。
+本技能的 ETS 入口会先尝试直接解析，失败后再将收到的 `\"` 还原为 `"` 并解析，
+两种形态都接受。
 
 ```text
 序列化后的 payload：{"query":"下载视频"}
-B 命令中的参数：--args '{\"query\":\"下载视频\"}'
+命令中的参数：--args '{\"query\":\"下载视频\"}'
 ```
 
-```bash
-exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'searchPackages' --args '{\"query\":\"下载视频\"}'
-)
-```
+**timeout_ms 怎么给**：searchPackages / queryPackage 是内存级查询，60000 足够；
+previewInstall / requestInstall 走真实 `brew install --dry-run`（只读、需要网络、
+最长约两分钟），建议给 180000。超时不是失败重试的信号，结果以回包为准。
 
 ## 返回结果与错误处理
 
@@ -85,8 +98,10 @@ exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPa
 
 执行参数：
 
-```bash
-exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'searchPackages' --args '{\"query\":\"下载视频\"}'
+```text
+exec(
+  command: "ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'searchPackages' --args '{\"query\":\"下载视频\"}'",
+  timeout_ms: 60000
 )
 ```
 
@@ -181,8 +196,10 @@ exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPa
 
 执行参数：
 
-```bash
-exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'queryPackage' --args '{\"token\":\"wget\"}'
+```text
+exec(
+  command: "ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'queryPackage' --args '{\"token\":\"wget\"}'",
+  timeout_ms: 60000
 )
 ```
 
@@ -261,8 +278,10 @@ ERR_INVALID_PARAMS / ERR_NOT_FOUND / ERR_INTERNAL）。
 
 执行参数：
 
-```bash
-exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'previewInstall' --args '{\"token\":\"wget\"}'
+```text
+exec(
+  command: "ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'previewInstall' --args '{\"token\":\"wget\"}'",
+  timeout_ms: 180000
 )
 ```
 
@@ -332,8 +351,10 @@ ERR_INVALID_PARAMS 分支（形态错误与字段缺失两种）同场景1。
 
 执行参数：
 
-```bash
-exec-cli(command: ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'requestInstall' --args '{\"token\":\"ffmpeg\"}'
+```text
+exec(
+  command: "ohos-arkTSScript --skillName 'handwer-brew-library' --scriptPath 'scripts/BrewSkill.ets' --functionName 'requestInstall' --args '{\"token\":\"ffmpeg\"}'",
+  timeout_ms: 180000
 )
 ```
 

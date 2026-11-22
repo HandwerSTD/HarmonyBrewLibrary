@@ -42,6 +42,14 @@ assert(md.includes('参数传递格式错误'), 'SKILL.md 缺「参数传递格�
 assert(md.includes('## 返回结果与错误处理'), 'SKILL.md 缺「返回结果与错误处理」段');
 assert(md.includes('## 运行条件与业务约定'), 'SKILL.md 缺「运行条件与业务约定」段');
 
+// ---- 1.7 实测调用形态与投喂强调（2026-11-23 真机机制实测）----
+assert(md.includes('exec('), 'SKILL.md 缺实测 exec() 调用形态');
+assert(md.includes('ohos-arktsscript'), 'SKILL.md 缺 ohos-arktsscript 工具名');
+assert(md.includes('timeout_ms'), 'SKILL.md 缺 timeout_ms 指引');
+assert(md.includes('不能安装本地 skill'), 'SKILL.md 缺「SKILL.md 不暴露 / 不能安装本地 skill」强调');
+assert(md.includes('发到小艺 Work 对话框'), 'SKILL.md 缺「整份投喂到对话框」操作指引');
+assert(md.includes("query\":\"python\"") || md.includes('query\\":\\"python'), 'SKILL.md 缺实测成功样本');
+
 // ---- 2. module.json5 注册 ----
 assert(/"skillProfiles"[\s\S]*"name":\s*"handwer-brew-library"/.test(moduleJson5),
   'module.json5 缺 handwer-brew-library 的 skillProfiles 注册');

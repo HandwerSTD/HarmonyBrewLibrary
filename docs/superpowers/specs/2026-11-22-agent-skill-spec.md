@@ -74,6 +74,7 @@ products/pc_acl/
 
 对照真实生产样本（`biandan-assistant`，2026-11-22 需求方提供）后的契约加固与裁决：
 - **单通道收敛（裁决终局，2026-11-23）**：exec-cli（ohos-arkTSScript）**真机验证通过**；首轮失败根因是小艺 Work 未开完全权限，与通道无关。A 通道（云端 invoke：工具注册件 + A/B 路由，完整实现见 commit `82339f8`、验证快照 `92c1f92`）按需求方裁定放弃并移除；日后需要云侧调用时从该提交取回注册件即可。
+- **机制实测（2026-11-23，需求方）**：应用安装后，系统解出 skill 与 ArkTS script 并暴露给 `ohos-arktsscript` 工具；小艺 Work 用自己的 `exec` 工具调用它，即完成应用接入（`exec(command: "ohos-arktsscript --skillName ... --functionName ... --args '{\"...\"}'", timeout_ms)`，实测成功样本 searchPackages / `{"query":"python"}` / 60000）。**系统不把 SKILL.md 文本暴露给小艺 Work，小艺 Work 也不能装本地 skill**——SKILL.md 必须整份投喂到对话框，harness 读完才能写对调用；此约定已写入 SKILL.md 调用方式段并强调。
 - **argv 单 JSON 字符串约定**：SKILL.md 教 harness 先 `JSON.stringify` 再转义 `\"`，脚本端「直接解析 → 失败还原 `\"` 重试一次」双形态兼容；argv 形态错误的 errMsg 带「参数传递格式错误」锚点，SKILL.md 据此指示自动压参重试一次（业务字段缺失与 NOT_FOUND 不自动重试）。
 - **跨模块编译已被样本证明**：样本脚本直接 import 多个跨模块包，探针 Q3 的风险基本排除；本技能的常量本地副本仍是刻意的保守设计（契约检查脚本核对不漂移）。
 
@@ -164,7 +165,7 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 1. **探针（真机，用户执行）**：§3.1 四问逐项记录 → Q1 不过则停（不排期）；Q2/Q3/Q4 决定升版与兜底方案。
 2. **静态**：`node hmosword-build/brew-skill/check_skill_contract.mjs` 与 `audit_skill_no_exec.mjs` 全绿（G11/G6）。
 3. **构建**：升版后双 product `devecocli build` ERROR 0（G2/G9）。
-4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → **确认小艺 Work 已开完全权限（首轮失败根因）** → 应用启动后看 `[skill-probe]` 日志确认注册状态（`skill registered` + `self skill count=1` 为生效；`17700093` 为未生效，查 name 三处一致与 srcEntries 路径）→ 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
+4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → **确认小艺 Work 已开完全权限（首轮失败根因）** → 应用启动后看 `[skill-probe]` 日志确认注册状态（`skill registered` + `self skill count=1` 为生效；`17700093` 为未生效，查 name 三处一致与 srcEntries 路径）→ **把 SKILL.md 全文投喂到小艺 Work 对话框（系统不暴露 skill 文本，机制见 §3.2）** → 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
 5. **回归（真机）**：API 升版后存量冒烟清单（G12）——tldr 区块、详情页、本机包管理、执行 Sheet、（若已合入）AI 卡片与哨兵卡片。
 
 ## 10. 风险与未决
