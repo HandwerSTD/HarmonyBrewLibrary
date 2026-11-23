@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ripgrep releases.atom 实测样例（2026-11-23，精简到 2 条 entry）。
+
+  Y · 更新情报中心（docs/superpowers/specs/2026-11-23-release-intel-spec.md §3.1 / §9）
+  的解析 fixture：
+    - entry 1：主程序发布，tag=v15.2.0（TagFilter strip v 后与 versions.stable=15.2.0 精确相等）；
+    - entry 2：workspace 子包发布（ignore-0.4.34）——G2「零误报」的关键反例，
+      与 formula 版本不相等，必须被 TagFilter 丢弃，不能当成主程序情报。
+  解析逻辑在 ArkTS 侧（ReleaseIntelService.parseAtomFeed，私有），本文件供
+  ohosTest / 后续工具化校验做口径对照；特征断言见 ReleaseIntel.test.ets。
+-->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>tag:github.com,2008:Repository/748118/releases</id>
+  <updated>2026-11-22T22:59:48Z</updated>
+  <title>Release notes from ripgrep</title>
+  <link href="https://github.com/BurntSushi/ripgrep/releases" rel="alternate" type="text/html"/>
+  <entry>
+    <id>tag:github.com,2008:Repository/748118/v15.2.0</id>
+    <updated>2026-11-22T22:59:48Z</updated>
+    <link href="https://github.com/BurntSushi/ripgrep/releases/tag/v15.2.0" rel="alternate" type="text/html"/>
+    <title>v15.2.0</title>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <content type="html">&lt;p&gt;15.2.0 is a new release. Major highlights:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;New flag &lt;code&gt;--crlf&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Fixes a heap overflow in the SOCKS5 proxy handshake path&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Breaking changes:&lt;/strong&gt; config keys renamed&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/748118/ignore-0.4.34</id>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <link href="https://github.com/BurntSushi/ripgrep/releases/tag/ignore-0.4.34" rel="alternate" type="text/html"/>
+    <title>ignore-0.4.34</title>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <content type="html">&lt;p&gt;workspace crate release&lt;/p&gt;</content>
+  </entry>
+</feed>

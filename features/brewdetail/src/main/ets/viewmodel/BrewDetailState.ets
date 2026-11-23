@@ -3,7 +3,14 @@
  */
 
 import { LoadingModel } from '@ohos/common';
-import { BrewInfoPageData, BrewKind, BrewPackageItem, TldrPage } from '@ohos/brewcommon';
+import {
+  BrewInfoPageData,
+  BrewKind,
+  BrewPackageItem,
+  ReleaseIntelArchiveEntry,
+  ReleaseIntelSnapshot,
+  TldrPage,
+} from '@ohos/brewcommon';
 import type { BrewDetailParams } from '@ohos/brewcommon';
 
 /**
@@ -72,4 +79,20 @@ export class BrewDetailState {
    */
   public tldrPage: TldrPage = new TldrPage();
   public hasTldr: boolean = false;
+  /**
+   * Y 更新情报快照（release intel spec §3.1 / §4）。与 tldrPage 同一条约束：
+   * **恒非 null 实例 + `hasReleaseIntel` 开关**（ArkUI 的 if 不做联合类型收窄）。
+   * 只在「本机已装且过期」的 formula 详情页装配（G8 懒加载；cask v1 不渲染，spec §10）。
+   */
+  public releaseIntel: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
+  public hasReleaseIntel: boolean = false;
+  /** 当前 to 版本已被用户「忽略此版本」（详情页顶部弱化条 + 撤销入口，spec §4） */
+  public releaseIntelIgnored: boolean = false;
+  /** `brew pin <token>` 命令文本（G6：只复制不执行；cask 无 pin 语义，恒空串） */
+  public releaseIntelPinCommand: string = '';
+  /**
+   * 版本档案（spec §3.3：更新完成后留档，详情页 caveats 与 siblings 之间展示）。
+   * 只装当前 token 的条目；独立异步加载、失败保持为空（档案是增益记录，不提示错误）。
+   */
+  public releaseArchive: ReleaseIntelArchiveEntry[] = [];
 }

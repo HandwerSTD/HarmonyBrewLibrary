@@ -835,6 +835,158 @@
     {
       "name": "brew_tldr_command_hint",
       "value": "%s 提供的命令是 %s"
+    },
+    {
+      "name": "release_intel_title",
+      "value": "更新情报"
+    },
+    {
+      "name": "release_intel_major",
+      "value": "重大变更"
+    },
+    {
+      "name": "release_intel_security",
+      "value": "安全相关"
+    },
+    {
+      "name": "release_intel_security_note",
+      "value": "以上为上游发布说明的原文转述，未经漏洞库核验。"
+    },
+    {
+      "name": "release_intel_fixes",
+      "value": "修复"
+    },
+    {
+      "name": "release_intel_new",
+      "value": "新功能"
+    },
+    {
+      "name": "release_intel_diff_title",
+      "value": "依赖与配置变化"
+    },
+    {
+      "name": "release_intel_deps_add",
+      "value": "新增依赖"
+    },
+    {
+      "name": "release_intel_deps_build_add",
+      "value": "新增构建依赖"
+    },
+    {
+      "name": "release_intel_deps_remove",
+      "value": "移除依赖"
+    },
+    {
+      "name": "release_intel_deps_repack",
+      "value": "安装包重打包（代码未变，通常是例行修复）"
+    },
+    {
+      "name": "release_intel_caveats_changed",
+      "value": "安装注意事项有更新"
+    },
+    {
+      "name": "release_intel_gap_repo",
+      "value": "上游仓库不在 GitHub，暂无法获取发布情报"
+    },
+    {
+      "name": "release_intel_gap_tag",
+      "value": "上游发布中未找到与该版本对应的发布页"
+    },
+    {
+      "name": "release_intel_gap_net",
+      "value": "暂时连不上上游发布页，可稍后重新生成"
+    },
+    {
+      "name": "release_intel_gap_empty",
+      "value": "该发布没有提供正文说明"
+    },
+    {
+      "name": "release_intel_gap_diff",
+      "value": "上游说明未覆盖的方面"
+    },
+    {
+      "name": "release_intel_source",
+      "value": "情报来源：上游发布页"
+    },
+    {
+      "name": "release_intel_ai_badge",
+      "value": "摘要由 AI 依据上游 Release Notes 归纳，可能存在偏差"
+    },
+    {
+      "name": "release_intel_view_source",
+      "value": "查看原文"
+    },
+    {
+      "name": "release_intel_pin",
+      "value": "固定版本"
+    },
+    {
+      "name": "release_intel_ignore",
+      "value": "忽略此版本"
+    },
+    {
+      "name": "release_intel_unignore",
+      "value": "撤销忽略"
+    },
+    {
+      "name": "release_intel_pause",
+      "value": "暂停提醒"
+    },
+    {
+      "name": "release_intel_pause_7",
+      "value": "暂停 7 天"
+    },
+    {
+      "name": "release_intel_pause_30",
+      "value": "暂停 30 天"
+    },
+    {
+      "name": "release_intel_pause_forever",
+      "value": "无限期暂停"
+    },
+    {
+      "name": "release_intel_ai_failed",
+      "value": "AI 归纳失败，可稍后重新生成"
+    },
+    {
+      "name": "release_intel_stale",
+      "value": "缓存已过期且刷新失败，当前展示的是上次结果"
+    },
+    {
+      "name": "release_intel_truncated",
+      "value": "上游说明过长，已截断归纳"
+    },
+    {
+      "name": "release_intel_ignored_bar",
+      "value": "已忽略 %s 的更新提醒"
+    },
+    {
+      "name": "release_intel_archive",
+      "value": "版本档案"
+    },
+    {
+      "name": "release_intel_verdict_major",
+      "value": "大版本升级"
+    },
+    {
+      "name": "release_intel_verdict_minor",
+      "value": "功能更新"
+    },
+    {
+      "name": "release_intel_verdict_patch",
+      "value": "修复更新"
+    },
+    {
+      "name": "release_intel_verdict_revision",
+      "value": "重打包"
+    },
+    {
+      "name": "release_intel_verdict_unknown",
+      "value": "版本更新"
+    },
+    {
+      "name": "release_intel_privacy_note",
+      "value": "更新情报：本功能会访问上游项目的公开发布页，并在生成摘要时把 Release Notes 原文发送给您配置的 AI 服务商；请求不包含您的身份信息，摘要结果仅保存在本机。"
     }
   ]
 }

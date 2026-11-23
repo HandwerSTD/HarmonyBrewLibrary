@@ -31,6 +31,10 @@ import { BrewCli } from './BrewCli';
 // 与 BrewInstalledLoader 互相 import 是有意的：读取路径要问「现在有没有写命令在执行」（spec §6.2 规则 5），
 // 写命令结束要让它失效并刷新（spec §5.3 第 5 点）。两侧都只在方法体内引用对方，不在顶层求值。
 import { BrewInstalledLoader } from './BrewInstalledLoader';
+import type { BrewInstalledSnapshot } from './BrewInstalledLoader';
+import type { BrewInstalledPackage } from '../model/BrewModels';
+// Y 档案钩子（release intel spec §3.3）：只在 finish 的 DONE 分支单向调用，无反向依赖。
+import { ReleaseIntelService } from './ReleaseIntelService';
 
 const TAG: string = '[brew-cmd]';
 
@@ -245,6 +249,12 @@ export class BrewCommandRunner {
   /** 样式段的全局序号，只在当前这条命令内递增 */
   private nextSegmentId: number = 0;
   private listeners: (() => void)[] = [];
+  // Y 档案钩子上下文（release intel spec §3.3）：upgrade 开始时捕获「从哪个版本升到哪个」。
+  // 必须在 begin 里捕获——finish 前的 invalidate() 会冲掉盘上快照，from 就读不到了。
+  private archiveKind: string = '';
+  private archiveToken: string = '';
+  private archiveFrom: string = '';
+  private archiveTo: string = '';
 
   /** 重置状态并起轮询。就地改一级属性，页面持有的实例与 `@ObjectLink` 才继续有效 */
   private begin(request: BrewCommandRequest, taskId: number): void {
@@ -268,11 +278,44 @@ export class BrewCommandRunner {
     this.state.killSent = false;
     this.state.forceKillReady = false;
     this.state.resultViewed = false;
+    this.captureArchiveContext(request);
     this.pollTimer = setInterval(() => {
       this.poll();
     }, BREW_COMMAND_POLL_MS);
     Logger.info(TAG, `start args=${request.args} command=${request.command}`);
     this.notifyListeners();
+  }
+
+  /**
+   * Y 档案钩子（release intel spec §3.3）：upgrade 命令开始时捕获档案上下文。
+   * args 形态 = `upgrade [--cask] <name>`（BrewCommandGenerator.upgradeArgs）；
+   * 全量升级 `upgrade [--formula|--cask]` 没有 token 尾参、tap 限定名（tap/name）不在
+   * 本机快照的 name 口径里——两种情况都读不到包，留空 = 不记档案（档案只记 Y 流程能给出的包）。
+   */
+  private captureArchiveContext(request: BrewCommandRequest): void {
+    this.archiveKind = '';
+    this.archiveToken = '';
+    this.archiveFrom = '';
+    this.archiveTo = '';
+    if (request.args.length < 2 || request.args[0] !== 'upgrade') {
+      return;
+    }
+    const target: string = request.args[request.args.length - 1];
+    if (target.startsWith('--')) {
+      return; // 全量升级没有目标包
+    }
+    this.archiveKind = request.args[1] === '--cask' ? 'cask' : 'formula';
+    const snap: BrewInstalledSnapshot | null = BrewInstalledLoader.snapshot();
+    const one: BrewInstalledPackage | null =
+      snap === null ? null : BrewInstalledLoader.installedOf(target);
+    if (one === null) {
+      return;
+    }
+    this.archiveToken = one.name;
+    this.archiveFrom = one.version;
+    this.archiveTo = one.latestVersion;
+    Logger.info(TAG,
+      `archive context token=${this.archiveToken} ${this.archiveFrom} -> ${this.archiveTo}`);
   }
 
   private poll(): void {
@@ -414,6 +457,13 @@ export class BrewCommandRunner {
       `status=${this.state.status} args=${this.state.args}`);
     // 已安装列表的失效与刷新：写命令已结束，这一次读取拿到的是稳定状态
     BrewInstalledLoader.invalidate();
+    // Y 档案（release intel spec §3.3 / G7）：upgrade 成功（DONE）落一条档案。
+    // appendArchiveSync 内部全兜底（上下文缺失 / from==to / 读缓存失败都静默跳过），
+    // 档案写入失败不影响命令收尾——档案是增益记录，不是命令结果的组成部分。
+    if (this.state.status === BrewCommandStatus.DONE && this.archiveToken.length > 0) {
+      ReleaseIntelService.appendArchiveSync(this.archiveToken, this.archiveKind,
+        this.archiveFrom, this.archiveTo);
+    }
     if (this.state.sheetShown) {
       this.state.resultViewed = true;
     }

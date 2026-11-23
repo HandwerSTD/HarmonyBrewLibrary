@@ -835,6 +835,158 @@
     {
       "name": "brew_tldr_command_hint",
       "value": "%s provides the command %s"
+    },
+    {
+      "name": "release_intel_title",
+      "value": "Release intelligence"
+    },
+    {
+      "name": "release_intel_major",
+      "value": "Breaking changes"
+    },
+    {
+      "name": "release_intel_security",
+      "value": "Security"
+    },
+    {
+      "name": "release_intel_security_note",
+      "value": "Quoted verbatim from upstream release notes; not verified against any vulnerability database."
+    },
+    {
+      "name": "release_intel_fixes",
+      "value": "Fixes"
+    },
+    {
+      "name": "release_intel_new",
+      "value": "New features"
+    },
+    {
+      "name": "release_intel_diff_title",
+      "value": "Dependency and config changes"
+    },
+    {
+      "name": "release_intel_deps_add",
+      "value": "Added dependencies"
+    },
+    {
+      "name": "release_intel_deps_build_add",
+      "value": "Added build dependencies"
+    },
+    {
+      "name": "release_intel_deps_remove",
+      "value": "Removed dependencies"
+    },
+    {
+      "name": "release_intel_deps_repack",
+      "value": "Bottle repacked (code unchanged; usually routine fixes)"
+    },
+    {
+      "name": "release_intel_caveats_changed",
+      "value": "Install caveats changed"
+    },
+    {
+      "name": "release_intel_gap_repo",
+      "value": "Upstream repository is not on GitHub; release intelligence unavailable"
+    },
+    {
+      "name": "release_intel_gap_tag",
+      "value": "No matching release found upstream for this version"
+    },
+    {
+      "name": "release_intel_gap_net",
+      "value": "Upstream releases page unreachable; try regenerating later"
+    },
+    {
+      "name": "release_intel_gap_empty",
+      "value": "This release provides no release notes"
+    },
+    {
+      "name": "release_intel_gap_diff",
+      "value": "Not covered by upstream notes"
+    },
+    {
+      "name": "release_intel_source",
+      "value": "Source: upstream release page"
+    },
+    {
+      "name": "release_intel_ai_badge",
+      "value": "Summary AI-generated from upstream release notes; may be inaccurate"
+    },
+    {
+      "name": "release_intel_view_source",
+      "value": "View source"
+    },
+    {
+      "name": "release_intel_pin",
+      "value": "Pin version"
+    },
+    {
+      "name": "release_intel_ignore",
+      "value": "Ignore this version"
+    },
+    {
+      "name": "release_intel_unignore",
+      "value": "Unignore"
+    },
+    {
+      "name": "release_intel_pause",
+      "value": "Pause alerts"
+    },
+    {
+      "name": "release_intel_pause_7",
+      "value": "Pause for 7 days"
+    },
+    {
+      "name": "release_intel_pause_30",
+      "value": "Pause for 30 days"
+    },
+    {
+      "name": "release_intel_pause_forever",
+      "value": "Pause indefinitely"
+    },
+    {
+      "name": "release_intel_ai_failed",
+      "value": "AI summary failed; try regenerating later"
+    },
+    {
+      "name": "release_intel_stale",
+      "value": "Cache expired and refresh failed; showing the last result"
+    },
+    {
+      "name": "release_intel_truncated",
+      "value": "Upstream notes were truncated before summarizing"
+    },
+    {
+      "name": "release_intel_ignored_bar",
+      "value": "Updates to %s are ignored"
+    },
+    {
+      "name": "release_intel_archive",
+      "value": "Update archive"
+    },
+    {
+      "name": "release_intel_verdict_major",
+      "value": "Major upgrade"
+    },
+    {
+      "name": "release_intel_verdict_minor",
+      "value": "Feature update"
+    },
+    {
+      "name": "release_intel_verdict_patch",
+      "value": "Fix update"
+    },
+    {
+      "name": "release_intel_verdict_revision",
+      "value": "Repack"
+    },
+    {
+      "name": "release_intel_verdict_unknown",
+      "value": "Version update"
+    },
+    {
+      "name": "release_intel_privacy_note",
+      "value": "Release intelligence: this feature visits the upstream project's public release page and sends release notes text to your configured AI provider to generate summaries; requests contain no identity information and summaries are stored locally only."
     }
   ]
 }

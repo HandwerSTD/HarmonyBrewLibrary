@@ -9,9 +9,9 @@ import { formBindingData, formProvider } from '@kit.FormKit';
 import { bundleManager, common, wantAgent } from '@kit.AbilityKit';
 import type { WantAgent } from '@kit.AbilityKit';
 import { Logger } from '@ohos/common';
-import { BrewInstalledLoader } from './BrewInstalledLoader';
-import type { BrewInstalledSnapshot } from './BrewInstalledLoader';
+import { BrewInstalledLoader, BrewInstalledSets, BrewInstalledSnapshot } from './BrewInstalledLoader';
 import type { BrewInstalledPackage } from '../model/BrewModels';
+import { ReleaseIntelFilter } from './ReleaseIntelFilter';
 import {
   SENTINEL_DATA_AS_OF,
   SENTINEL_DATA_COUNT,
@@ -210,9 +210,23 @@ export class BrewSentinelService {
       return;
     }
     // 宿主路径：先把镜像写下去（扩展进程下次定时触发才有数据可读），再推卡、再走通知
-    const base: SentinelCardBase = this.deriveBase(snap);
+    // Y 接入（release intel spec §3.2 / G6）：被用户「忽略此版本 / 暂停提醒」的包不进
+    // 通知计数与去重集合——策略只改变「要不要打扰」，不改变卡片数据本身的口径。
+    // 这里浅拷贝一份快照换掉 outdated 数组，snap 原对象不动（其他读者不受影响）。
+    const notifiableOutdated: BrewInstalledPackage[] = [];
+    for (const one of snap.sets.outdated) {
+      if (!ReleaseIntelFilter.isSuppressed(one.name, one.latestVersion)) {
+        notifiableOutdated.push(one);
+      }
+    }
+    const notifiableSets: BrewInstalledSets = new BrewInstalledSets();
+    notifiableSets.installed = snap.sets.installed;
+    notifiableSets.outdated = notifiableOutdated;
+    notifiableSets.updated = snap.sets.updated;
+    const notifiable: BrewInstalledSnapshot = new BrewInstalledSnapshot(notifiableSets, snap.readAt);
+    const base: SentinelCardBase = this.deriveBase(notifiable);
     this.putString(store, SENTINEL_KEY_LAST_CARD, JSON.stringify(base));
-    const count: number = snap.sets.outdated.length;
+    const count: number = notifiable.sets.outdated.length;
     const age: number = Date.now() - snap.readAt;
     const stale: boolean = age > SENTINEL_STALE_MS;
     Logger.info(TAG, `evaluate outdated=${count} age=${age} stale=${stale} forms=${this.formIds(store).length}`);
@@ -233,7 +247,7 @@ export class BrewSentinelService {
       Logger.info(TAG, 'notify skip: frequency off');
       return;
     }
-    const setKey: string = this.setKeyOf(snap);
+    const setKey: string = this.setKeyOf(notifiable);
     const reminded: string = this.getString(store, SENTINEL_KEY_REMINDED_SET);
     if (setKey.length > 0 && setKey === reminded) {
       Logger.info(TAG, 'notify skip: current set was dismissed');
@@ -264,7 +278,7 @@ export class BrewSentinelService {
       const uiContext: common.UIAbilityContext = context as common.UIAbilityContext;
       notificationManager.requestEnableNotification(uiContext).then(() => {
         Logger.info(TAG, 'authorization granted, publish');
-        this.publishAsync(context, store, snap, setKey);
+        this.publishAsync(context, store, notifiable, setKey);
       }).catch((err: BusinessError) => {
         if (err.code === ERR_NOTIFICATION_REFUSED) {
           // 拒绝后该接口不再弹窗：记标记，之后全部静默降级；设置页保留「去开启」入口（G8）
@@ -276,7 +290,7 @@ export class BrewSentinelService {
       });
       return;
     }
-    this.publishAsync(context, store, snap, setKey);
+    this.publishAsync(context, store, notifiable, setKey);
   }
 
   /**

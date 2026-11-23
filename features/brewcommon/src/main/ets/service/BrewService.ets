@@ -286,6 +286,25 @@ export class BrewService {
     BrewSourcePrefs.persistNow();
   }
 
+  /**
+   * 只读访问 store 里的 raw 单条文档（release intel 的 diff 基线预捕获用，
+   * spec §3.1：store 缓存是覆盖式的，已装版本的 raw 必须在新抓取前抢救出来）。
+   * 返回 raw JSON 文本；无条目 / schema 不符 → 空串。**只读**，不动 ts/lastModified。
+   */
+  public static cachedRawDocJson(kind: string, token: string): string {
+    const cacheKey: string = `${kind}_${token}`;
+    const cache: Record<string, DetailCacheEntry<Object>> = BrewService.ensureCache();
+    const hit: DetailCacheEntry<Object> | undefined = cache[cacheKey];
+    if (hit === undefined || hit.schemaVersion !== BrewService.SCHEMA_VERSION) {
+      return '';
+    }
+    try {
+      return JSON.stringify(hit.data);
+    } catch (err) {
+      return '';
+    }
+  }
+
   // ------------------------------------------------------------ 包表转发
 
   /** 目录里的 30 天安装量。详情页降级骨架用它在没有单条文档时仍能显示数字 */

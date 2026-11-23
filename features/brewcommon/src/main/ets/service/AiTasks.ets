@@ -22,6 +22,14 @@ import {
   AI_TEMPERATURE_D2,
   AI_TEMPERATURE_D3,
 } from '../constant/AiConstants';
+// RI（更新情报）的常量单独成文件：只被 release intel 一条链路使用，见 ReleaseIntelConstants
+import {
+  AI_CACHE_TTL_RI_MS,
+  AI_MAX_TOKENS_RI,
+  AI_PROMPT_VERSION_RI,
+  AI_TEMPERATURE_RI,
+  RELEASE_INTEL_FEATURE,
+} from '../constant/ReleaseIntelConstants';
 import {
   AiError,
   AiErrorKind,
@@ -33,6 +41,12 @@ import {
   AiToolCandidate,
   AiToolResult,
 } from '../model/AiTypes';
+import {
+  ReleaseIntelBreakingChange,
+  ReleaseIntelCard,
+  ReleaseIntelInput,
+  ReleaseIntelSecurityClaim,
+} from '../model/ReleaseIntelModels';
 import { AiCache, AiCacheReadResult } from './AiCache';
 import { AiClient } from './AiClient';
 import type { AiClientTask, AiCompletion as AiCompletion2 } from './AiClient';
@@ -496,6 +510,175 @@ export class AiTasks {
     });
   }
 
+  // ------------------------------------------------------------ RI · 更新情报摘要（Y）
+
+  /**
+   * 更新情报摘要（Y spec G8）：TTL 24h、stale-while-revalidate、promptVersion=ri-1。
+   * 缓存键 `<token>_<to>`（同一目标版本只归纳一次；to 变了 = 新一次归纳）。
+   * force（「重新生成」）旁路缓存直接取数（对齐 D1 的 2026-11-23 修复结论）。
+   */
+  public static releaseIntel(input: ReleaseIntelInput,
+    onRefreshed?: (card: ReleaseIntelCard) => void, force: boolean = false): Promise<ReleaseIntelCard> {
+    const cacheKey: string = `${input.token}_${input.to}`;
+    const providerKey: string = AiTasks.providerModelKey();
+    if (force) {
+      return AiTasks.fetchIntel(input, providerKey, onRefreshed);
+    }
+    const cached: AiCacheLookup = AiTasks.lookup(RELEASE_INTEL_FEATURE, providerKey, cacheKey,
+      AI_PROMPT_VERSION_RI, AI_CACHE_TTL_RI_MS);
+    if (cached.hit) {
+      const card: ReleaseIntelCard | null = AiTasks.parseIntel(cached.dataJson);
+      if (card !== null) {
+        Logger.info(TAG, `ri cache hit token=${input.token} age=${cached.age}`);
+        return Promise.resolve(card);
+      }
+    }
+    if (cached.stale) {
+      const staleCard: ReleaseIntelCard | null = AiTasks.parseIntel(cached.dataJson);
+      if (staleCard !== null) {
+        Logger.info(TAG, `ri stale-while-revalidate token=${input.token}`);
+        AiTasks.fetchIntel(input, providerKey, onRefreshed);
+        return Promise.resolve(staleCard);
+      }
+    }
+    return AiTasks.fetchIntel(input, providerKey, onRefreshed);
+  }
+
+  /**
+   * 读「已有」的情报卡（档案钩子用，spec §3.3）：只查缓存不发请求，HIT/STALE 都收。
+   * 升级完成时详情页大概率已经打开过情报卡（Y 的入口就在详情页），缓存命中是常态；
+   * miss（用户没打开过）→ 返回 null，档案条目 cardJson 留空，档案区退化为版本区间行。
+   */
+  public static cachedIntelCard(token: string, to: string): ReleaseIntelCard | null {
+    const providerKey: string = AiTasks.providerModelKey();
+    const cached: AiCacheLookup = AiTasks.lookup(RELEASE_INTEL_FEATURE, providerKey,
+      `${token}_${to}`, AI_PROMPT_VERSION_RI, AI_CACHE_TTL_RI_MS);
+    if (cached.dataJson.length === 0) {
+      return null;
+    }
+    return AiTasks.parseIntel(cached.dataJson);
+  }
+
+  private static fetchIntel(input: ReleaseIntelInput, providerKey: string,
+    onRefreshed?: (card: ReleaseIntelCard) => void): Promise<ReleaseIntelCard> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.RI_SYSTEM;
+    task.user = AiTasks.riUserPrompt(input);
+    task.temperature = AI_TEMPERATURE_RI;
+    task.maxTokens = AI_MAX_TOKENS_RI;
+    const cacheKey: string = `${input.token}_${input.to}`;
+    return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
+      const card: ReleaseIntelCard | null = AiTasks.parseIntel(completion.content, outcome);
+      if (card === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `ri reason=${e4ReasonOf(completion, outcome.reason)}`);
+      }
+      AiCache.write(RELEASE_INTEL_FEATURE, providerKey, cacheKey, AI_PROMPT_VERSION_RI,
+        completion.model, JSON.stringify(card));
+      Logger.info(TAG, `ri ok token=${input.token} latency=${completion.latencyMs}`);
+      if (onRefreshed !== undefined) {
+        onRefreshed(card);
+      }
+      return card;
+    });
+  }
+
+  private static riUserPrompt(input: ReleaseIntelInput): string {
+    // grounding（spec G4）：notes（已剥标签 ≤4KB）+ diff JSON + 版本区间，没有别的。
+    // notes 超限时循环砍半（对齐 D1 的 caveats 砍法）；diff 与版本区间是最小集合不砍。
+    let notes: string = input.notes;
+    let base: string = RiTasksPromptShell.of(input, notes);
+    while ((AiTasks.RI_SYSTEM.length + base.length) > AI_PROMPT_MAX_CHARS && notes.length > 64) {
+      notes = notes.substring(0, Math.floor(notes.length / 2));
+      base = RiTasksPromptShell.of(input, notes);
+    }
+    return base + '\n请按 schema 输出 JSON。';
+  }
+
+  private static readonly RI_SYSTEM: string = '你是 Homebrew 包更新情报助手，向熟悉命令行的用户' +
+    '归纳一次版本更新。只基于给定的 Release Notes 与本地 diff JSON 回答，用简体中文；' +
+    'notes 没有的信息不得编造，没有依据的方面写进 gaps（如「无兼容性说明」）；' +
+    '安全相关内容只逐条转述 notes 原文（security_claims），不得自行推断严重性或补充漏洞编号。' +
+    'breaking_changes 每条给出 impact（对本机使用的影响）与 action（建议动作），' +
+    '没有可靠依据时 action 输出空串。\n' +
+    '空字段原则：new_features/fixes/breaking_changes/security_claims/gaps 没有内容时输出 []，' +
+    '禁止输出「无」「暂无」之类的填充句。\n' +
+    '输出 JSON：{"one_liner":"这次更新最值得注意什么，一句话","new_features":["0–3条"],' +
+    '"fixes":["0–3条"],"breaking_changes":[{"title":"变更是什么","impact":"对本机使用的影响",' +
+    '"action":"建议动作，可为空串"}],"security_claims":[{"claim":"上游自述原文转述"}],' +
+    '"gaps":["0–3条"],"confidence":"full|partial|none"}。';
+
+  private static parseIntel(text: string, outcome?: ParseOutcome): ReleaseIntelCard | null {
+    return parseJsonSafe(text, (obj: Record<string, Object>): ReleaseIntelCard | null => {
+      const card: ReleaseIntelCard = new ReleaseIntelCard();
+      card.oneLiner = typeof obj['one_liner'] === 'string' ? obj['one_liner'] as string : '';
+      card.newFeatures = stringArrayOf(obj['new_features'], 3);
+      card.fixes = stringArrayOf(obj['fixes'], 3);
+      card.gaps = stringArrayOf(obj['gaps'], 3);
+      // breaking_changes 逐条 cast：缺 title 的条目跳过（不整页拒绝，与 D2 单条 drop 同精神）
+      const breaking: Object | undefined = obj['breaking_changes'];
+      if (breaking !== undefined && Array.isArray(breaking)) {
+        const list: Array<Object> = breaking as Array<Object>;
+        if (list.length > 3) {
+          return null;
+        }
+        for (let i: number = 0; i < list.length; i++) {
+          const rec: Object | undefined = list[i];
+          if (rec === undefined || rec === null) {
+            continue;
+          }
+          const recObj: Record<string, Object> = rec as Record<string, Object>;
+          const title: string = typeof recObj['title'] === 'string' ? recObj['title'] as string : '';
+          if (title.trim().length === 0) {
+            continue;
+          }
+          const item: ReleaseIntelBreakingChange = new ReleaseIntelBreakingChange();
+          item.title = title;
+          item.impact = typeof recObj['impact'] === 'string' ? recObj['impact'] as string : '';
+          item.action = typeof recObj['action'] === 'string' ? recObj['action'] as string : '';
+          card.breakingChanges.push(item);
+        }
+      }
+      // security_claims 容两种元素形态：纯字符串（自述原文）或 {claim} 对象
+      const security: Object | undefined = obj['security_claims'];
+      if (security !== undefined && Array.isArray(security)) {
+        const list: Array<Object> = security as Array<Object>;
+        if (list.length > 2) {
+          return null;
+        }
+        for (let i: number = 0; i < list.length; i++) {
+          const rec: Object | undefined = list[i];
+          if (rec === undefined || rec === null) {
+            continue;
+          }
+          let claim: string = '';
+          if (typeof rec === 'string') {
+            claim = rec as string;
+          } else {
+            const recObj: Record<string, Object> = rec as Record<string, Object>;
+            claim = typeof recObj['claim'] === 'string' ? recObj['claim'] as string : '';
+          }
+          if (claim.trim().length === 0) {
+            continue;
+          }
+          const item: ReleaseIntelSecurityClaim = new ReleaseIntelSecurityClaim();
+          item.claim = claim;
+          card.securityClaims.push(item);
+        }
+      }
+      const confidence: string =
+        typeof obj['confidence'] === 'string' ? obj['confidence'] as string : '';
+      if (confidence.length > 0) {
+        card.confidence = confidence; // 非法值由 isValid 兜底判 false
+      }
+      if (!card.isValid()) {
+        return null;
+      }
+      return card;
+    });
+  }
+
   // ------------------------------------------------------------ 缓存与工具
 
   /** providerModel 缓存段：`<provider>_<model>`（sanitize 在 AiCache 里再做）。 */
@@ -530,6 +713,15 @@ export class AiTasks {
 }
 
 // ------------------------------------------------------- 模块级工具函数
+
+/** ri prompt 的拼装壳（超限砍半循环里复用，保持两次拼装口径一致）。 */
+class RiTasksPromptShell {
+  public static of(input: ReleaseIntelInput, notes: string): string {
+    return `包名: ${input.token}\n版本区间: ${input.from} → ${input.to}\n` +
+      `本地结构化 diff(JSON): ${input.diffJson}\n` +
+      `上游 Release Notes(纯文本，超长已截断):\n${notes}`;
+  }
+}
 
 /** E4 的 reason 判定：finishReason=length 即截断；其余用解析层的归类（schema/fence/nonjson）。 */
 function e4ReasonOf(completion: AiCompletion2, parseReason: string): string {

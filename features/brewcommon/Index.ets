@@ -343,6 +343,52 @@ export {
 } from './src/main/ets/constant/AiConstants';
 export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
 
+// ------------------------------------------------------------------ Y · 更新情报中心（Release Intelligence）
+
+// 详情页懒加载的更新情报：上游 Release Notes（releases.atom）+ 本地 formula diff + BYOK 归纳。
+// 服务编排与策略（忽略/暂停）都在 brewcommon，UI 卡在 brewdetail（spec 2026-11-23 §8）。
+export { ReleaseIntelService } from './src/main/ets/service/ReleaseIntelService';
+export { ReleaseIntelFilter } from './src/main/ets/service/ReleaseIntelFilter';
+export { ReleaseIntelPrefs } from './src/main/ets/service/ReleaseIntelPrefs';
+export { ReleaseIntelBaselineStore } from './src/main/ets/service/ReleaseIntelBaselineStore';
+export { SemverJudge } from './src/main/ets/util/SemverJudge';
+export { FormulaDiffer } from './src/main/ets/util/FormulaDiffer';
+export { BrewNotesExtractor } from './src/main/ets/util/BrewNotesExtractor';
+export { ReleaseIntelRepoResolver, ReleaseIntelTagFilter } from './src/main/ets/util/ReleaseIntelRepoResolver';
+export {
+  ReleaseIntelCard,
+  ReleaseIntelBreakingChange,
+  ReleaseIntelSecurityClaim,
+  ReleaseIntelInput,
+  ReleaseIntelDiff,
+  ReleaseIntelVerdict,
+  ReleaseIntelSnapshot,
+  ReleaseIntelArchiveEntry,
+  releaseIntelArchiveEntryOf,
+} from './src/main/ets/model/ReleaseIntelModels';
+export {
+  RELEASE_INTEL_FEATURE,
+  AI_PROMPT_VERSION_RI,
+  AI_CACHE_TTL_RI_MS,
+  RELEASE_INTEL_NOTES_MAX_CHARS,
+  RELEASE_INTEL_ATOM_TIMEOUT_MS,
+  RELEASE_INTEL_PREFS_STORE,
+  RELEASE_INTEL_PREFS_KEY_IGNORED,
+  RELEASE_INTEL_PREFS_KEY_PAUSED,
+  RELEASE_INTEL_PAUSE_7D_MS,
+  RELEASE_INTEL_PAUSE_30D_MS,
+  RELEASE_INTEL_PAUSE_FOREVER_MS,
+  RELEASE_INTEL_ARCHIVE_CAP,
+  RELEASE_INTEL_CONFIDENCE_FULL,
+  RELEASE_INTEL_CONFIDENCE_PARTIAL,
+  RELEASE_INTEL_CONFIDENCE_NONE,
+  RELEASE_INTEL_GAP_NONE,
+  RELEASE_INTEL_GAP_REPO,
+  RELEASE_INTEL_GAP_TAG,
+  RELEASE_INTEL_GAP_NET,
+  RELEASE_INTEL_GAP_NOTES,
+} from './src/main/ets/constant/ReleaseIntelConstants';
+
 // ------------------------------------------------------------------ 本机包（设备上的 brew 安装记录）
 
 // 执行设备上的 `brew info --json=v2 --installed` 并把结果归一成三个集合。

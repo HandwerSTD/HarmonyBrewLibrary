@@ -24,8 +24,12 @@ import {
   BrewFormulaModel,
   BrewInstalledLoader,
   BrewKind,
+  BrewService,
   BrewSourceStore,
   BREW_DIALECT_HARMONYBREW,
+  ReleaseIntelBaselineStore,
+  ReleaseIntelPrefs,
+  ReleaseIntelService,
   TldrService,
 } from '@ohos/brewcommon';
 import type {
@@ -35,6 +39,8 @@ import type {
   BrewInfoPageData,
   BrewInstalledPackage,
   BrewPackageItem,
+  ReleaseIntelArchiveEntry,
+  ReleaseIntelSnapshot,
   TldrPage,
 } from '@ohos/brewcommon';
 import { BrewDetailState, BrewInstallState } from './BrewDetailState';
@@ -90,6 +96,10 @@ export class BrewDetailViewModel {
     // 不等详情请求，也不等 brew 命令。详情页自己的网络取数不受这条路径影响。
     this.refreshInstallState(state);
     this.loadInstallState(state);
+    // Y 基线预捕获（release intel spec §3.1）：store 的单条缓存是覆盖式的，
+    // 详情请求一落地就会把「已装版本」的 raw 冲掉——必须抢在发起请求**之前**
+    // 把旧 raw 抢救进基线库（版本相符才落盘，内部判；幂等）。
+    this.captureBaselineFromStoreIfInstalled(param);
     const task: Promise<BrewInfoPageData> = param.kind === BrewKind.CASK ?
       this.loadCask(param.id, param.token) : this.loadFormula(param.id, param.token);
     task.then((data: BrewInfoPageData) => {
@@ -101,6 +111,11 @@ export class BrewDetailViewModel {
       // spec 2026-11-22 §3.1）—— 详情成功后再发起。详情失败时整页本就是错误态，
       // tldr 分区不可见，不需要取数。
       this.loadTldr(param, state);
+      // Y：抓取落地后「已装==最新」时顺手把新 raw 快照进基线库（幂等），
+      // 再装配更新情报卡（独立异步、失败静默——tldr 同款惯例，spec §4 / G8）。
+      this.captureBaselineFromStoreIfInstalled(param);
+      this.loadReleaseIntel(param, state);
+      this.loadReleaseArchive(param, state);
       Logger.info(TAG, `load success, kind=${param.kind} token=${param.token}`);
     }).catch((error: Error) => {
       if (error instanceof BrewDocAbsentError) {
@@ -307,5 +322,131 @@ export class BrewDetailViewModel {
       return;
     }
     uiContext.animateTo({ duration: 300, curve: Curve.Friction }, apply);
+  }
+
+  // ------------------------------------------------------------ Y · 更新情报中心
+
+  /**
+   * Y 基线的捕获入口（release intel spec §3.1）：store 缓存里的 raw 若恰好是「已装版本」，
+   * 就把它落进基线库（幂等）。两个时机共用：详情请求**前**（预捕获，防覆盖）与
+   * 成功落地**后**（已装==最新时新抓到的 raw 就是已装配方）。
+   * 内部判「raw 版本 == 已装版本」——OUTDATED 包刚抓到的新版本不会误存成基线。
+   */
+  private captureBaselineFromStoreIfInstalled(param: BrewDetailParams): void {
+    if (!BrewCli.isEnabled() || param.kind === BrewKind.CASK || param.token.trim().length === 0) {
+      return;
+    }
+    const installed: BrewInstalledPackage | null = BrewInstalledLoader.installedOf(param.token);
+    if (installed === null || installed.version.length === 0) {
+      return;
+    }
+    ReleaseIntelService.captureBaselineFromStore('formula', param.token, installed.version,
+      BrewService.cachedRawDocJson('formula', param.token));
+  }
+
+  /**
+   * Y 更新情报卡（release intel spec §3.1 / §4 / G8）。与 tldr 同一条惯例：
+   * 独立异步、失败静默、数据到达带 300ms 淡入。
+   *
+   * 出现条件（三道闸，任一不满足整卡不出现、不发请求）：
+   * - pc_normal / CLI 关（G10）；
+   * - 仅 formula（cask v1 不渲染情报卡，spec §10）；
+   * - 本机已装且 OUTDATED（H 负责发现更新，Y 只理解「这一组更新」）。
+   *
+   * baseline 缺失 → F5（diff 区降级）；上游通道失败 → 对应缺口码；
+   * AI 失败 / 无 Key → 结构化区照常渲染（G5）。
+   * public：情报卡操作行（重新生成）需要从视图层重新触发（force 旁路 AI 缓存）。
+   */
+  public loadReleaseIntel(param: BrewDetailParams, state: BrewDetailState, force: boolean = false): void {
+    if (!BrewCli.isEnabled() || param.kind === BrewKind.CASK || param.token.trim().length === 0) {
+      return;
+    }
+    if (state.installState !== BrewInstallState.OUTDATED) {
+      return;
+    }
+    const installed: BrewInstalledPackage | null = BrewInstalledLoader.installedOf(param.token);
+    if (installed === null || installed.version.length === 0 ||
+      installed.latestVersion.length === 0) {
+      return;
+    }
+    // store 里的 raw 是「刚刚抓到的最新版」；基线库里有已装版本的旧 raw（load 开头已预捕获）
+    const rawJson: string = BrewService.cachedRawDocJson('formula', param.token);
+    if (rawJson.length === 0) {
+      return;
+    }
+    let rawDoc: Object = new Object();
+    try {
+      rawDoc = JSON.parse(rawJson) as Object;
+    } catch (error) {
+      Logger.warn(TAG, `release intel raw parse failed, token=${param.token}`);
+      return;
+    }
+    const oldRawJson: string = ReleaseIntelBaselineStore.read(param.token, installed.version);
+    ReleaseIntelService.assemble(rawDoc, oldRawJson, param.token, 'formula', installed.version, force)
+      .then((snapshot: ReleaseIntelSnapshot) => {
+        // 版本无增量（快照同步偏差：brew 说 outdated 但源还没更新）→ 不渲染情报卡
+        if (snapshot.toVersion.length === 0 || snapshot.toVersion === snapshot.fromVersion) {
+          Logger.info(TAG, `release intel skip: no version delta, token=${param.token}`);
+          return;
+        }
+        state.releaseIntel = snapshot;
+        // 策略与 pin（G6）：忽略状态影响顶部弱化条；pin 只生成命令文本，执行=复制
+        state.releaseIntelIgnored =
+          ReleaseIntelPrefs.ignoredVersion(param.token) === snapshot.toVersion;
+        state.releaseIntelPinCommand = BrewCommandGenerator.pinCommand(param.token, state.data.tap);
+        BrewDetailViewModel.applyIntelWithTransition(state);
+        Logger.info(TAG, `release intel ready token=${param.token} ` +
+          `${snapshot.fromVersion} -> ${snapshot.toVersion} gap=${snapshot.gapCode} ` +
+          `card=${snapshot.card !== null} aiFailed=${snapshot.aiFailed}`);
+      })
+      .catch((error: Error) => {
+        // assemble 内部不抛（缺口都收敛进 gapCode）；这里的 catch 只兜非预期异常
+        Logger.warn(TAG, `release intel load failed. reason=${error.message}`);
+      });
+  }
+
+  /** 情报卡数据落 state，带插入转场（对齐 tldr 的 300ms 淡入，spec §4.2 同款） */
+  private static applyIntelWithTransition(state: BrewDetailState): void {
+    const apply: () => void = () => {
+      state.hasReleaseIntel = true;
+    };
+    const uiContext: UIContext | undefined = AppStorage.get<UIContext>(StorageKey.UI_CONTEXT);
+    if (uiContext === undefined) {
+      apply();
+      return;
+    }
+    uiContext.animateTo({ duration: 300, curve: Curve.Friction }, apply);
+  }
+
+  /**
+   * 「重新生成」（G8）：旁路 AI 缓存强制取数，与 D1 的 force 同口径。
+   * atom 每次都现拉，AI 缓存被旁路后新值写回同键；结构化区同步重算（零成本）。
+   */
+  public regenerateReleaseIntel(param: BrewDetailParams, state: BrewDetailState): void {
+    this.loadReleaseIntel(param, state, true);
+  }
+
+  /**
+   * 版本档案区（spec §3.3 / §4：caveats 与 siblings 之间）。readArchive 是同步盘读，
+   * 这里同步调用、try/catch 兜底静默（档案是增益记录，读失败只影响档案区展示）；
+   * 只展示当前 token 的条目，按时间倒序（appendArchive 已保证）。
+   * CLI 关 / pc_normal（G10）/ token 空都不加载。
+   */
+  public loadReleaseArchive(param: BrewDetailParams, state: BrewDetailState): void {
+    if (!BrewCli.isEnabled() || param.token.trim().length === 0) {
+      return;
+    }
+    try {
+      const entries: ReleaseIntelArchiveEntry[] = ReleaseIntelService.readArchive();
+      const mine: ReleaseIntelArchiveEntry[] = [];
+      for (const entry of entries) {
+        if (entry.token === param.token) {
+          mine.push(entry);
+        }
+      }
+      state.releaseArchive = mine;
+    } catch (error) {
+      Logger.warn(TAG, `release archive load failed. reason=${(error as Error).message}`);
+    }
   }
 }
