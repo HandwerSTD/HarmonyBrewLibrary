@@ -1,401 +1,576 @@
-# 工具清单同步（W′ v0 · 文件流）· 设计
+# W′ 工具清单分布式同步 spec（BrewManifestSync）
 
-> 日期：2026-11-23。状态：待评审。评审通过后按「构建顺序」第 6 位实施（主线四：B′ 路径② Brewfile 导入 + W′ v0 文件流）。
-> 范围：`features/brewcommon` 新增 Brewfile 解析器与批量安装队列 service；`features/mine` 新增「工具清单同步」页与「安装队列」页；
-> `hmosword-build` 新增解析器检查脚本；文案（zh/en）。
-> 叙事定位：motivation「主线四 · 工具链跟着人走」——「换机一键复制 CLI 环境、双机互见」。裁决与排序见
-> [`decisions.md`](../../2026-11-21-brainstorm/decisions.md)（31 号 W′ v0 文件流，第一梯队；构建顺序第 6 位）。
-> 机制分级是本 spec 的第一约束：**v0 只做文件流**（导出一个文件、经任何渠道自传、零云依赖）；
-> v1 账号端云同步已被 [`rejected.md`](../../2026-11-21-brainstorm/rejected.md) §2 第 3 条否决（默认关、显式开启、需隐私评估），
-> 本 spec 不为其预留任何后门字段。同理，系统分布式能力（流转/接续/分布式数据对象）已被 rejected.md §1 第 14 条否决
-> ——brew 的一切事实都在本机，「多设备」在本 spec 中是**人的多设备**（文件跟着人走），不是设备的分布式协同。
-> 相关文档：[`2026-10-04-brew-command-execution-spec.md`](2026-10-04-brew-command-execution-spec.md)（执行 Sheet / 中断 / 退出码，本 spec 的执行底座）、
-> [`2026-10-04-brew-installed-packages-spec.md`](2026-10-04-brew-installed-packages-spec.md)（已装列表与 install-on-request 口径）、
-> [`2026-10-05-brew-detail-action-bar-spec.md`](2026-10-05-brew-detail-action-bar-spec.md)（底部悬浮操作栏复用）、
-> [`../../knowledge/2026-11-21-brew-cache-ownership.md`](../../knowledge/2026-11-21-brew-cache-ownership.md)（缓存归属——队列文件不是缓存）、
-> CloudPurePlay `docs/deprecated/2025-07-30-settings-import-export-design.md`（导出/导入 UX 参考：摘要确认、错误分类、保存选择器模式）。
-
----
-
-## 0. 一句话
-
-把我主动安装的工具（`brew bundle dump` 的口径）导出成一个 Brewfile 语义的文本文件；在另一台设备上把它导入回来——
-与本机已装清单做差集，逐条标注、勾选、进批量安装队列。**W′ v0 = 应用版的 `brew bundle dump` + 带 UX 的 `brew bundle install`。**
+> 日期：2026-11-23。状态：**已立项**（需求方当日裁定：W′ 以分布式同步实现，取代本日早些
+> 时候的 v0 文件流方案；`round4.md` 与 `rejected.md` 已同步修订）。
+> 范围：分布式键值数据库（distributedKVStore）承载的工具清单与 AI 模型配置（含显式
+> 授权后的 API Key 同步）跨设备同步、侧边栏新增入口 + 半模态 Sheet、设置常驻页、
+> 批量安装队列、pc_normal 隐藏测试能力。
+> 叙事定位：主线四「工具链跟着人走」——多台鸿蒙 PC 组网互见工具清单，换机一键复制、
+> 双机互见跟装（`relatedwork.md` 主线四；brainstorm 轮次定义见 `round5.md` §2）。
+>
+> 相关文档：
+> - `docs/spec/2026-11-21-brainstorm/round5.md` §2（W′ 收窄口径：只同步主动安装）
+> - `docs/spec/2026-11-21-brainstorm/rejected.md` §1 第 14 条修订、§2 第 3 条重写（本 spec 的裁定记录）
+> - `docs/superpowers/specs/2026-10-04-brew-installed-packages-spec.md`（installedOnRequest 口径）
+> - `docs/superpowers/specs/2026-10-05-brew-detail-action-bar-spec.md`（pc_normal 行为闸 G10 模式）
+> - worktree `feature/brew-manifest-sync`（`D:\HarmonyOS\Projects\Local\Worktrees\brew-sync-spec`）上
+>   2026-11-23 的文件流版 spec：**机制已废弃**（本 spec 取代），其批量安装队列、导入预览
+>   diff UX、loading 分档、文案表设计被本 spec 回收。
+> - 参考工程 UX：CloudPurePlay `blocking-loading-ux-design.md`（loading 分档 T0–T3 规范）。
 
 ---
 
 ## 1. 目标与成功判据
 
 | # | 判据 | 可观测证据 |
-| --- | --- | --- |
-| G1 | pc_acl：「我的 → 设置」出现「工具清单同步」行，点击进入同步页 | 真机 |
-| G2 | 导出生成 Brewfile 语义文本：`tap` 行（仅非默认 tap）+ `brew`/`cask` 行（**仅主动安装**，依赖不同步），头部为 `#` 注释元数据 | 文件内容比对；`[BrewManifest] export items=N formula=F cask=C taps=T bytes=B` |
-| G3 | 导出的文件与 brew 生态兼容：新 Mac 上 `brew bundle install --file=<该文件>` 可直接消费（注释行被 brew 忽略）；反之，Mac `brew bundle dump` 的产物可被本应用导入 | 沙盒比对（不要求真机） |
-| G4 | 导入：选择文件 → 解析 → 与本机已装 diff 标注 → 勾选 → 批量安装逐条执行 → 已装列表出现新包 | 真机；`[BrewManifest] parse lines=L valid=V ignored=I`、`[BrewQueue] item token=… status=done exit=0` |
-| G5 | 双机互见（文件流近似）：导入预览出现亮点行「另一台设备有 N 个你没有的工具」，且 N = 清单项 − 本机已装 | 真机 |
-| G6 | 队列落盘：批量执行中途杀进程，重启应用后队列恢复（执行中条目回 `pending`），可继续 | 真机（kill 后重启）；`filesDir/brew_state/install_queue.json` 存在且状态正确 |
-| G7 | 失败续跑：失败条目可单独重试；「重试失败项」批量重置 | 真机 |
-| G8 | 中断语义：执行中暂停 = interrupt 当前条目（SIGINT→SIGKILL 既有链路），队列停止，剩余条目保持 `pending` 可恢复 | 真机；`[BrewQueue] pause at token=… reason=interrupt` |
-| G9 | 执行 Sheet 复用：队列执行期间，全局 BrewCommandSheet 显示当前条目的流式输出，可关闭可重开（`BrewCommandState` 单例语义不变） | 真机 |
-| G10 | pc_normal：设置页**不出现**「工具清单同步」行（随 `BREW_CLI_ENABLED`，同 sentinel 行模式） | 真机（pc_normal） |
-| G11 | 非清单文件（无任何合法行）→ Toast「不是有效的清单文件」，无崩溃；超 1MB 文件 → 拒读 | 真机 |
-| G12 | 双 product 构建通过 | `devecocli build --product default` 与 `--product pc_normal` 双绿 |
-| G13 | 队列文件**不**属于缓存：CacheAdmin 一键清理后 `brew_state/install_queue.json` 仍在 | 真机；文件存在性 |
-| G14 | 解析器检查脚本全绿（构造用例：注释头/tap 行/带版本 pin/cask 行/全名行/BOM/CRLF/空行/垃圾行/超限） | `node hmosword-build/brew-manifest/check_manifest_parser.mjs` |
+|---|---|---|
+| G1 | 组网（同账号、可信设备）的两台 2in1 上，A 机新装一个包后，B 机侧边栏底部出现「清单同步」入口 | B 机日志 `[sync] pending new=1 from=<deviceId>`；侧边栏 Shell 入口上方出现入口行 |
+| G2 | 入口**仅在存在未消费的新增时显示**；点开 Sheet 即视为已消费，入口消失；再有远端新增则重新出现 | 入口可见性 = `pendingNewCount > 0`；`onWillAppear` 触发 ack（G6）；日志 `[sync] ack device=<id> at=<updatedAt>` |
+| G3 | 同步库为**加密 + 最高安全等级 S4**：`encrypt: true`、`securityLevel: SecurityLevel.S4` | 代码常量断言；日志 `[sync] kv open store=brew_manifest_sync encrypt=true sl=S4 ok=true` |
+| G4 | AI 模型配置（provider / baseUrl / model）跨设备同步；**API Key 仅在用户显式开启「同步 API Key」后进同步库**（默认不同步、开关可随时关）；同步 UI（状态展示 + Key 开关）住**设置-AI 配置页**（`AiSettingView` 新增「分布式同步」区），不在清单同步 Sheet | A 机改配置 → B 机 AI 配置页刷新出新值；未开启时 `ai/config` 值无 key 字段；开启后同步库含 key 字段、对端写入本机 Asset Store；日志 `[sync] ai config applied provider=… model=… key=<true|false>` |
+| G5 | 清单口径 = **只同步主动安装**（formula 取 installedOnRequest，cask 视为主动），含各包 tap；依赖包不同步 | 复用 `BrewInstalledParser` 投影（§2）；日志 `[sync] publish device=<id> packages=N taps=M ms=N` |
+| G6 | 已读语义同命令 Sheet 的 `resultViewed`：Sheet 打开即 ack 当前各设备 manifest 的 `updatedAt` | ack 落本地 preferences `brew_sync_state`（不进同步库）；入口随 ack 消失 |
+| G7 | 常驻界面 =「我的 → 设置 → 工具清单同步」二级页（全功能、无新增也可见）；设备清单卡 = Formulae 分类卡同构（前 5 条 + 「查看全部」二级页全量清单） | `MineSettingView` 新行 push `BrewManifestSyncPage`；页内设备卡复用 `BrewCategoryCardHeader` / `BrewPackageRow` / `BREW_CATEGORY_PREVIEW_COUNT` 口径；卡片「查看全部」可进 `BrewManifestDevicePage` |
+| G8 | 新增包可勾选并**批量安装**：队列逐条 `brew install`、失败域隔离、进度续看（复用命令 Sheet） | `install_queue.json` 落盘；逐条日志 `[queue] start/ok/fail token=…`；中途关 Sheet 重开续看 |
+| G9 | pc_normal（无执行通道）：同步查看、AI 配置应用照常；**安装动作不出现**（同 G10 行为闸） | `BrewCli.isEnabled() === false` 时无勾选框与批量安装条 |
+| G10 | 隐藏测试能力：**仅 pc_normal**，设置-关于页 app 图标 4 连点 → 向同步库写入 3 个测试包（`python@3.12`、`deepseek-harness`、`reasonix`，来源身份取**本机真实 deviceId/设备名**，与其他 manifest 同源同构） | 4 次点击后 Toast + 日志 `[sync] easter egg written packages=3`；侧边栏入口随即出现（本地写读链路，无需组网） |
+| G11 | 权限 `ohos.permission.DISTRIBUTED_DATASYNC` 双 product 声明，常驻页首次打开时动态申请；拒绝不崩溃，视图内引导授权 | module.json5 声明 + 日志 `[sync] permission grant=true`；拒绝态显示引导行 |
+| G12 | 双 product 构建绿 | `devecocli build --product default`、`devecocli build --product pc_normal` 均无错误 |
+| G13 | 关键链路全部打点 | §3.9 打点表 |
 
-**成功判据的总原则**：W′ 是「主线四」的证据件，且 decisions.md 已裁定它**无实测门槛**（复用既有链路）——
-所以本 spec 的全部新风险集中在三处：保存选择器先例为零（§10）、队列是新的执行形态（§3.2）、导入页是新的交互（§4）。
+范围外（明确不做）：
+- **云端账号同步**——数据不出设备信任圈，无服务端、无用户协议负担（`rejected.md` §2 第 3 条重写后的边界）。
+- **依赖包同步**、全量 Brewfile——主动清单才是「我的工具链」（round5 §2 口径）。
+- **后台自动安装**——跟装必须经过 Sheet 勾选确认，同步只负责「看见」。
+- B′ 工作台的粘贴 / 拖拽导入路径与三色画布（B′② 的另两条输入路径，另立 spec）。
+- 跨端任务接续 / 应用接续 / 分布式流转（`rejected.md` §1 第 14 条：否决理由已修订，但流转本体仍否决）。
 
 ---
 
-## 2. 现状
+## 2. 现状（落点 × 已有事实）
 
 | 位置 | 现状 |
-| --- | --- |
-| `features/brewcommon/src/main/ets/service/BrewCommandRunner.ets` | 单命令执行通道已建成：单飞（BUSY）、流式输出、超时、SIGINT→SIGKILL 中断、`BrewCommandState` 是 `@Observed` 单例（Sheet 可关可重开续看）。**当前是单命令，不是队列**——本 spec 新增的队列 service 逐条复用它 |
-| `features/brewcommon/src/main/ets/service/BrewInstalledLoader.ets` | 静态类：`snapshot()` 同步取内存快照、`loadSets()` 异步合并等待、写命令结束自动 `invalidate()`。导出取数与导入 diff 都以它为唯一数据源（同构 BrewSentinelService「只读快照、绝不自己跑命令」模式） |
-| `features/brewcommon/src/main/ets/util/BrewInstalledParser.ets` | `installedOnRequest`：formula 取最新 keg 的 `installed_on_request === true`；cask 恒 true（投影无此字段，按主动安装）。tap 信息在 `fullName`（`homebrew/core/wget`）/`full_token`（`tap/token`）里 |
-| `features/brewcommon/src/main/ets/util/BrewCommandGenerator.ets` | `qualifiedName(token, tap)`（非默认 tap 拼 `tap/token`）、`installArgs(kind, token, tap)`、`isSafeName`（允许 `@ + . _ - /`，首字符字母数字，长 1–128）。导出是它的逆运算，安装是它的正向复用 |
-| `features/pcui/src/main/ets/view/PcMainPage.ets` | BrewCommandSheet 全局宿主（bindSheet 绑 `commandState.sheetShown`）——队列执行零改动即可复用 |
-| `features/mine/src/main/ets/view/MineSettingView.ets` | 设置页导航列表（HmosListItem×ListItemGroup），sentinel 行已是「`if (isLocalPackagesEnabled())` + G10 注释」的样板——同步入口行照抄此模式 |
-| `features/mine/src/main/resources/base/profile/router_map.json` | 页面路由注册表；新页面需登记 name/pageSourceFile/buildFunction，并在 `common/src/main/ets/model/PageEnum.ets` 加枚举 |
-| 文件选择器 | 全工程仅 `features/hmkit-ai/src/main/ets/attachment/Attachments.ets:49` 一处 `picker.DocumentViewPicker(context).select()` 先例（@kit.CoreFileKit）。**保存选择器（save）零先例**——本 spec 引入，CloudPurePlay `BackupRestoreSettings.ets`（picker→temp→save→copy→清 temp）是参考实现 |
-| 缓存归属（`docs/knowledge/2026-11-21-brew-cache-ownership.md`） | `filesDir/brew_live/*` 是缓存（CacheAdmin 统一清理、CacheEpoch 切源清理）。**队列文件是用户任务状态不是缓存** → 新目录 `filesDir/brew_state/`，不进 CacheAdmin（G13） |
-| B′ 工作台 | brainstorm round1 提案（粘贴/拖拽/文件导入三入口 + 三色画布 + 批量队列），**尚无 spec**。本 spec 把「文件导入路径 + 批量队列」落地为 B′② 的第一块砖；粘贴/拖拽入口与三色画布留给 B′ 工作台 spec（§范围外） |
+|---|---|
+| `features/brewcommon/src/main/ets/service/BrewInstalledLoader.ets` | 静态类；`snapshot()` / `loadSets()` / `subscribe(fn)` / `invalidate()`；写命令结束自动失效刷新；盘上缓存 installed 集合。**清单发布的数据源** |
+| `features/brewcommon/src/main/ets/util/BrewInstalledParser.ets:78-86` | formula 取 newest keg 的 `installed_on_request === true`；cask 投影无此字段按主动安装处理（caskOf 恒 true）。**G5 口径直接复用** |
+| `features/brewcommon/src/main/ets/model/BrewModels.ets:269-283` | `BrewInstalledPackage { name; fullName; …; installedOnRequest; …; kind }`——token 取 `name`，tap 从 `fullName` 剥前缀派生 |
+| `features/brewcommon/src/main/ets/service/BrewCommandRunner.ets` | 单命令执行（单飞 BUSY / interrupt / 超时）；`openSheet()/closeSheet()/markViewed()` 管理 Sheet 生命周期。**队列的执行底座，但当前无队列概念** |
+| `features/brewcommon/src/main/ets/model/BrewCommandModels.ets` | `BrewCommandState` @Observed（含 `sheetShown`、`resultViewed`）——同步服务状态类同构仿写 |
+| `features/brewcommon/src/main/ets/component/BrewCommandSheet.ets` | 命令执行 Sheet 组件；宿主 `PcMainPage`。**BrewManifestSyncView 的样板** |
+| `features/brewcommon/src/main/ets/service/AiSettingsStore.ets:38` | BYOK 存储：Key 只进 Asset Store（`AI_ASSET_ALIAS_API_KEY`）；provider/baseUrl/model 存 GSKV 偏好（store `AI_PREFS_STORE`，key `AI_PREFS_KEY_CONFIG`）；`saveConfig`/`loadConfig`/`snapshot`。**AI 同步的本地真源；Key 读写方法（`saveApiKey`/`loadApiKey`）现成，远端 Key 应用直接复用** |
+| `features/brewcommon/src/main/ets/component/BrewCategoryCardView.ets` | Formulae/Casks 分类卡：卡头（`BrewCategoryCardHeader`）+ 前几条 + 「查看全部」行；`previewLimit` / `showViewAllEntry` 两 prop 支持一级预览与二级全量复用同一组件。**设备清单卡的视觉母版（§4.2.1）** |
+| `features/brewcommon/src/main/ets/component/BrewPackageRow.ets` | 卡内包行：HDS `HdsListItemCard` + 包图标基底 + token 主文本/desc 副文本 + 热度右槽（`hideRank` 可关）。**设备卡与二级页的行组件** |
+| `features/brewcommon/src/main/ets/constant/BrewConstants.ets:268` | `BREW_CATEGORY_PREVIEW_COUNT = 5`——预览条数与数据层 `hasMore` 判据同源。**设备卡复用同一常量，不新设** |
+| `features/brewformulae/src/main/ets/view/BrewFormulaCategoryView.ets` | 分类「查看全部」二级页：`List` + `LazyForEach` 虚拟滚动 + 让位首项 + 首末项圆角拼卡。**设备清单二级页的版式母版（§4.2.2）** |
+| `features/brewcommon/src/main/ets/model/AiTypes.ets:47` | `AiProviderConfig { provider; baseUrl; model }`——同步的恰好是不含密钥的三个字段 |
+| `features/pcui/src/main/ets/component/CustomSideBar.ets:45,157` | `shellEntryVisible()` = 命令状态离开 IDLE 即常显；`if` 块 = Divider + ShellEntryBuilder 压在 `Blank()` 之后。**同步入口插在它上面，同构** |
+| `features/pcui/src/main/ets/view/PcMainPage.ets:240` | 命令 Sheet 的 bindSheet 绑在 `HdsNavDestination` 上。**同一节点多绑 bindSheet 不可靠**（官方 FAQ：多半模态应绑不同组件）——同步 Sheet 绑在内层 `HdsSideBar` 节点 |
+| `features/mine/src/main/ets/view/MineSettingView.ets` | 导航型列表（`HmosListItem` + pushPath）；已有 `isLocalPackagesEnabled()` 条目模式（sentinel 行）。**常驻入口行的落点** |
+| `features/mine/src/main/resources/base/profile/router_map.json` | mine 页面路由注册表（`MinePackagesView` / `AboutView` 等）。新页在此登记 |
+| `features/mine/src/main/ets/view/AboutView.ets:67` | `Image(this.drawableDescriptor)` app 图标，`draggable(false)`——**4 连点彩蛋目标** |
+| `products/pc_normal/src/main/ets/pcability/PcAbility.ets:16` | `BREW_CLI_ENABLED=false` 注入（pc_acl=true）。**彩蛋的 product 判据**（取反） |
+| `products/pc_acl/src/main/module.json5:71`、`products/pc_normal/src/main/module.json5:39` | requestPermissions 现无 `DISTRIBUTED_DATASYNC`，需双 product 补声明 |
+| 工程依赖 | 全工程**零** distributedKVStore / deviceManager 先例；无任何分布式代码——本 spec 是第一块 |
 
 ---
 
-## 3. 数据流与缓存
+## 3. 数据流与数据模型
 
-### 3.1 导出：快照 → Brewfile 文本 → 保存选择器
-
-```
-「导出清单」按钮
-  → BrewInstalledLoader.loadSets()            // T2：按钮 spinner；有新鲜快照立即返回，无则后台刷新等待
-  → snapshot().sets.installed
-      过滤 installedOnRequest === true         // W′ 口径：只同步主动安装；cask 恒 true
-  → BrewfileBuilder.build(items): string       // 纯函数
-      1) 头部注释（见下）
-      2) tap 行：逐包从 fullName/full_token 剥 tap 前缀（lastName 段为 token，
-         其余为 tap；无 / 前缀 = 默认 tap），收集**非默认 tap** 集合
-         （默认 = homebrew/core、homebrew/cask），排序去重
-      3) brew 行：kind=formula 且主动安装，按 name 排序
-      4) cask 行：kind=cask，按 name 排序
-  → 写临时文件 filesDir/temp/manifest_<ts>.txt
-  → picker.DocumentViewPicker.save(newFileNames=['Brewfile-<yyyyMMdd-HHmm>.txt'])
-      // 用户选位置（默认落系统 Download）；save picker 是唯一合规写公共目录的路径
-  → fs 拷贝 temp → saveUri；finally 删 temp    // CloudPurePlay 模式
-  → Toast「已导出：<用户可见路径/文件名>」
-  → [BrewManifest] export items=N formula=F cask=C taps=T bytes=B
-```
-
-**导出文件格式（v1，Brewfile 方言 + 注释头）：**
+### 3.1 同步库（唯一分布式 KV 库）
 
 ```
-# HarmonyBrewLibrary tool manifest v1
-# exported_at=2026-11-23T20:30:00+08:00
-# items=12 formula=11 cask=1
-tap "user/tap"
-brew "gh"
-brew "wget"
-cask "visual-studio-code"
+import { distributedKVStore } from '@kit.ArkData';
+import { deviceManager } from '@kit.DeviceManagerKit';
+
+storeId  = 'brew_manifest_sync'          // 两端一致；不一致 getKVStore 报 15100002
+options  = {
+  createIfMissing: true,
+  encrypt: true,                          // 数据库加密（G3）
+  securityLevel: distributedKVStore.SecurityLevel.S4,   // 最高等级（G3）
+  kvStoreType: distributedKVStore.KVStoreType.SINGLE_VERSION,
+  autoSync: true,                         // put/delete 后自动同步（辅助路径）
+  backup: true,
+}
 ```
 
-- `#` 注释行是 brew bundle 的合法语法（被其忽略），同时是应用自己的元数据（导入预览显示「导出于 …」）——**一份文件，两个消费者，零私有格式**。
-- **不导出版本号**（Brewfile 支持 `brew "wget", "1.2.3"` pin）：工具链跟人走，不是复现实验环境；跨设备/跨源版本无意义，版本随源走。
-- **不导出依赖包**：W′ 口径（round5 需求方裁定：全量 Brewfile 太庞大且无意义）。
-- 文件后缀 `.txt`：微信/邮件/选择器三头通吃（无后缀 `Brewfile` 在部分渠道与选择器里都会遇到摩擦）；内容即 Brewfile，改名 `Brewfile` 后 `brew bundle` 照常可用（G3）。
+- **SINGLE_VERSION 而非 DEVICE_COLLABORATION**：清单 Key 按设备前缀隔离（每设备只写自己的
+  Key，天然无同 Key 冲突）；`ai/config` 是唯一多端共写 Key，按 KV 层「最后写入生效」
+  （LWW）解决——SINGLE_VERSION 的既定语义，不自建冲突策略。
+- **一个库装两类数据**（`device:*/manifest` + `ai/config`）：S4/加密对全库生效，开一个库
+  代价最小（app 同时最多 16 库的限制从此不构成压力）。
+- **S4 风险即接受**：数据安全标签不得高于对端设备安全等级，否则**静默不同步**（不报错）。
+  需求方明确裁定 S4；PC/2in1 一般为 SL4。真机核对步骤见 §9、风险见 §10。
 
-### 3.2 批量安装队列：落盘 service + 逐条复用 Runner
+### 3.2 Key 设计与 Value Schema
 
-**队列是落盘数据，不是内存态**——rejected.md §2 第 2 条（手机遥控否决）留的门：「批量安装队列落盘为数据，
-未来任何前端触发同一队列零架构改动」。文件：`filesDir/brew_state/install_queue.json`（不属于 CacheAdmin，G13）。
+| Key | 写者 | Value（JSON，< 4MB；清单实际 KB 级） |
+|---|---|---|
+| `device:<deviceId>/manifest` | 该设备（仅 `BrewCli.isEnabled()` 时发布） | `BrewSyncManifestDoc` |
+| `ai/config` | 任意设备（保存 AI 设置时） | `BrewSyncAiConfigDoc` |
 
-```
-BrewInstallQueue（单例实例，对齐 BrewCommandRunner 的单例风格）
-  schema（JSON, version=1）:
-  { items: [ { token, kind, tap, status: pending|running|done|failed,
-               attempts, lastExitCode, lastStartedAt, lastEndedAt } ],
-    createdAt }
+```jsonc
+// BrewSyncManifestDoc（schema 字段做向前校验：非 1 拒收）
+{
+  "schema": 1,
+  "deviceId": "…",                  // deviceManager.getLocalDeviceSync().deviceId
+  "deviceName": "Handwer-PC",       // 同源；设备自报，读取端直接展示
+  "updatedAt": 1763892345678,       // 发布时刻 epoch ms——「新增判定」的时间轴
+  "packages": [
+    { "token": "wget",   "kind": "formula", "tap": "" },
+    { "token": "python@3.12", "kind": "formula", "tap": "" },
+    { "token": "gh",     "kind": "formula", "tap": "user/repo" }
+  ],
+  "taps": ["user/repo"]             // packages 的 tap 去重集（安装即 `brew install tap/token`，tap 自动克隆）
+}
 
-  enqueue(items)      // 覆盖式：新导入的勾选项整体替换 pending（不与旧失败项合并——见 §4.4）
-  start()             // 幂等；逐条执行循环（见下）
-  retry(token)        // failed → pending
-  retryAllFailed()
-  pause()             // interrupt 当前条目，循环停止（G8）
-  subscribe(fn)       // 状态变更通知（队列页刷新；按函数对象去重，对齐 runner listeners 的坑）
-  每次条目状态变更 → 写盘（KB 级文件，全量重写）
-```
-
-**执行循环（事件驱动）：**
-
-```
-start():
-  if runner.isRunning() → 拒绝 + 调用方提示「当前有命令执行中」（既有 BUSY 文案链路）
-  runner.subscribe(队列监听器)                 // 完成事件驱动
-  取第一条 pending → 设 running（写盘）→ runner.start(该条的 install 命令)
-onRunnerFinished(state):
-  if state.args === 当前条目的期望 args:       // 防串：用户自发的单命令完成不驱动队列
-    status = (exit 0 → done, 其余 → failed)；写盘
-    if 还有 pending 且未 pause → 下一条 start
-  else: 忽略（非队列命令）
-崩溃恢复：冷启动读盘，running 条目一律重置为 pending（上次死在半途）
+// BrewSyncAiConfigDoc
+{ "schema": 1, "updatedAt": 1763892345678,
+  "provider": "deepseek",           // AI_PROVIDER_DEEPSEEK | AI_PROVIDER_CUSTOM
+  "baseUrl": "https://api.deepseek.com",
+  "model": "deepseek-chat",         // 与 AiProviderConfig 三字段一一对应
+  "key": "sk-…" }                   // 可选；仅当本机「同步 API Key」开关开着时写入/应用（G4）
 ```
 
-- **逐条独立命令**（`brew install <qualifiedName>`，cask 加 `--cask`），不用 `brew install a b c`：
-  失败域隔离、输出可读、单条可中断可重试。命令拼装完全复用 `BrewCommandGenerator.installArgs`（页面上显示什么就执行什么）。
-- 每条完成时 runner 自动 `BrewInstalledLoader.invalidate()` → 已装列表逐条刷新，队列页「已装」标注同步更新。
-- 中断 = `runner.interrupt()`（SIGINT→SIGKILL 既有链路），条目记 failed（`exit<0`），循环停止，pending 保留（G8）。
-- 队列执行期间用户在别处点单命令 → runner 返回 BUSY → 既有提示（语义对称：谁先占执行权谁先走）。
+- 包投影（G5）：`BrewInstalledLoader.snapshot().sets.installed` 过滤 `installedOnRequest === true`
+  → `token = name`、`kind`、`tap = fullName 含 '/' ? 前缀 : ''`；`brew info --json=v2 --installed`
+  的既有口径零改动。
+- **ack 状态不进同步库**（进库会被同步污染对端）：落本地 GSKV 偏好 store `brew_sync_state`，
+  key `ack`，value JSON `{ "<deviceId>": <ackUpdatedAt> }`。
 
-### 3.3 导入：选择器 → 解析（纯函数）→ diff → 勾选 → enqueue
+### 3.3 发布链（本机清单 → KV）
 
 ```
-「选择清单文件」→ picker.DocumentViewPicker.select()   // 不设后缀过滤（见下）
-  → 读文件（> 1MB 拒读，G11；读为 UTF-8 字符串）
-  → BrewfileParser.parse(text): BrewManifest        // 纯函数，可脚本回归（G14）
-      逐行（容忍 BOM / CRLF / 空行 / 行首尾空白）：
-        `# …`              → 注释；头部 `# key=value` 提取为 meta（exported_at 等）
-        `tap "user/repo"`  → taps[]
-        `brew "token"[, "ver"]` → items[formula]；版本 pin 读入但**不用于安装**
-        `cask "token"`     → items[cask]
-        `brew "u/r/token"` → 拆 tap + token（人手写全名的防御分支）
-        其余               → ignored 计数
-      items+taps 全空 → 抛「不是有效的清单文件」（F1）
-  → diffAgainst(snapshot().sets.installed):
-      优先 name+kind 精确命中 → 已装（禁勾，默认不勾）
-      次选 name 跨 kind 命中   → 已装（禁勾，行上保留导入侧 kind 角标）
-      未命中                  → 新装（默认全勾——换机场景一键复制）
-  → 预览态（§4.3）→ 勾选 → 「安装所选(N)」→ 轻确认 dialog → enqueue + start
-  → [BrewManifest] parse lines=L valid=V ignored=I
+BrewManifestSyncService.init(context)            // PcAbility.onCreate（双 product）
+  → createKVManager / getKVStore / 订阅（§3.4）/ 首次 sync()
+  → 若 BrewCli.isEnabled()：BrewInstalledLoader.subscribe(publishListener)
+
+publishListener(snapshot 变化)：
+  manifest = 投影(snapshot)                        // §3.2 包投影
+  old      = kvStore.get(`device:<myId>/manifest`)
+  if (manifest.packages 集合 ≠ old.packages 集合)：
+    put(`device:<myId>/manifest`, {…, updatedAt: now})     // autoSync 辅助推送
+    显式 sync(deviceIds, PUSH_PULL)（§3.5）
+  else：跳过（防 updatedAt 漂移——集合不变不写）
 ```
 
-- 导入**不设后缀过滤**：Mac `brew bundle dump` 的无后缀 `Brewfile`、微信改名 `.txt`、手写 `.md` 都能选进来；
-  合法性由内容判定（解析是纯函数，错了给 F1 Toast）。文件大小上限兜底恶意/误选大文件。
-- 导入的 `tap` 行只作**源信息标注**（预览显示、安装时拼 qualifiedName），**不自动克隆 tap**：
-  Tap 由应用自己克隆管理（custom-tap spec 的体系），与设备 brew 的 tap 是两回事；
-  清单里的 tap 行缺失时该条安装自然失败进 failed（用户在设备侧补 tap 后重试，G7 兜底）。
+- 发布闸：`BrewCli.isEnabled() === false`（pc_normal）**永不发布**——pc_normal 的角色是
+  接收端 + 彩蛋写入端，避免无 brew 设备发布空清单噪音。
+- 触发面：service init（读缓存快照即比对一次）+ `BrewInstalledLoader.subscribe`（每次
+  装载/写命令后失效刷新都会走一遍，集合不变则零写入）。
 
-### 3.4 缓存归属登记
+### 3.4 接收链（远端变更 → 新增 → 入口）
 
-| 文件 | 归属 | CacheAdmin 一键清理 | CacheEpoch 切源清理 |
-| --- | --- | --- | --- |
-| `filesDir/brew_state/install_queue.json` | 用户任务状态 | **否**（G13） | 否 |
-| `filesDir/temp/manifest_<ts>.txt` | 导出中转，finally 即删 | —（常态不存在） | — |
+```
+kvStore.on('dataChange', SUBSCRIBE_TYPE_REMOTE, listener)
+  → service.refresh()
+  → 遍历 kvStore 前缀 `device:` 的全部条目（getEntries）
+  → 对每个远端 manifest：updatedAt > ack[deviceId] ？ → pendingNew +=（包 − 本机已装集合）
+  → 本机 manifest（deviceId === self）不计入 pendingNew
+  → 更新 BrewManifestSyncState（@Observed）：devices[] / pendingNew[] / pendingNewCount
+  → 侧边栏入口可见性 = pendingNewCount > 0（G2）
+
+冷启动无事件：service.init() 里同样跑一次 refresh()（读盘上的同步库数据即可判新增，
+不依赖运行中收到通知）。
+```
+
+- 「新增」的完整判定 = **远端 manifest 有未 ack 的更新** ∧ **包含本机未安装的包**；
+  Sheet 新装区显示后者（互见句 + 勾选安装都面向它）；前者由每设备一张卡承载
+  （§4.2.1：卡内前 5 条 + 「查看全部」进二级页看全量只读清单）。
+- 本机已装集合：`BrewInstalledLoader.snapshot()`（null 时按空集处理，pc_normal 恒空集）。
+
+### 3.5 同步触发时机（autoSync 之外的四次显式 sync）
+
+| 时机 | 模式 | 说明 |
+|---|---|---|
+| `PcAbility.onCreate` → service.init | PUSH_PULL | 冷启动对齐 |
+| 同步视图打开（Sheet `onWillAppear` / 常驻页 `aboutToAppear`） | PUSH_PULL | 进门先同步 |
+| 「立即同步」按钮 | PUSH_PULL | 手动兜底（含授权后首同步） |
+| 本机清单 put 之后 | PUSH_ONLY | 发布即推 |
+
+- `deviceIds` = `deviceManager.getAvailableDeviceListSync().map(d => d.deviceId)`（可信设备表；
+  空表 = 未组网，sync 记日志 no-op）。
+- `kvStore.on('syncComplete')`：核对各设备同步结果，更新 `lastSyncAt` / 失败计数（失败
+  有限次数指数退避，最多 3 次——对齐论坛增量对账建议：本地先落库、同步结果单独跟踪）。
+
+### 3.6 AI 模型配置同步（G4）
+
+```
+本地改：AiSettingVM.save()
+  → AiSettingsStore.saveConfig(config)               // 现状不动（prefs 是渲染真源）
+  → BrewManifestSyncService.publishAiConfig(config)  // put('ai/config', {…, updatedAt: now}) + sync(PUSH)
+      // keySyncOn === true 时 doc 里带 key 字段（值 = Asset Store 现存 Key），否则不带
+
+远端来：dataChange 里 Key === 'ai/config' 的条目
+  → AiSettingsStore.saveConfig(远端三字段)           // 只改 prefs，绝不回写 KV（防回环）
+  → 若 doc.key 非空 && 本机 keySyncOn：AiSettingsStore.saveApiKey(doc.key)  // 写入本机 Asset Store
+  → service 通知已注册的 AiSettingVM.refresh()      （VM aboutToAppear 注册 / aboutToDisappear 注销）
+  → AiClient 下次请求读 loadConfig() 自然生效
+```
+
+- 冲突：两台设备并发改 → KV 层 LWW；本地 prefs 只是渲染缓存，接受「最后写入生效」。
+- **API Key 的显式授权同步**（2026-11-23 需求方裁定修订）：`ai/config` Value schema 增加
+  可选 `key` 字段。开关「同步 API Key」：
+  - 默认 **关**——关着时 `publishAiConfig` 不带 key 字段；开关从开转关时，本机发布一个
+    **不含 key 的 doc 覆盖**同步库里的旧值（对端 LWW 覆盖后不再收到 key；对端
+    prefs/Asset 里**已落地**的 Key 不主动删除，只不再更新——删除对端密钥超出本机
+    开关的权限边界）；
+  - 开启动作发生在 **设置-AI 配置页**（`AiSettingView`「分布式同步」区新增开关行，
+    2026-11-23 需求方裁定：AI 配置同步的 UI 不放 ManifestSyncSheet），开启即弹确认
+    （`sync_key_confirm` 文案：密钥将进入加密同步库并出现在可信设备上）；
+  - 关闭后远端传来的 doc 里的 key 字段被**忽略**（本机开关是应用侧的闸，不是对端的）；
+  - 开着时本机 Key 变化（保存 / 清除）也走 `publishAiConfig` 同步链路。
+- `autoExplain` 开关不同步（设备偏好非模型配置）。
+- **Asset → KV 的单向闸**：Key 值只在 `publishAiConfig`（用户开关开着时）这一个出口
+  离开 Asset Store；日志永不打 key 值（打 `key=<true|false>` 布尔）。
+- **UI 归属**（m00337）：AI 配置同步的状态展示（provider/model/baseUrl 三字段的同步
+  情况与上次应用时间）与「同步 API Key」开关都在 `AiSettingView` 的「分布式同步」区；
+  `BrewManifestSyncView`（Sheet 与常驻页）**不渲染任何 AI 卡**。`AiSettingVM` 在
+  aboutToAppear 注册 / aboutToDisappear 注销远端应用回调（刷新本页展示）。
+
+### 3.7 批量安装队列（G8，回收 v1 文件流 spec 的设计）
+
+`features/brewcommon/src/main/ets/service/BrewInstallQueue.ets`（新单例）：
+
+- **落盘为数据而非内存态**：`filesDir/brew_state/install_queue.json`
+  `[{ token, kind, tap, status: PENDING|RUNNING|DONE|FAILED, queuedAt, finishedAt }]`。
+  不属 CacheAdmin 管辖（brew-cache-ownership.md 的归属口径）；这同时兑现
+  `rejected.md` §2 第 2 条「手机遥控」留的门：未来任何前端触发同一队列零架构改动。
+- 入队：Sheet 勾选 → 「安装所选 (N)」→ `enqueue(items)` → 落盘 → kick。
+- 驱动：事件驱动复用 `BrewCommandRunner`——queue subscribe 命令终态：终态时置当前条
+  DONE/FAILED、落盘、kick 下一条（RUNNER 单飞语义不变；BUSY 时不抢，等当前命令自然结束）。
+- 命令拼装：`BrewCommandGenerator.installArgs(kind, token, tap)` + `isSafeName` 安全闸
+  （不合法 token 入队前即拒，Toast 提示）。
+- 失败域隔离：单条失败不停队，条目置 FAILED 供单条重试；用户可清空队列。
+- 进度续看：条目状态渲染在同步视图 + 命令 Sheet（执行明细照旧由命令 Sheet 承载——
+  宏观（队列条目）与微观（命令输出）分工，同 v1 spec）。
+
+### 3.8 隐藏测试能力（G10，仅 pc_normal）
+
+```
+AboutView 图标 onClick（draggable(false) 的 app 图标）：
+  if (BREW_CLI_ENABLED === true) return          // pc_acl 点了无反应——彩蛋只在 pc_normal
+  计数器 +1；相邻两次间隔 > 800ms 则清零
+  第 4 次：
+    put(`device:<myId>/manifest`, {
+      schema: 1, deviceId: <本机真实 deviceId>, deviceName: <本机真实设备名>, updatedAt: now,
+      packages: [
+        { token: 'python@3.12',      kind: 'formula', tap: '' },
+        { token: 'deepseek-harness', kind: 'formula', tap: '' },
+        { token: 'reasonix',         kind: 'formula', tap: '' } ],
+      taps: [] })
+    service.refresh()                            // 本地写读链路：无 dataChange 事件，主动刷
+    Toast「已写入 3 个分布式测试包」；计数器清零（可重复触发）
+```
+
+- 为什么 put 后 refresh 能看到：可见性来自**读路径**（getEntries + ack diff），不依赖
+  REMOTE 事件——彩蛋在单机无组网时也能完整验证入口出现 → Sheet 展示 → 3 包只读
+  （pc_normal 无安装按钮，G9）的整条 UX。
+- **来源设备名取本机真实名称**（2026-11-23 需求方裁定）：deviceId / deviceName 均为
+  `deviceManager.getLocalDeviceSync()` 的真实值——与其他任何 manifest 同源同构，互见句
+  显示的就是「你的 <本机真实名> 新装了 3 个包」。彩蛋与发布链共用同一设备身份，不引入
+  任何伪设备 Key。
+- pc_normal 发布闸不动：彩蛋走的 put 是**旁路直写**（不经过 `BrewCli.isEnabled()` 的
+  发布闸——闸管的是 snapshot 投影链路，彩蛋写的是固定 3 包）。真实 manifest 的 Key
+  与彩蛋 manifest 的 Key 相同（`device:<myId>/manifest`），pc_normal 无 brew 永不发布
+  真实清单，所以该 Key 在 pc_normal 上只承载彩蛋数据；pc_normal 若升级为 pc_acl
+  （BREW_CLI_ENABLED=true），下一次发布链 put 会覆盖彩蛋数据——这是可接受的语义
+  （彩蛋本就是测试能力，真实清单优先）。
+- `ack` 后入口消失，重触发（updatedAt 更新）再出现。
+
+### 3.9 打点表（G13）
+
+| 行 | 时机 |
+|---|---|
+| `[sync] kv open store=brew_manifest_sync encrypt=true sl=S4 ok=<bool>` | init |
+| `[sync] publish device=<id> packages=<N> taps=<M> ms=<N>` | 本机清单 put |
+| `[sync] remote change keys=<N>` | dataChange REMOTE |
+| `[sync] pending new=<N> from=<deviceId>` | refresh 判定出新增 |
+| `[sync] ack device=<id> at=<updatedAt>` | Sheet 打开 ack |
+| `[sync] sync complete devices=<N> failed=<N> ms=<N>` | syncComplete |
+| `[sync] ai config applied provider=<p> model=<m> key=<bool>` | 远端 AI 配置应用（布尔，永不打 Key 值） |
+| `[sync] easter egg written packages=3` | 彩蛋触发 |
+| `[queue] start/ok/fail token=<t> remain=<N>` | 队列条目流转 |
+| `[sync] permission grant=<bool>` | 动态授权结果 |
 
 ---
 
-## 4. 交互与视觉（UX 专项）
+## 4. 交互与视觉
 
-> 本节是用户点名「重点考虑 UX」的落点。UX 决策的总依据有三：
-> ① CloudPurePlay《blocking-loading-ux-design》分档规范——**档位由「用户是否该去做别的事」决定，不是耗时**；
-> ② CloudPurePlay 备份/恢复的成熟节奏——**导入前摘要 + 二次确认 + 错误分类 Toast**；
-> ③ 既有执行 Sheet 的「可关可重开、离开页面执行不停」心智——队列是长任务，绝不用阻塞遮罩看住用户。
+### 4.1 侧边栏入口（Shell 上方，有新增才显示）
 
-### 4.1 入口与页面信息架构
-
-- **入口**：「我的 → 设置 → 工具清单同步」（MineSettingView 加一行，sentinel 行同模式：`if (isLocalPackagesEnabled())`，G10）。
-  理由：同步是低频动作，「我的」首页已经拥挤（登录 + promo + 三张本机包卡 + 设置），不适合再添卡；设置页是导航型列表，加行成本最低；
-  pc_normal 下导出无数据（快照为 null）、导入无执行通道，整页无意义 → 入口随能力隐藏。
-- **同步页（BrewManifestSyncView，新路由）单页四区块，自上而下按「你有什么 → 你可以拿什么 → 进行中的事」排列**：
+`CustomSideBar.ets`——完整仿 `ShellEntryBuilder` 同构，插在 Shell 块**上面**：
 
 ```
-┌ 摘要卡「我的工具链」──────────────────────┐
-│ 本机主动安装 12 项工具（11 命令行 + 1 应用） │
-│ [ 导出清单 ]  ← 主按钮（T2：点击后 spinner） │
-└────────────────────────────────────────┘
-┌ 导入卡「从其他设备导入」────────────────────┐
-│ 选择另一台设备导出的清单文件，勾选要安装的工具 │
-│ [ 选择清单文件 ]                             │
-└────────────────────────────────────────┘
-┌ 清单预览卡（选择文件后展开，见 §4.3）─────────┐
-┌ 队列状态卡（有队列数据时常驻）─────────────────┐
-│ 上次队列：6/7 完成 · 1 失败    [查看队列 →]   │
-└────────────────────────────────────────┘
+Blank()
+if (this.syncEntryVisible()) {                    // pendingNewCount > 0（G2）
+  Divider()
+  this.SyncEntryBuilder()                          // Row：SymbolGlyph(arrow_2_circlepath) + 「清单同步」 + 尾部 +N
+}
+if (this.shellEntryVisible()) { Divider()  this.ShellEntryBuilder() }   // 现状不动
 ```
 
-  - 导出在上（现状与身份）、导入在下（动作与增量）——先「我有什么」再「对面的新东西」，与双机互见的心理模型一致。
-  - 队列状态卡是队列页的**回访入口**：批量安装启动后用户大概率离开页面（允许！），回来时从同步页一眼看到队列进度，不依赖任何通知。
+- 入口行尺寸 / 圆角 / hover / 高度全部复用 Shell 行样式（`side_bar_height`、
+  `corner_radius_level4`、`interactive_hover`）；尾部 `+N` 用 `interactive_active` 色
+  （Body_L 同行字号），是「新增未消费」的唯一视觉信号——不引入红点徽章（侧边栏
+  底部安静区域，克制）。
+- **常驻性对仗**：Shell 入口「执行过一次就常显」；同步入口「有新增才显示、看完即隐」
+  ——两个底部入口一个记过程、一个记增量，互不打扰。`@State syncState =
+  BrewManifestSyncService.getInstance().getState()`（与命令状态同款的 @Observed 单例模式）。
+- 点击：`BrewManifestSyncService.getInstance().openSheet()`（与 Shell 入口
+  `openSheet()` 同构——入口只改状态，不各自弹提示）。
 
-### 4.2 loading 分档（逐动作核定）
+### 4.2 同步 Sheet（BrewManifestSyncView 的形态一）
 
-| 动作 | 档位 | 形态 |
-| --- | --- | --- |
-| 进同步页读快照 | T1 页内 | 摘要卡骨架；`loadSets()` 有新鲜快照即时返回 |
-| 导出 | T2 就地 | 按钮禁用 + 行内 spinner；**无遮罩**（用户该去做别的） |
-| 选文件→解析 | T0 | 本地纯函数毫秒级，不设 loading |
-| enqueue + start | T2 | 按钮禁用一瞬，完成后跳队列页 |
-| 批量安装执行 | T1 页内 | 队列页自表达进度（§4.4）；**绝不 T3 阻塞遮罩**——长任务必须允许用户离开 |
+宿主：`PcMainPage.ets` 的 `HdsSideBar` 子节点上绑第二个 bindSheet（命令 Sheet 绑在
+`HdsNavDestination`——**同一节点双 bindSheet 不可靠**，官方 FAQ 的多半模态口径是
+「不同组件各绑一个」）。材质 / 尺寸口径与命令 Sheet 完全一致：
+`MaterialUtil.getMaterialOptions<SheetOptions>` + `CustomImmersiveStyle.ULTRA_THICK`、
+XL 高度比 `SHEET_HEIGHT_RATIO_XL` / 宽 `SHEET_WIDTH_XL`、SM 底部 BOTTOM 其余 CENTER、
+`showClose: false`（视图内自带关闭）。
 
-### 4.3 清单预览（导入的核心交互）
+```
+BrewManifestSyncSheet 内容（自上而下）：
+① 标题行「工具清单同步」+ 关闭按钮（sheetMode 才渲染；页模式标题由 NavDestination 出）
+② 互见句（pendingNew > 0 时）：
+   「你的 <设备名> 新装了 <N> 个包」——round5 双机互见场景的原句落地；
+   N = 0 时此区不渲染（空态见 ⑤）
+③ 新装列表：勾选框（仅 pc_acl）+ token（等宽字体）+ kind chip + tap 副文本 + 来源设备名
+   行右侧状态 chip：待装 / 已入队 / 安装中 / 已完成 / 失败（重试）
+④ 批量安装条（pc_acl 且勾选数 > 0）：「安装所选 (N)」强调按钮 → enqueue → 队列跑起来
+   后按钮变「查看进度」拉起命令 Sheet（微观明细归命令 Sheet）
+⑤ 设备区：每台设备一张**安装包卡片**（视觉与交互仿 Formulae 页 `BrewCategoryCardView`，
+   见 §4.2.1）；pc_normal 也渲染（接收端视角）
+⑥ 底部行：「立即同步」（执行中转圈）+ 「上次同步 14:32」；未授权时替换为授权引导行
+   ——AI 配置同步不在此 Sheet（见 §3.6/§4.3：入口与开关都在设置-AI 配置页）
+```
 
-- **展开动效**：预览卡以 300ms 淡入 + 轻微上移出现（对齐 tldr spec G15 的 `TransitionEffect.OPACITY + translate({y:12})` 模式），
-  消「选完文件内容瞬间砸出来」的突兀感。
-- **来源摘要行**：「来自 Brewfile-20261123.txt · 导出于 11-23 20:30 · 12 项」——文件名 + 头部 meta，让人确认「这就是那台机的清单」。
-- **新装亮点行（双机互见时刻，G5）**：彩色强调行「**另一台设备有 7 个你没有的工具**」。
-  这是 brainstorm 场景②（台式机看到「笔记本今天新装了 gh、jq」）在文件流下的诚实表达——不做后台监听，但「差集」本身就是那条消息。
-  样式对齐「新适配速递」同类「你有新东西」提示的心理模型（强调色 + 前置符号）。
-- **条目列表**：每行 = 勾选框 + token（等宽字体）+ kind 角标（命令行/应用）+ tap 源（非默认时）+ 状态标注：
-  - 已装 → 行置灰、勾选框禁用（已装就是已装，升级走既有更新流程，不在同步页掺合）
-  - 新装 → 默认勾选（换机场景「一键复制」就是默认全选）
-  - 新装且 tap 非空 → 追加小字「需先在设备安装 tap」——把 §3.3 的「不自动 tap」从隐含失败变成前置告知
-- **底部操作栏**：复用 BrewActionBar 模式（barOverlap + mask、按钮 60% 宽上限 448vp、高 40vp、抬 16vp，常量已在 brewcommon），
-  「安装所选（N）」强调蓝，N=0 时禁用。长列表滚动时操作栏常驻，勾选成本不随列表长度上升。
-- **轻确认 dialog**（批量写操作的最后一道闸）：「开始安装 7 项？每项单独执行，可随时暂停。」→ 确认后建队列并跳队列页。
-  勾选已是强意图，但批量安装不可撤销且耗时，这道确认成本极低。
+- **ack 时机**：Sheet `onWillAppear` → `markViewed()`（ack 各远端 manifest 当前 updatedAt，
+  G6）——与命令 Sheet `onWillAppear → markViewed()` 同一生命周期钩子、同一语义。
+- Sheet 关闭登记在 `onDisappear`（官方约束：onWillDisappear 不允许改状态变量）——
+  与命令 Sheet 现有写法一致。
 
-### 4.4 队列页（BrewInstallQueueView，新路由）
+### 4.2.1 每台设备的安装包卡片（Formulae 分类卡同构）
 
-宏观进度页，与执行 Sheet（微观输出）成对分工——**Sheet 看单条命令的流式输出，队列页看整个批的进度**：
+设备区的卡 = **Formulae 页 `BrewCategoryCardView` 的同构复刻**，只换数据语义
+（分类 → 设备）。同步场景的每台设备 manifest 只有 KB 级几十条，但卡片模式
+照搬的理由不是数据量，而是**视觉与交互的统一**：用户在 Formulae 页已经学会的
+「卡头 → 前几条 → 查看全部」心智，在同步视图里零学习成本。
 
-- **进行中**：页顶进度摘要「3/12 已完成」+ 当前条目卡（token + 行内 spinner + [查看输出]（开 Sheet，G9）+ [暂停]（G8））；
-  条目列表逐行状态染色（pending 灰点 / running 蓝 spinner / done 绿勾 / failed 红叉）。
-- **全部完成**：成功摘要 + 结果行；有失败时追加「重试失败项（N）」操作（G7）。
-- **空态**：「没有排队中的安装任务」。
-- **失败条目**：显示退出码（`brewCommandStatusText` 同款文案）+ 单条 [重试]；**不保留历史条目的流式输出**
-  （BrewCommandState 单例只存最后一条，v0 明确接受，逐条输出持久化列 §范围外）。
-- 离开页面执行不停（队列与 runner 都在全局单例 + 落盘里）；回来从队列状态卡或重新进队列页续看（G6 的崩溃恢复覆盖 kill 场景）。
+| Formulae 分类卡 | 设备清单卡（本 spec） |
+|---|---|
+| 卡头：分类 symbol + 分类名 + 包数 | 卡头：设备 symbol（`sys.symbol.laptopcomputer`/`pc`）+ 设备名 + 包数 + 「本机」标记 |
+| `BrewCategoryCardHeader`（brewcommon 共享组件） | 同一组件复用，`kind` 传设备语义 |
+| 卡内前 `BREW_CATEGORY_PREVIEW_COUNT`（5）条 | 同常量（**预览条数与 hasMore 判据同源**，brewcommon `BrewConstants.ets:268`） |
+| 每行 `BrewPackageRow`（HdsListItemCard：包图标基底 + token 主文本 + desc 副文本 + 热度右槽） | 同一组件；**右槽替换**：热度（排名/安装量）→ 同步状态 chip（待装/已入队/安装中/已完成/失败）或「已在本机」灰字 |
+| 底部「查看全部」行（`hasMore` 时） | 同款 `ViewAllBuilder`；点击 → 二级页（§4.2.2） |
+| 整卡点击 = 查看全部 | 同款（`clickEffect` MIDDLE；点行优先，ArkUI 手势不冒泡已验证） |
 
-### 4.5 空态与错误态
+- **`BREW_CATEGORY_PREVIEW_COUNT` 不引入新常量**：同步清单卡与浏览分类卡共用一个
+  预览条数口径，卡内截断与 `hasMore` 判据永远同源（分开写会漂成「预览装得下却
+  给了查看全部」——`BrewCategoryCardView.ets` 注释原话）。「查看全部」文案同样复用
+  既有资源 `app.string.brew_action_view_all`（§7 不新设）。
+- 设备 manifest 的包投影 `BrewSyncManifestDoc.packages` → `BrewPackageRow` 需要的
+  `BrewPackageItem` 投影：`subTitle=token`（主文本）、`title = tap 非空 ? tap : kind 描述`
+  （副文本）；`categoryRank/installs30d` 置 0 且 `hideRank: true`（同步语境无排名概念）。
+- 行右槽的同步状态 chip：本机已装的包显示「已在本机」灰字（无 chip）；新装清单
+  ③ 区的条目 chip 状态机（待装/已入队/安装中/已完成/失败）仅在 ③ 区——设备卡行的
+  右槽只表达「装没装在本机」这一个二值事实，避免两区状态机漂移。
+- 排序口径：manifest 内按 `token` 字典序（**清单是集合不是榜单**，字典序稳定可 diff）。
+  「新增」引导不设在设备卡——新装行的勾选与安装能力集中在 Sheet ③ 区，设备卡只负责
+  该设备的全量只读视角，两区不重复。
 
-| 态 | 表现 |
-| --- | --- |
-| 本机无主动安装包（导出侧空） | 摘要卡「本机还没有可同步的工具」，导出按钮禁用 |
-| 快照未就绪（首次进页） | 摘要卡「正在读取本机清单…」，导出按钮禁用（T1） |
-| 非清单文件（0 合法行） | Toast「不是有效的清单文件」（F1） |
-| 文件超 1MB | Toast「文件过大」（F2） |
-| 读文件失败/选择器取消 | 取消=静默回预览前态；读失败 Toast「无法读取文件」（F3） |
+### 4.2.2 设备清单二级页（查看全部）
+
+`features/mine/src/main/ets/view/BrewManifestDevicePage.ets`（新）：
+
+- **版式照搬 `BrewFormulaCategoryView`**（`brewformulae` 分类二级页）：标题栏（标题 =
+  设备名）+ `List` + `LazyForEach` 虚拟滚动 + 让位首项 `ListItem` + 首项圆上角/末项
+  圆下角拼卡 + 底部让位导航条。chip bar 不需要（单设备无分类切换）。
+- 行仍用 `BrewPackageRow`（`hideRank: true`），点击进包详情（`BrewDetailParams` 派生
+  token/kind/tap）；**与 ③ 新装列表不同**：本页是全量只读清单（每台设备几十条），
+  不提供勾选（勾选集中在 Sheet ③ 区——引导路径单一）。
+- 路由：`router_map.json` 登记 `BrewManifestDevicePage`，`PageEnum` 加
+  `BREW_MANIFEST_DEVICE_VIEW`；路由参数 `{ deviceId }`，页内从 service state 取该
+  设备 manifest（内存数据，零加载等待）。
+- pc_acl 点击行 → 进包详情（可安装/升级，既有详情页能力）；pc_normal 同样可进详情
+  （详情页浏览能力与执行闸 G9 无关——与现有 G10 模式一致）。
+
+### 4.3 常驻页（形态二，G7）
+
+`features/mine/src/main/ets/view/BrewManifestSyncPage.ets`（薄壳）：
+`NavDestination`（标题「工具清单同步」）+ 内容 = **同一个** `BrewManifestSyncView`
+（`sheetMode: false`：不渲染标题行、无关闭按钮、底部动作区常驻）。
+
+- 路由：`router_map.json` 登记 `BrewManifestSyncPage`；`MineSettingView` 列表在
+  「AI 设置」行下方新增行「工具清单同步」（`sys.symbol.arrow_2_circlepath`，
+  **不挂** `isLocalPackagesEnabled()`——同步查看与 AI 配置应用在 pc_normal 也是真功能，
+  只有安装动作受 G9 闸；行常显 = 常驻语义）。
+- `PageEnum` 加 `BREW_MANIFEST_SYNC_VIEW`。
+- 首次打开触发动态授权（G11）：`aboutToAppear` → 若未授权 →
+  `requestPermissionsFromUser(['ohos.permission.DISTRIBUTED_DATASYNC'])` →
+  授权后自动跑一次 sync + refresh。
+
+### 4.4 权限申请（G11）
+
+- 双 product `module.json5` 声明 `ohos.permission.DISTRIBUTED_DATASYNC`（reason string
+  `distributed_datasync_reason`）。**本地 put / get / 彩蛋不依赖该权限**（只影响跨设备
+  sync）；因此 pc_normal 未授权时彩蛋链路依然完整可用。
+- 申请时机锚在**常驻页首次打开**（用户带着意图进功能时弹，不在冷启动打扰）；
+  拒绝 → 视图底部授权引导行（「需要授权才能与组网设备同步」+ 去设置按钮），
+  「立即同步」时再按需提示。
+
+### 4.5 loading 分档（对齐 CloudPurePlay 规范）
+
+同步视图的数据全在内存（service state），渲染零等待（T0 静默）；「立即同步」按钮
+执行中按钮内转圈（T1 页内 busy，禁用防重入）；sync 慢 / 设备不可达不是错误态而是
+`lastSyncAt` 与失败计数的行内表达——**全程无阻塞遮罩**（T3 不出现）。
+
+### 4.6 双 product 行为矩阵
+
+| 能力 | pc_acl | pc_normal |
+|---|---|---|
+| 清单发布（put 本机 manifest） | ✅ | ❌（无 brew，永不发布） |
+| 接收 / 新增入口 / Sheet 查看 | ✅ | ✅ |
+| 设备卡「查看全部」二级页 / 行点进包详情 | ✅ | ✅（浏览能力不受 G9 闸） |
+| AI 配置同步（双向，UI 在设置-AI 配置页） | ✅ | ✅ |
+| 勾选 + 批量安装 | ✅ | ❌（G9：不渲染勾选框与安装条） |
+| 关于图标 4 连点彩蛋 | ❌（点了无反应） | ✅（G10） |
+| 常驻入口行（设置） | ✅ | ✅ |
 
 ---
 
 ## 5. 失败态分级
 
-| 级 | 场景 | 行为 |
-|---|---|---|
-| F1 | 导入文件无任何合法行 | Toast「不是有效的清单文件」；`[BrewManifest] parse reject reason=no-valid-lines` |
-| F2 | 导入文件 > 1MB / 读取失败 | Toast「文件过大」/「无法读取文件」；不崩溃 |
-| F3 | 导出时快照不可用（brew 未 ready） | 按钮 T1 禁用态持续；不产生半成品文件 |
-| F4 | save picker 用户取消 | 静默；清理临时文件 |
-| F5 | 单条安装失败 | 条目 failed + 退出码；队列继续下一条（失败域隔离）；`[BrewQueue] item token=… status=failed exit=N` |
-| F6 | 队列启动时执行权被占 | 提示「当前有命令执行中」，队列保持 pending 等待用户再次启动 |
-| F7 | 写盘失败（队列状态无法持久化） | 队列继续在内存执行 + `[BrewQueue] persist fail` 日志；崩溃恢复降级为丢队列（可接受：安装是幂等重试型操作） |
-
-**原则**：导入/导出是短动作，错误即时可见（Toast）；队列是长任务，错误逐条沉淀在列表里（不弹窗轰炸）。
+| # | 失败 | 现象 | 处置 | 文案（zh） |
+|---|---|---|---|---|
+| F1 | KV 库打开失败（15100002 选项不匹配 / 文件损坏） | init 日志 ok=false | 服务降级：入口不出现、常驻页显示失败行；损坏走系统自动重建 | 「同步库不可用，重启应用重试」 |
+| F2 | put 失败 | 发布链 catch | 记日志，下次 snapshot 变化重试（发布幂等） | 不打扰 |
+| F3 | sync 失败 / 设备不可达 | syncComplete failed>0 | 行内表达（「上次同步失败 · 14:32」+ 重试按钮）；指数退避 ≤3 次 | 见文案表 |
+| F4 | 权限拒绝 | 未授权 | 常驻页授权引导行 + 按需提示（G11） | 「需要授权才能与组网设备同步」 |
+| F5 | S4 静默不同步（对端设备等级 < S4） | 现象 = 永远收不到远端数据 | 无法在应用内检测——§9 真机核对步骤前置；风险登记 §10 | —（对用户不可见） |
+| F6 | 远端数据 schema 不符（未来版本） | 解析拒收该 manifest | 跳过该设备条目 + 日志；其它设备不受影响 | 该设备卡显示「清单版本过新，请升级应用」 |
+| F7 | 队列条目安装失败 | FAILED chip | 单条重试按钮；不停队（G8 隔离） | 「安装失败，点击重试」 |
+| F8 | deviceManager 不可用（getLocalDeviceSync 抛） | 发布链 deviceId 缺失 | 本机不发布（只做接收端）+ 日志；不崩溃 | 不打扰 |
 
 ---
 
 ## 6. 安全与合规
 
-- **导出内容只有包名与 tap 名**：不含版本、不含路径、不含任何设备/用户标识（头部 meta 只有导出时刻）。
-  清单本身无隐私敏感信息——但「装了什么工具」是行为画像，v0 文件流下它只在用户自己选择的信道里流动，应用不发起任何网络传输（零云依赖的字面兑现）。
-- **执行面收敛**：队列只产生 `brew install` 命令，token 过 `BrewCommandGenerator.isSafeName` 闸（导入解析出的 token 也全走该闸，
-  垃圾 token 在解析层即拒）；不接受清单文件里的任何可执行内容（Brewfile 语义天然没有命令字段——选 Brewfile 而非自定 JSON 的安全红利之一）。
-- **文件大小上限 1MB**：防误选/恶意大文件（正常清单 KB 级）。
-- **无新权限**：picker（save/select）是系统 UI 无需权限声明；读写均在应用沙箱与选择器授权路径内。
+- **库级**：`encrypt: true` + `SecurityLevel.S4`——组网传输与落盘均处最高标签；数据不出
+  设备信任圈（无云端、零服务端性格不变）。
+- **密钥边界（G4，2026-11-23 需求方裁定修订）**：API Key 默认只存在于各设备 Asset Store
+  （`AiSettingsStore` 既有纪律：不进偏好、不进日志、不进缓存文件）。**用户显式开启
+  「同步 API Key」后**，Key 才进同步库（值 schema 可选 `key` 字段）——且这是 Asset 的
+  唯一出口（§3.6 单向闸）：发布侧仅 `publishAiConfig` 在开关开着时读取；应用侧仅本机
+  开关开着时写回 Asset；关闭开关后远端 `key` 字段一律忽略。日志永不打 Key 值。
+- **数据最小化**：只同步主动安装包名 + tap（KB 级），不含版本、安装时间、使用痕迹。
+- **日志纪律**：打点表全部字段不含 Key 值、不列完整清单（计数 + deviceId 级）。
+- **彩蛋**：pc_normal 专属 + 4 连点隐匿触发，不进任何菜单与文档可见入口；写入的伪设备
+  manifest 与真实链路同构，不产生越权数据。
 
 ---
 
-## 7. 文案
+## 7. 文案表（zh）
 
-| key | zh 值 |
+| key | 文案 |
 |---|---|
-| `mine_setting_manifest_sync` | 工具清单同步 |
-| `manifest_sync_title` | 工具清单同步 |
-| `manifest_export_section_title` | 我的工具链 |
-| `manifest_export_summary` | 本机主动安装 %d 项工具（%d 命令行 + %d 应用） |
-| `manifest_export_button` | 导出清单 |
-| `manifest_export_done` | 已导出：%s |
-| `manifest_export_empty` | 本机还没有可同步的工具 |
-| `manifest_export_loading` | 正在读取本机清单… |
-| `manifest_import_section_title` | 从其他设备导入 |
-| `manifest_import_hint` | 选择另一台设备导出的清单文件，勾选要安装的工具 |
-| `manifest_import_button` | 选择清单文件 |
-| `manifest_import_source` | 来自 %s · 导出于 %s · %d 项 |
-| `manifest_import_new_highlight` | 另一台设备有 %d 个你没有的工具 |
-| `manifest_import_installed` | 已安装 |
-| `manifest_import_kind_formula` | 命令行 |
-| `manifest_import_kind_cask` | 应用 |
-| `manifest_import_tap_hint` | 需先在设备安装 tap |
-| `manifest_install_selected` | 安装所选（%d） |
-| `manifest_install_confirm_title` | 开始安装 %d 项？ |
-| `manifest_install_confirm_body` | 每项单独执行，可随时暂停。 |
-| `manifest_parse_reject` | 不是有效的清单文件 |
-| `manifest_file_too_large` | 文件过大 |
-| `manifest_read_fail` | 无法读取文件 |
-| `manifest_runner_busy` | 当前有命令执行中 |
-| `queue_title` | 安装队列 |
-| `queue_progress` | %d/%d 已完成 |
-| `queue_current` | 正在安装：%s |
-| `queue_view_output` | 查看输出 |
-| `queue_pause` | 暂停 |
-| `queue_retry_failed` | 重试失败项（%d） |
-| `queue_retry` | 重试 |
-| `queue_empty` | 没有排队中的安装任务 |
-| `queue_state_pending` | 等待中 |
-| `queue_state_failed` | 失败 |
-| `brew_cmd_title_install` | 安装：%s |
-
-（en 侧编码时同步补全，对齐既有文案管理方式。）
+| tab_manifest_sync | 清单同步 |
+| sync_sheet_title | 工具清单同步 |
+| sync_mutual_seen | 你的{device}新装了{count}个包 |
+| sync_empty_no_pending | 设备清单已是最新 |
+| sync_empty_no_devices | 暂无组网设备——在系统设置中添加可信设备后，这里会显示它们的工具清单 |
+| sync_install_selected | 安装所选 ({count}) |
+| sync_view_progress | 查看进度 |
+| sync_sync_now | 立即同步 |
+| sync_last_at | 上次同步 {time} |
+| sync_last_failed | 上次同步失败 · {time} |
+| sync_permission_row | 需要授权才能与组网设备同步 |
+| sync_permission_go | 去授权 |
+| sync_ai_sync_section | 分布式同步 |（设置-AI 配置页「分布式同步」区标题，m00337）
+| sync_ai_config_status | 配置随清单同步 · 上次应用 {time} |（AI 配置页同步状态行）
+| sync_ai_key_switch | 同步 API Key |（AI 配置页开关行）
+| sync_key_confirm | 密钥将进入加密同步库，并出现在您的可信设备上。确定开启？ |（开启开关的确认弹窗）
+| sync_device_self | 本机 |
+| sync_pkg_kind_formula / _cask | 命令行工具 / 图形应用 |
+| sync_pkg_status_pending/_queued/_running/_done/_failed | 待装 / 已入队 / 安装中 / 已完成 / 失败 |
+| sync_pkg_installed_here | 已在本机 |（设备卡行右槽的灰字态，替代热度槽）
+| sync_device_page_title | {device}的清单 |（设备清单二级页标题兜底；首选路由参数直接给设备名）
+| sync_retry | 重试 |
+| sync_kv_unavailable | 同步库不可用，重启应用重试 |
+| sync_schema_too_new | 清单版本过新，请升级应用 |
+| sync_queue_fail_toast | 安装失败，点击重试 |
+| sync_easter_egg_toast | 已写入 3 个分布式测试包 |
+| distributed_datasync_reason | 用于在您的可信设备间同步工具清单与模型配置 |
+| mine_setting_manifest_sync | 工具清单同步 |
 
 ---
 
 ## 8. 改动清单
 
-| 模块 | 改动 |
-| --- | --- |
-| `features/brewcommon` | 新增 `util/BrewfileParser.ets`（纯函数：parse）、`util/BrewfileBuilder.ets`（纯函数：build）、`service/BrewInstallQueue.ets`（落盘队列单例：enqueue/start/pause/retry/subscribe + 事件驱动执行循环）、`model/BrewManifestModels.ets`（manifest/条目/队列条目模型）、`constant/BrewManifestConstants.ets`（1MB 上限、状态枚举、`[BrewManifest]`/`[BrewQueue]` tag） |
-| `features/mine` | 新增 `view/BrewManifestSyncView.ets`（同步页）、`view/BrewInstallQueueView.ets`（队列页）+ 配套 viewmodel/state（对齐 mine 模块既有 VM 模式，编码时对齐 MinePackagesVM 构造方式）；`MineSettingView.ets` 加「工具清单同步」行（isLocalPackagesEnabled 闸，sentinel 行同位插入）；`router_map.json` 登记两页；文案 zh/en |
-| `common` | `PageEnum.ets` 加 `BREW_MANIFEST_SYNC_VIEW` / `BREW_INSTALL_QUEUE_VIEW` 枚举 |
-| `hmosword-build` | 新增 `brew-manifest/check_manifest_parser.mjs`（G14：构造用例回归，对齐 brew-tldr 检查脚本做法，接入既有自检入口） |
-
-**明确不动**：BrewCommandRunner（只消费不修改）、BrewCommandSheet/PcMainPage（零改动复用）、BrewInstalledLoader（只读快照）、
-BrewCommandGenerator（只调用）、MineView 首页（不加区块）。
+| 模块 | 文件 | 动作 |
+|---|---|---|
+| brewcommon | `src/main/ets/model/BrewSyncModels.ets` | 新增：`BrewSyncPackage` / `BrewSyncManifestDoc` / `BrewSyncAiConfigDoc` / `BrewSyncDeviceView` / `BrewSyncNewItem` + schema 校验 |
+| brewcommon | `src/main/ets/service/BrewManifestSyncService.ets` | 新增：单例；KV open / 订阅 / refresh / 发布 / ack / syncNow / openSheet / closeSheet / markViewed / `BrewManifestSyncState` @Observed / AI 配置发布与应用 / 彩蛋写入 API |
+| brewcommon | `src/main/ets/service/BrewInstallQueue.ets` | 新增：§3.7 队列（落盘 + 事件驱动） |
+| brewcommon | `src/main/ets/component/BrewManifestSyncView.ets` | 新增：§4.2/§4.3 双形态视图组件（`sheetMode` prop）；设备卡 = Formulae 分类卡同构（§4.2.1：复用 `BrewCategoryCardHeader` / `BrewPackageRow` / `ViewAllBuilder` 模式，`BrewPackageItem` 由 manifest 投影、`hideRank: true`） |
+| brewcommon | `src/main/ets/component/BrewManifestDeviceCard.ets` | 新增（或并入 SyncView 文件）：§4.2.1 设备清单卡组件 |
+| brewcommon | `src/main/ets/service/AiSettingsStore.ets` | 微改：暴露供 service 应用的入口（saveConfig/saveApiKey 复用即可，预计零改动或仅加注释） |
+| brewcommon | `Index.ets` | 导出上述类型 / 服务 / 组件 |
+| pcui | `src/main/ets/component/CustomSideBar.ets` | 修改：§4.1 同步入口（Shell 上方） |
+| pcui | `src/main/ets/view/PcMainPage.ets` | 修改：`HdsSideBar` 节点绑定同步 Sheet（§4.2） |
+| mine | `src/main/ets/view/BrewManifestSyncPage.ets` | 新增：常驻页薄壳（§4.3） |
+| mine | `src/main/ets/view/BrewManifestDevicePage.ets` | 新增：§4.2.2 设备清单二级页（版式照搬 `BrewFormulaCategoryView`：`List` + `LazyForEach` + 让位首项 + 首末项圆角拼卡；行点进包详情） |
+| mine | `src/main/resources/base/profile/router_map.json` | 登记 `BrewManifestSyncPage` 与 `BrewManifestDevicePage` |
+| mine | `src/main/ets/view/MineSettingView.ets` | 修改：新增「工具清单同步」行（常显，§4.3） |
+| mine | `src/main/ets/view/AboutView.ets` | 修改：图标 4 连点彩蛋（§3.8，pc_normal 闸） |
+| mine | `src/main/ets/view/AiSettingView.ets`、`src/main/ets/viewmodel/AiSettingVM.ets` | 修改（m00337/m00306）：AI 配置页新增「分布式同步」区（provider/model/baseUrl 同步状态 + 上次应用时间 + `sync_ai_key_switch` 开关行 + `sync_key_confirm` 确认弹窗）；VM save 后 `publishAiConfig`、Key 变化在开关开着时也发布；aboutToAppear 注册 / aboutToDisappear 注销远端应用回调刷新 |
+| common | `src/main/ets/model/PageEnum.ets` | 加 `BREW_MANIFEST_SYNC_VIEW`、`BREW_MANIFEST_DEVICE_VIEW` |
+| common | `src/main/ets/constant/StorageKey.ets` | 预留 `SYNC_*` 键（如需要） |
+| products | `pc_acl/src/main/module.json5`、`pc_normal/src/main/module.json5` | 补 `DISTRIBUTED_DATASYNC` 声明 + reason string |
+| products | `pc_acl/…/pcability/PcAbility.ets`、`pc_normal/…/pcability/PcAbility.ets` | onCreate 尾部 `BrewManifestSyncService.getInstance().init(this.context)` |
+| 资源 | `features/*/resources/base/element/string.json` | §7 文案 |
 
 ---
 
 ## 9. 验证
 
-1. G1–G14 逐条真机验证（HUAWEI MateBook Pro，pc_acl），日志 tag `[BrewManifest]` / `[BrewQueue]`；
-2. **换机全链路**（核心判据）：设备 A 导出 → 文件经任意渠道 → 设备 B（或清数据后的同机）导入 → 勾选 → 队列执行 →
-   已装列表出现新包、同步页 diff 归零（重导同文件 →「另一台设备有 0 个你没有的工具」）；
-3. **brew 生态兼容**（G3 沙盒比对）：导出文件与 `brew bundle dump` 的行格式逐行比对（tap/brew/cask 语义一致、注释行被忽略）；
-   Mac dump 产物导入本应用解析通过；
-4. 崩杀恢复（G6）：队列执行第 3 条时 kill 应用 → 重启 → 队列页第 3 条回 pending、1–2 条 done 保留 → 继续；
-5. 缓存归属（G13）：CacheAdmin 一键清理 → `brew_state/install_queue.json` 仍在；
-6. 解析器脚本接入自检入口，与 `brew-tldr` / `brew-search` 并列；
-7. 双 product 构建 + pc_normal 行为差异（G10）。
+构建（G12）：`devecocli build --product default` 与 `devecocli build --product pc_normal`
+双绿（新增分布式代码在双 product 编译路径上对称）。
+
+单机链路（无组网，pc_normal 即可走通）：
+1. 安装 pc_normal → 设置 → 关于 → 图标 4 连点 → Toast「已写入 3 个分布式测试包」→
+   日志 `[sync] easter egg written packages=3`；
+2. 侧边栏底部 Shell 上方出现「清单同步 +3」→ 点击拉起 Sheet → 互见句「你的
+   <本机真实设备名> 新装了 3 个包」（m00326：来源身份 = `getLocalDeviceSync()` 真实值，
+   与组网场景同构）→ 3 行只读（无勾选框，G9）→ 设备卡按 §4.2.1 渲染（前 5 条 + 卡头
+   设备名/包数；3 条 < 5 无「查看全部」行）→ 关闭 Sheet → 入口消失（ack 生效）；
+3. 再连点 4 次 → 入口重新出现（updatedAt 前移）。
+
+双机链路（真机组网，同账号可信设备，模拟器不支持端端同步）：
+1. `hidumper -s 3511` 两端核对设备安全等级 ≥ S4（S4 标签静默门槛前置排查，F5）；
+2. A 机（pc_acl）`brew install <pkg>` → 刷新已装 → 日志 `[sync] publish device=<A> packages=N`；
+3. B 机（pc_acl）侧边栏出现「清单同步 +N」→ Sheet 勾选 → 「安装所选」→ 队列逐条执行
+   （命令 Sheet 明细可关可重开续看）→ 完成后 `install_queue.json` 条目全部 DONE；
+   设备卡「查看全部」→ `BrewManifestDevicePage` 全量清单 → 行点击进包详情；
+4. B 机设置 → AI 配置页改 provider/model → A 机 AI 配置页（保持打开或重进）显示新值 +
+   日志 `[sync] ai config applied …`；默认（未开 Key 开关）时 `ai/config` 值无 key 字段；
+   B 机开启「同步 API Key」→ 确认弹窗 → B 机保存 Key → A 机（开关也开）AI 配置页出现
+   Key 已同步状态、本机 Asset Store 可查询到该 alias；A 机开关关闭 → B 机后续发布带
+   key 的 doc 被 A 机忽略（日志 `key=false`）；
+5. 断连重连场景：A 机离线期间装 2 个包 → 重连后 B 机 syncComplete 日志
+   `devices=1 failed=0` → 入口出现（增量同步不退化为全量）。
 
 ---
 
 ## 10. 风险与未决
 
 | 风险 | 处置 |
-| --- | --- |
-| **保存选择器零先例**（本工程首次用 `DocumentViewPicker.save()`；PC 2in1 形态下的选择器行为未观测） | 编码第一天冒烟：save → 返回 uri → fs 写入 → 读回比对，四步一次走通；不通则降级方案 = 写 `filesDir` 内固定路径 + 提示用户路径（不理想但保交付），结果写回本节 |
-| save 返回 uri 的写入方式（fs.openSync vs fileIo.copy）与 `DocumentSaveOptions` 参数确切拼写（`newFileNames`/后缀选择） | 同上冒烟核对；CloudPurePlay `BackupRestoreSettings.ets` 的 picker→temp→save→copy 模式为参考实现 |
-| 队列事件驱动的防串（runner 完成事件里区分「队列命令」与「用户自发命令」） | args 逐字比对（BrewCommandState.args 与条目期望 args）；实现时若发现更稳的标识方式（如 state 挂来源标记）再收紧，但**不修改 runner 的对外契约** |
-| 微信等渠道对 .txt 的编码/换行改造 | 导出 UTF-8；解析容忍 BOM/CRLF/空行（G14 用例覆盖）；渠道改坏内容 → F1 兜底 |
-| 大清单（数百行）渲染 | List 懒加载天然支持；不设上限行数（1MB 上限即物理上限） |
-| 队列执行中切源/清缓存 | 队列命令按 qualifiedName 已定格，切源不影响在途命令；新 enqueue 的条目按当刻源拼装 |
-| B′ 工作台后续接入（粘贴/拖拽/三色画布） | 本 spec 的解析器与队列即为其地基；B′ spec 落地时只加输入路径与标注层，不重复建设管线 |
-
-**实现第一天核对清单**（对齐 tldr spec「实测先行」传统）：
-① save picker 四步冒烟；② `DocumentSelectOptions` 不设后缀过滤时的行为（能否选无后缀文件）；
-③ `BrewCommandState` 完成事件的订阅时机（队列冷启动时 runner 尚空，订阅必须在首条 start 之前）。
-
----
-
-## 范围外（明确不做）
-
-- **v1 端云同步**：rejected.md 已否决（默认关、显式开启、需隐私评估）——本 spec 不留后门字段。
-- **B′ 工作台的粘贴/拖拽输入路径与三色画布**（可装/缺依赖/弃用的完整适配标注）：留给 B′ 工作台 spec，
-  落地时直接复用本 spec 的解析器与队列；本 spec 的导入标注只有「已装/新装」二态 + tap 前置提示。
-- **导入时的源内存在性预判**（清单项在当前源有没有）：不查搜索引擎索引——「新装可勾」已满足换机场景，
-  源内没有的包在执行时自然进 failed（退出码 + 重试）。预判层归 B′ 三色画布。
-- **系统分布式能力**（流转/接续/分布式数据对象）：rejected.md §1 第 14 条否决，brew 场景全是单机本地事实。
-- **队列历史条目的流式输出持久化**：v0 只保留最后一条命令的输出（BrewCommandState 单例语义）。
-- **v1 通知态**（「你的笔记本今天新装了…」卡片）：文件流下无对端事实来源；`SENTINEL_PENDING_ROUTE` 的
-  want 直达模式（MineHomeView 已有）是未来接入点，本 spec 不动。
-- **已装项的重装/跨 kind 勾选**：已装即禁勾。
-- **清单预览的全选/反选 chip**：默认全勾已覆盖换机主场景，多选三态 chip 的复杂度不值 v0。
-- **侧边栏/桌面卡片等其他队列入口**：队列回访只走同步页的队列状态卡。
+|---|---|
+| S4 静默不同步（F5）：组网中任一设备等级 < S4 则整库不同步且无报错 | 需求方明确裁定 S4 不降级；§9 前置 hidumper 核对；论坛来源（华为开发者问答 0203230805818336547）已确认该行为 |
+| `autoSync` 语义分歧：论坛一说法称仅「跨设备 Call 多端协同」场景生效 | 不依赖 autoSync：§3.5 四次显式 sync() 为主，autoSync=true 仅作辅助（无害） |
+| `deviceManager.getLocalDeviceSync()` 未在本工程验证过 | F8 降级路径兜底（拿不到 deviceId → 不发布，只接收）；真机首轮核对 |
+| 同节点双 bindSheet 不可靠 | 已规避：同步 Sheet 绑 `HdsSideBar`、命令 Sheet 绑 `HdsNavDestination`（官方 FAQ 口径） |
+| `DISTRIBUTED_DATASYNC` 授权方式（system_grant / user_grant 说法不一） | 双保险：module.json5 声明 + 常驻页首次打开动态申请（已授权时 request 为 no-op）；拒绝态有引导行兜底 |
+| 常驻页与 Sheet 双形态组件状态同步 | 共享 service 单例 state（@Observed），形态只是宿主差异 |
+| decisions.md / round5.md §2 仍留「v0 文件流 / v1 云同步」旧口径 | 需求方仅指示修订 round4 与 rejected（已完成）；其余文档的口径统一待后续裁定（本 spec 为实现权威） |
+| v1 文件流 spec 残留在 worktree 分支 `feature/brew-manifest-sync` | 分支不合并、可择机删除；队列设计已被本 spec §3.7 回收 |
