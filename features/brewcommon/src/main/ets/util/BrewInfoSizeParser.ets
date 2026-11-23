@@ -38,24 +38,33 @@ export class BrewInfoSizeParser {
    * outdated 包是**箭头形态**（设备实测 git-lfs）：
    * `git-lfs 3.8.0_1 → 3.8.1 (82 files, 14.6MB) [Linked]`——已装版本与最新版都在行内，
    * 体积归属已装版本，version 捕获已装版本、箭头段跳过。`[Linked]` 等后缀不进捕获。
+   * 大包的文件数带**千分位逗号**（`6,869 files` / `23,904 files`，设备实测 openssl@4 /
+   * ohos-sdk-native），files 组收 `[\d,]+` 再去逗号取整。版本与 `(` 之间可能是多空格。
    * 只匹配这种行：未安装的包不产生它，天然表达「无数据」。
    */
   private static readonly SIZE_LINE_RE: RegExp =
-    /^([A-Za-z0-9][A-Za-z0-9@+._/-]*)\s+(\S+)(?:\s+(?:→|->)\s+\S+)?\s+\((\d+)\s+files?,\s+([^)]+)\)/;
+    /^([A-Za-z0-9][A-Za-z0-9@+._/-]*)\s+(\S+)(?:\s+(?:→|->)\s+\S+)?\s+\(([\d,]+)\s+files?,\s+([^)]+)\)/;
 
   public static parse(stdout: string): BrewInfoSizeResult {
     const result: BrewInfoSizeResult = new BrewInfoSizeResult();
     const clean: string = stdout.replace(BrewInfoSizeParser.ANSI_RE, '');
     const lines: string[] = clean.split('\n');
+    // 同名同版本的占用行去重（设备实测 python@3.15 的段落出现两次）
+    const seen: Set<string> = new Set<string>();
     for (const line of lines) {
       const match: RegExpMatchArray | null = line.trim().match(BrewInfoSizeParser.SIZE_LINE_RE);
       if (match === null) {
         continue;
       }
-      const files: number = parseInt(match[3], 10);
+      const files: number = parseInt(match[3].replace(/,/g, ''), 10);
       if (isNaN(files)) {
         continue;
       }
+      const key: string = match[1] + '@' + match[2];
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
       const size: BrewInfoSize = new BrewInfoSize();
       size.name = match[1];
       size.version = match[2];

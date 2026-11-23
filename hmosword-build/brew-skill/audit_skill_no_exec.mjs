@@ -317,5 +317,20 @@ const infoAsciiArrow = BrewInfoSizeParser.parse('git-lfs 3.8.0_1 -> 3.8.1 (82 fi
 assert.strictEqual(infoAsciiArrow.sizes.length, 1);
 assert.strictEqual(infoAsciiArrow.sizes[0].version, '3.8.0_1');
 
+// 千分位逗号文件数 + 多空格 + 同段重复（设备实测第三轮：openssl@4 / ohos-sdk-* / python@3.15）
+const infoComma = BrewInfoSizeParser.parse(
+  'openssl@4 4.1.0           (6,869 files, 28.4MB) [Linked]\n' +
+  'openssl@3 3.6.5_1 → 3.5.9 (7,643 files, 39MB)\n' +
+  'python@3.15 3.15.0 → 3.15.2_4    (3,521 files, 82.1MB) [Linked]\n' +
+  'python@3.15 3.15.0 → 3.15.2_4    (3,521 files, 82.1MB) [Linked]\n');
+assert.strictEqual(infoComma.sizes.length, 3);
+assert.strictEqual(infoComma.sizes[0].name, 'openssl@4');
+assert.strictEqual(infoComma.sizes[0].files, 6869);
+assert.strictEqual(infoComma.sizes[1].name, 'openssl@3');
+assert.strictEqual(infoComma.sizes[1].version, '3.6.5_1');
+assert.strictEqual(infoComma.sizes[1].sizeText, '39MB');
+assert.strictEqual(infoComma.sizes[2].name, 'python@3.15');
+assert.strictEqual(infoComma.sizes[2].files, 3521);
+
 console.log('audit_skill_no_exec: all green (2 touchpoints, '
   + (16 + 4 + 3 + 2 + 5) + ' parser cases)');

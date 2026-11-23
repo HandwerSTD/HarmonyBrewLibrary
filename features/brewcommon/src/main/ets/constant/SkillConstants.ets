@@ -51,8 +51,8 @@ export const SKILL_BREW_QUICK_TIMEOUT_MS: number = 60000;
 
 /** searchPackages 回包条数上限（spec §3.3） */
 export const SKILL_SEARCH_LIMIT: number = 5;
-/** 预演 sizes 补测（brew info 多包）的单次包名上限：预演清单可能很长，封顶防失控 */
-export const SKILL_INFO_NAMES_LIMIT: number = 30;
+/** 预演 sizes 补测（brew info 多包）的单次包名上限：upgradeAll 实测 34 条全量覆盖取 50 */
+export const SKILL_INFO_NAMES_LIMIT: number = 50;
 /** listInstalled / listOutdated 回包条数上限（v2） */
 export const SKILL_LIST_LIMIT: number = 20;
 /** listTrending 回包条数上限（v2） */
