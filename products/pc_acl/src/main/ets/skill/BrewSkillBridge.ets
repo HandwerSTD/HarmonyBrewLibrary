@@ -348,9 +348,7 @@ export class BrewSkillBridge {
         ' declared=' + result.declaredCount + ' ms=' + (Date.now() - started));
     } else {
       result.notFound = parsed.notFound;
-      result.failureMessage = parsed.failureMessage.length > 0
-        ? parsed.failureMessage
-        : BrewSkillBridge.tailOf(shellResult.stderr, 200);
+      result.failureMessage = BrewSkillBridge.failureOf(parsed, shellResult);
       Logger.warn(TAG, 'preview token=' + token + ' failed exit=' + shellResult.exitCode +
         ' notFound=' + result.notFound + ' reason=' + result.failureMessage);
     }
@@ -485,9 +483,7 @@ export class BrewSkillBridge {
       Logger.info(TAG, 'upgrade token=' + token + ' nothingToDo ms=' + (Date.now() - started));
     } else {
       result.notFound = parsed.notFound;
-      result.failureMessage = parsed.failureMessage.length > 0
-        ? parsed.failureMessage
-        : BrewSkillBridge.tailOf(shellResult.stderr, 200);
+      result.failureMessage = BrewSkillBridge.failureOf(parsed, shellResult);
       Logger.warn(TAG, 'upgrade token=' + token + ' failed exit=' + shellResult.exitCode +
         ' reason=' + result.failureMessage);
     }
@@ -524,9 +520,7 @@ export class BrewSkillBridge {
       result.nothingToDo = true;
       Logger.info(TAG, 'upgradeAll scope=' + scope + ' nothingToDo ms=' + (Date.now() - started));
     } else {
-      result.failureMessage = parsed.failureMessage.length > 0
-        ? parsed.failureMessage
-        : BrewSkillBridge.tailOf(shellResult.stderr, 200);
+      result.failureMessage = BrewSkillBridge.failureOf(parsed, shellResult);
       Logger.warn(TAG, 'upgradeAll scope=' + scope + ' failed exit=' + shellResult.exitCode +
         ' reason=' + result.failureMessage);
     }
@@ -1028,6 +1022,19 @@ export class BrewSkillBridge {
       return text.trim();
     }
     return text.substring(text.length - max).trim();
+  }
+
+  /**
+   * 预演失败摘要。解析器抓到具体 Error 行就用原文；只给出兜底文案
+   * （「no Would install line in output」）时改用命令输出尾部——兜底文案对转述
+   * 毫无信息量（真机 2026-11-23 实测教训），brew 原文才能定位真实原因。
+   */
+  private static failureOf(parsed: BrewDryRunResult, shellResult: ShellResult): string {
+    if (parsed.failureMessage.length > 0 &&
+      parsed.failureMessage !== 'no Would install line in output') {
+      return parsed.failureMessage;
+    }
+    return BrewSkillBridge.tailOf(shellResult.stdout + '\n' + shellResult.stderr, 200);
   }
 
   /** 长文本摘要：超长截断加省略号 */

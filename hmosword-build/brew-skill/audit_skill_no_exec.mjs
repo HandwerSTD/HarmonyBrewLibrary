@@ -182,6 +182,43 @@ assert.strictEqual(upAnsi.ok, true);
 assert.strictEqual(upAnsi.wouldInstall[0].kind, BREW_DRYRUN_KIND_CASK);
 assert.strictEqual(upAnsi.wouldInstall[0].name, 'foo-bar');
 
+// ---- 3.1.1 设备实测（brew 7.0.9_7，2026-11-23）：表头与清单分行 + 连带依赖升级段 ----
+// 真实失败样本（验收反馈）：表头尾部为空、条目在下一行，v2 解析器在这里漏成 0 条目
+const deviceSplit = BrewDryRunParser.parse(
+  'Warning: The following taps are not trusted:\n  harmony/ohos\n\n' +
+  'Homebrew is currently ignoring formulae from these taps.\n' +
+  '==> Would install 1 formula:\ndeepseek-harness 0.2.2-rc.2_1\n' +
+  '==> Would upgrade 1 dependency for deepseek-harness:\nnode\n');
+assert.strictEqual(deviceSplit.ok, true);
+assert.strictEqual(deviceSplit.declaredCount, 2);
+assert.strictEqual(deviceSplit.wouldInstall.length, 2);
+assert.strictEqual(deviceSplit.wouldInstall[0].name, 'deepseek-harness');
+assert.strictEqual(deviceSplit.wouldInstall[0].version, '0.2.2-rc.2_1');
+assert.strictEqual(deviceSplit.wouldInstall[0].kind, BREW_DRYRUN_KIND_FORMULA);
+// tap-trust 警告块的裸行（harmony/ohos）不得混进清单
+assert.strictEqual(deviceSplit.wouldInstall[1].name, 'node');
+assert.strictEqual(deviceSplit.wouldInstall[1].version, '');
+assert.strictEqual(deviceSplit.wouldInstall[1].kind, '');
+
+const wgetSplit = BrewDryRunParser.parse('==> Would install 1 formula:\nwget 1.25.0_2\n');
+assert.strictEqual(wgetSplit.ok, true);
+assert.strictEqual(wgetSplit.wouldInstall.length, 1);
+assert.strictEqual(wgetSplit.wouldInstall[0].name, 'wget');
+assert.strictEqual(wgetSplit.wouldInstall[0].version, '1.25.0_2');
+
+// 升级预演的分行形态（条目带 旧 -> 新）
+const upgradeSplit = BrewDryRunParser.parse('==> Would upgrade 1 outdated formula:\nwget 1.25.0_2 -> 1.26.0\n');
+assert.strictEqual(upgradeSplit.ok, true);
+assert.strictEqual(upgradeSplit.wouldInstall[0].name, 'wget');
+assert.strictEqual(upgradeSplit.wouldInstall[0].fromVersion, '1.25.0_2');
+assert.strictEqual(upgradeSplit.wouldInstall[0].version, '1.26.0');
+
+// 真不存在的包（设备实测 exit 1）：G7 判据在 brew 7 文案下照常命中
+const notFoundDevice = BrewDryRunParser.parse('Error: No formulae found for this-formula-does-not-exist-xyz.\n==> Searching for similarly named formulae...\n');
+assert.strictEqual(notFoundDevice.ok, false);
+assert.strictEqual(notFoundDevice.notFound, true);
+assert(notFoundDevice.failureMessage.includes('No formulae found'));
+
 // ---- 3.2 brew uses 解析（v2 卸载预演）----
 const usesNames = BrewUsesParser.parse('wget\ncurl\njq\n');
 assert.strictEqual(usesNames.ok, true);
@@ -217,4 +254,4 @@ assert.strictEqual(cfgGarbage.ok, false);
 assert.strictEqual(cfgGarbage.failureMessage, 'no HOMEBREW_VERSION line in output');
 
 console.log('audit_skill_no_exec: all green (2 touchpoints, '
-  + (12 + 4 + 3) + ' parser cases)');
+  + (16 + 4 + 3) + ' parser cases)');

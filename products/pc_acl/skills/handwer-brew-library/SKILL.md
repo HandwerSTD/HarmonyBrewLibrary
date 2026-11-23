@@ -304,7 +304,8 @@ ERR_INVALID_PARAMS / ERR_NOT_FOUND / ERR_INTERNAL）。
 **触发**：用户说"装 ffmpeg 会带哪些东西""先预演一下装 wget"等。
 
 **成功后的动作**：转述 `data.wouldInstall` 清单与 `data.cmdline`；说明这是 dry-run 预演、
-还没有安装任何东西。**不要**把预演结果转述成「已安装」。
+还没有安装任何东西。**不要**把预演结果转述成「已安装」。清单可能包含两类条目：将新增的
+软件包与会被连带升级的依赖（brew 7 实测形态；依赖条目的 `kind` 可能为空）。
 
 执行参数：
 
