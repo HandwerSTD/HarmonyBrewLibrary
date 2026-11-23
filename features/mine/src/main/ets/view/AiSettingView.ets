@@ -13,6 +13,7 @@ import {
   AiSettingInitEvent,
   AiSettingKeyClearEvent,
   AiSettingKeySaveEvent,
+  AiSettingKeySyncEvent,
   AiSettingProviderEvent,
   AiSettingSaveEvent,
   AiSettingTestEvent,
@@ -69,6 +70,7 @@ export struct AiSettingView {
       Scroll() {
         Column({ space: CommonConstants.SPACE_16 }) {
           this.FormCard()
+          this.SyncCard()
         }
         .width(CommonConstants.FULL_PERCENT)
         .padding({
@@ -294,6 +296,81 @@ export struct AiSettingView {
     .padding(FORM_INSET)
     .backgroundColor($r('sys.color.comp_background_primary'))
     .borderRadius($r('sys.float.corner_radius_level8'))
+  }
+
+  @Builder
+  SyncCard() {
+    Column() {
+      Text($r('app.string.sync_ai_sync_section'))
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .width(CommonConstants.FULL_PERCENT)
+
+      // 「上次应用」状态行（spec §3.6 接收链的 UI 表达）：远端 AI 配置应用过才显示。
+      if (this.state.aiAppliedAt > 0) {
+        Text($r('app.string.sync_ai_config_status', this.formatAppliedAt()))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width(CommonConstants.FULL_PERCENT)
+          .margin({ top: 8 })
+      }
+
+      // 「同步 API Key」开关行（G4，默认关）。开启必须先过确认弹窗（sync_key_confirm）；
+      // 关闭直接生效（VM 会立即发布一份不带 Key 的 doc 覆盖）。
+      Row({ space: 8 }) {
+        Text($r('app.string.sync_ai_key_switch'))
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.state.keySyncOn })
+          .selectedColor($r('sys.color.ohos_id_color_emphasize'))
+          .onChange((isOn: boolean) => {
+            if (isOn) {
+              this.confirmKeySync();
+            } else {
+              AiSettingVM.getInstance().sendEvent(new AiSettingKeySyncEvent(false));
+            }
+          })
+      }
+      .width(CommonConstants.FULL_PERCENT)
+      .margin({ top: 12 })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width(CommonConstants.FULL_PERCENT)
+    .alignItems(HorizontalAlign.Start)
+    .padding(FORM_INSET)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+    .borderRadius($r('sys.float.corner_radius_level8'))
+  }
+
+  /** 开启 Key 同步前的二次确认（G4：密钥离开设备必须显式授权）。 */
+  private confirmKeySync(): void {
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.sync_ai_key_switch'),
+      message: $r('app.string.sync_key_confirm'),
+      primaryButton: {
+        value: $r('app.string.brew_source_cancel'),
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: $r('app.string.sync_key_confirm_go'),
+        action: () => {
+          AiSettingVM.getInstance().sendEvent(new AiSettingKeySyncEvent(true));
+        }
+      }
+    });
+  }
+
+  /** 「上次应用」时间格式化（MM-DD HH:mm；与 BrewManifestSyncView 同款 padStart 口径）。 */
+  private formatAppliedAt(): string {
+    const d: Date = new Date(this.state.aiAppliedAt);
+    const mm: string = `${d.getMonth() + 1}`.padStart(2, '0');
+    const dd: string = `${d.getDate()}`.padStart(2, '0');
+    const hh: string = `${d.getHours()}`.padStart(2, '0');
+    const mi: string = `${d.getMinutes()}`.padStart(2, '0');
+    return `${mm}-${dd} ${hh}:${mi}`;
   }
 
   private testErrorText(): ResourceStr {

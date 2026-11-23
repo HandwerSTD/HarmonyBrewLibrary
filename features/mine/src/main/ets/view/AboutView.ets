@@ -13,10 +13,15 @@
  * limitations under the License.
  */
 
-import { BundleInfoData, CommonConstants, PageEnum, ResourceUtil, StorageKey } from '@ohos/common';
+import { BundleInfoData, CommonConstants, PageEnum, ResourceUtil, StorageKey, Toast } from '@ohos/common';
+import { BrewManifestSyncService } from '@ohos/brewcommon';
 import { AboutItemCard } from '../component/AboutItemCard';
 import { MineConstant } from '../constant/CommonConstants';
 import { AboutVM, ViewRegistrationInfoEvent } from '../viewmodel/AboutVM';
+
+/** 隐藏彩蛋（spec §3.8）：连点次数与相邻两次点按的最大间隔。 */
+const EASTER_EGG_TAP_COUNT: number = 4;
+const EASTER_EGG_TAP_WINDOW_MS: number = 800;
 
 @Component
 export struct AboutView {
@@ -26,6 +31,9 @@ export struct AboutView {
     AppStorage.get<BundleInfoData>(StorageKey.BUNDLE_INFO);
   @Consume('appIconDescriptor') drawableDescriptor: DrawableDescriptor;
   private pathStack?: NavPathStack;
+  /** 彩蛋计数：第 4 次触发写入；超过 800ms 间隔即清零重新计。 */
+  private tapCount: number = 0;
+  private lastTapAt: number = 0;
 
   private handleOnReady(ctx: NavDestinationContext): void {
     this.pathStack = ctx?.pathStack;
@@ -33,6 +41,30 @@ export struct AboutView {
 
   private openStatement(): void {
     this.pathStack?.pushPath({ name: PageEnum.STATEMENT_VIEW });
+  }
+
+  /**
+   * 「关于」图标连点彩蛋（spec §3.8，仅 pc_normal）：
+   * 4 连点（相邻间隔 ≤800ms）→ 旁路直写 `device:<本机>/manifest` 的 3 个测试包
+   * （python@3.12 / deepseek-harness / reasonix）→ 侧边栏「清单同步」入口随之出现。
+   * pc_acl 直接 return：那台机器有真实发布链，写死 3 个包会被下一次发布覆盖，语义混乱。
+   */
+  private handleIconTap(): void {
+    if (AppStorage.get<boolean>(StorageKey.BREW_CLI_ENABLED) === true) {
+      return;
+    }
+    const now: number = Date.now();
+    if (this.lastTapAt > 0 && now - this.lastTapAt > EASTER_EGG_TAP_WINDOW_MS) {
+      this.tapCount = 0;
+    }
+    this.lastTapAt = now;
+    this.tapCount++;
+    if (this.tapCount < EASTER_EGG_TAP_COUNT) {
+      return;
+    }
+    this.tapCount = 0;
+    BrewManifestSyncService.getInstance().writeEasterEgg();
+    Toast.showToast($r('app.string.sync_easter_egg_toast'));
   }
 
   /** 「声明」入口行：与上方「版本信息」同处一张卡片，中间以分隔线相隔（同设置页列表样式） */
@@ -69,6 +101,9 @@ export struct AboutView {
             .width($r('app.float.about_image_size'))
             .height($r('app.float.about_image_size'))
             .borderRadius($r('sys.float.corner_radius_level8'))
+            .onClick(() => {
+              this.handleIconTap();
+            })
           Text(ResourceUtil.getResourceString(this.context, this.bundleInfo?.labelResource ?? $r(undefined)))
             .fontSize($r('sys.float.Title_S'))
             .fontWeight(FontWeight.Bold)

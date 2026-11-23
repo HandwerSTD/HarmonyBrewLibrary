@@ -1,6 +1,7 @@
 import { AbilityConstant, UIAbility, Configuration, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { Logger, StorageKey } from '@ohos/common';
+import { BrewManifestSyncService } from '@ohos/brewcommon';
 import { ShellStreamProbe } from '@ohos/pcnative';
 import { BaseAbilityHelper } from '@ohos/pcui';
 
@@ -18,6 +19,9 @@ export default class PcAbility extends UIAbility {
     AppStorage.setOrCreate<boolean>(StorageKey.BREW_HARMONYBREW_SOURCE_ENABLED, false);
     // 执行通道启动自检。`SHELL_STREAM_VERIFY` 默认关闭，此时这里不会起任何子进程
     ShellStreamProbe.run();
+    // W′ 分布式清单同步（spec §3.3）：打开 KV 同步库 + 订阅远端变更 + 首次 sync。
+    // init 不弹权限窗；DISTRIBUTED_DATASYNC 由常驻页 / Sheet 首开时动态申请
+    BrewManifestSyncService.getInstance().init(this.context);
     this.baseAbilityHelper.doOnCreate(this.context, want, launchParam);
   }
 

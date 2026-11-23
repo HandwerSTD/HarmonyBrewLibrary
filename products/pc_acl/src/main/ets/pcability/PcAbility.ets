@@ -1,6 +1,7 @@
 import { AbilityConstant, UIAbility, Configuration, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { Logger, StorageKey } from '@ohos/common';
+import { BrewManifestSyncService } from '@ohos/brewcommon';
 import { ShellStreamProbe } from '@ohos/pcnative';
 import { BaseAbilityHelper } from '@ohos/pcui';
 import { SentinelBootstrap } from '../sentinel/SentinelBootstrap';
@@ -29,6 +30,9 @@ export default class PcAbility extends UIAbility {
     this.captureSentinelWant(want);
     // Agent Skill 注册自检（G3 / Stage 0 探针）：只读查询本应用技能注册状态，只打日志
     SkillProbe.probe();
+    // W′ 分布式清单同步（spec §3.3）：打开 KV 同步库 + 订阅远端变更 + 首次 sync。
+    // init 不弹权限窗；DISTRIBUTED_DATASYNC 由常驻页 / Sheet 首开时动态申请
+    BrewManifestSyncService.getInstance().init(this.context);
     this.baseAbilityHelper.doOnCreate(this.context, want, launchParam);
   }
 

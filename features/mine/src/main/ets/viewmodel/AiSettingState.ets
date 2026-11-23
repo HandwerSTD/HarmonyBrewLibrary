@@ -36,4 +36,11 @@ export class AiSettingState extends BaseState {
   public testErrorKind: string = '';
   /** 刚保存成功的提示（一次性）。 */
   public savedFlash: boolean = false;
+  /**
+   * 「同步 API Key」开关（spec §3.6，默认关）。表单副本；事件里落 BrewManifestSyncService。
+   * 开启要走确认弹窗（sync_key_confirm），所以 View 侧持有确认流程，VM 只收最终结果。
+   */
+  public keySyncOn: boolean = false;
+  /** 远端 AI 配置上次应用到本机的时间（epoch ms；0 = 应用过）。展示格式归 View。 */
+  public aiAppliedAt: number = 0;
 }

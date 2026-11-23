@@ -14,6 +14,10 @@
     {
       "name": "vibrator_reason",
       "value": "You need to obtain your vibrator permission to provide vibrator feel"
+    },
+    {
+      "name": "distributed_datasync_reason",
+      "value": "Sync package manifests and AI settings across your trusted devices"
     }
   ]
 }

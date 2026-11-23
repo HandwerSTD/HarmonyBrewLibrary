@@ -835,6 +835,102 @@
     {
       "name": "brew_tldr_command_hint",
       "value": "%s 提供的命令是 %s"
+    },
+    {
+      "name": "sync_sheet_title",
+      "value": "工具清单同步"
+    },
+    {
+      "name": "sync_mutual_seen",
+      "value": "你的%1$s新装了%2$d个包"
+    },
+    {
+      "name": "sync_empty_no_pending",
+      "value": "设备清单已是最新"
+    },
+    {
+      "name": "sync_empty_no_devices",
+      "value": "暂无组网设备，在设备上登录同一华为账号并完成组网后即可同步"
+    },
+    {
+      "name": "sync_install_selected",
+      "value": "安装所选(%d)"
+    },
+    {
+      "name": "sync_view_progress",
+      "value": "查看进度"
+    },
+    {
+      "name": "sync_sync_now",
+      "value": "立即同步"
+    },
+    {
+      "name": "sync_last_at",
+      "value": "上次同步 %s"
+    },
+    {
+      "name": "sync_last_failed",
+      "value": "上次同步失败 · %s"
+    },
+    {
+      "name": "sync_permission_row",
+      "value": "需要授权才能与组网设备同步"
+    },
+    {
+      "name": "sync_permission_go",
+      "value": "去授权"
+    },
+    {
+      "name": "sync_pkg_kind_formula",
+      "value": "命令行工具"
+    },
+    {
+      "name": "sync_pkg_kind_cask",
+      "value": "图形应用"
+    },
+    {
+      "name": "sync_pkg_status_pending",
+      "value": "待装"
+    },
+    {
+      "name": "sync_pkg_status_queued",
+      "value": "已入队"
+    },
+    {
+      "name": "sync_pkg_status_running",
+      "value": "安装中"
+    },
+    {
+      "name": "sync_pkg_status_done",
+      "value": "已完成"
+    },
+    {
+      "name": "sync_pkg_status_failed",
+      "value": "失败"
+    },
+    {
+      "name": "sync_pkg_installed_here",
+      "value": "已在本机"
+    },
+    {
+      "name": "sync_device_self",
+      "value": "本机"
+    },
+    {
+      "name": "sync_retry",
+      "value": "重试"
+    },
+    {
+      "name": "sync_kv_unavailable",
+      "value": "同步库不可用，重启应用重试"
+    },
+    {
+      "name": "sync_schema_too_new",
+      "value": "该设备的清单来自更新的应用版本，请升级应用后查看"
+    },
+    {
+      "name": "sync_queue_fail_toast",
+      "value": "部分包未能加入安装队列，请检查包名"
     }
   ]
 }

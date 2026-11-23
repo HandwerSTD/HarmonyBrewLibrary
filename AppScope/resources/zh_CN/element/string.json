@@ -15,6 +15,10 @@
     {
       "name": "vibrator_reason",
       "value": "需要获取震动权限来提供震动感"
+    },
+    {
+      "name": "distributed_datasync_reason",
+      "value": "用于在您的可信设备间同步工具清单与模型配置"
     }
   ]
 }

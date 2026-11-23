@@ -118,6 +118,16 @@
           ],
           "when": "inuse"
         }
+      },
+      {
+        "name": "ohos.permission.DISTRIBUTED_DATASYNC",
+        "reason": "$string:distributed_datasync_reason",
+        "usedScene": {
+          "abilities": [
+            "PcAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ]
   }

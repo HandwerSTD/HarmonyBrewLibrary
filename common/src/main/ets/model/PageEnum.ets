@@ -47,4 +47,8 @@ export enum PageEnum {
   BREW_DISCOVER_BOARD_VIEW = 'BrewDiscoverBoardView',
   /** 搜索结果页（侧边栏搜索框触达，不属于任何页签） */
   BREW_SEARCH_RESULT_VIEW = 'BrewSearchResultView',
+  /** W′ 工具清单同步常驻页（「我的 - 设置」进入；Sheet 与它共用同一视图组件） */
+  BREW_MANIFEST_SYNC_VIEW = 'BrewManifestSyncView',
+  /** W′ 设备清单二级页（设备卡「查看全部」；参数 BrewManifestDeviceParams） */
+  BREW_MANIFEST_DEVICE_VIEW = 'BrewManifestDeviceView',
 }

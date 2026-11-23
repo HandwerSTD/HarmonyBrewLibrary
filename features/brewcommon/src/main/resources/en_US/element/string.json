@@ -835,6 +835,102 @@
     {
       "name": "brew_tldr_command_hint",
       "value": "%s provides the command %s"
+    },
+    {
+      "name": "sync_sheet_title",
+      "value": "Package manifest sync"
+    },
+    {
+      "name": "sync_mutual_seen",
+      "value": "%1$s installed %2$d new packages"
+    },
+    {
+      "name": "sync_empty_no_pending",
+      "value": "Device manifests are up to date"
+    },
+    {
+      "name": "sync_empty_no_devices",
+      "value": "No trusted devices yet. Sign in with the same HUAWEI ID on your devices to sync"
+    },
+    {
+      "name": "sync_install_selected",
+      "value": "Install selected (%d)"
+    },
+    {
+      "name": "sync_view_progress",
+      "value": "View progress"
+    },
+    {
+      "name": "sync_sync_now",
+      "value": "Sync now"
+    },
+    {
+      "name": "sync_last_at",
+      "value": "Last synced %s"
+    },
+    {
+      "name": "sync_last_failed",
+      "value": "Last sync failed · %s"
+    },
+    {
+      "name": "sync_permission_row",
+      "value": "Authorization is required to sync with your trusted devices"
+    },
+    {
+      "name": "sync_permission_go",
+      "value": "Authorize"
+    },
+    {
+      "name": "sync_pkg_kind_formula",
+      "value": "CLI tool"
+    },
+    {
+      "name": "sync_pkg_kind_cask",
+      "value": "GUI app"
+    },
+    {
+      "name": "sync_pkg_status_pending",
+      "value": "To install"
+    },
+    {
+      "name": "sync_pkg_status_queued",
+      "value": "Queued"
+    },
+    {
+      "name": "sync_pkg_status_running",
+      "value": "Installing"
+    },
+    {
+      "name": "sync_pkg_status_done",
+      "value": "Done"
+    },
+    {
+      "name": "sync_pkg_status_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "sync_pkg_installed_here",
+      "value": "Installed here"
+    },
+    {
+      "name": "sync_device_self",
+      "value": "This device"
+    },
+    {
+      "name": "sync_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "sync_kv_unavailable",
+      "value": "Sync store unavailable. Restart the app and try again"
+    },
+    {
+      "name": "sync_schema_too_new",
+      "value": "This device manifest is from a newer app version. Update the app to view it"
+    },
+    {
+      "name": "sync_queue_fail_toast",
+      "value": "Some packages could not be queued. Check the package names"
     }
   ]
 }

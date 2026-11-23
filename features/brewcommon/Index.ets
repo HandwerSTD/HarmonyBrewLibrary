@@ -351,6 +351,46 @@ export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewIn
 export { BrewInstalledParser } from './src/main/ets/util/BrewInstalledParser';
 export type { BrewCaskDoc, BrewFormulaDoc, BrewInstalledDoc, BrewInstalledKegDoc } from './src/main/ets/model/BrewInstalledDoc';
 
+// ---------------------------------------------------------------- 分布式清单同步（W′）
+
+// 同步数据模型：Key/storeId 常量、清单与 AI 配置文档、受控反序列化、@Observed 状态、队列模型。
+// BrewSyncDeviceEntry / BrewManifestSyncState 是 UI 接的 @Observed，必须值导出；
+// parse* 与 BrewQueueItem 由服务层 new，同为值导出。
+export {
+  BREW_SYNC_KEY_AI_CONFIG,
+  BREW_SYNC_KEY_DEVICE_PREFIX,
+  BREW_SYNC_KEY_MANIFEST_SUFFIX,
+  BREW_SYNC_PREFS_KEY_ACK,
+  BREW_SYNC_PREFS_STORE,
+  BREW_SYNC_SCHEMA_VERSION,
+  BREW_SYNC_STORE_ID,
+  BrewManifestDeviceParams,
+  BrewManifestSyncState,
+  BrewQueueDoc,
+  BrewQueueItem,
+  BrewQueueStatus,
+  BrewSyncAiConfigDoc,
+  BrewSyncDeviceEntry,
+  BrewSyncManifestDoc,
+  BrewSyncPackageDoc,
+  parseBrewQueueItem,
+  parseBrewSyncAiConfigDoc,
+  parseBrewSyncManifestDoc,
+  parseBrewSyncPackageDoc,
+} from './src/main/ets/model/BrewSyncModels';
+
+// 同步服务单例：KV 打开/发布/接收/ack/显式 sync/AI 配置同步/权限/彩蛋直写。
+export { BrewManifestSyncService, BREW_SYNC_KEY_AI_KEY_SYNC } from './src/main/ets/service/BrewManifestSyncService';
+
+// 批量安装队列（落盘 filesDir/brew_state/install_queue.json；事件驱动复用 BrewCommandRunner）。
+export { BrewInstallQueue } from './src/main/ets/service/BrewInstallQueue';
+
+// 同步主视图（Sheet 形态由 PcMainPage 宿主，常驻页形态由 BrewManifestSyncPage 宿主）。
+export { BrewManifestSyncView } from './src/main/ets/component/BrewManifestSyncView';
+
+// 设备清单卡（Formulae 分类卡同构；Sheet 与设备二级页共用）。
+export { BrewManifestDeviceCard } from './src/main/ets/component/BrewManifestDeviceCard';
+
 // ---------------------------------------------------------------- Agent Skill（32 号功能点）
 
 // `brew install/upgrade --dry-run` 输出解析（纯函数层）。Agent Skill 的预演与检查脚本共用同一份；

@@ -411,6 +411,38 @@
     {
       "name": "ai_privacy_note",
       "value": "AI 功能会把包元数据与命令错误文本发送给你配置的模型服务商（如 DeepSeek）；不包含账号、设备标识等身份信息。API Key 仅加密存储在本机。"
+    },
+    {
+      "name": "mine_setting_manifest_sync",
+      "value": "工具清单同步"
+    },
+    {
+      "name": "sync_easter_egg_toast",
+      "value": "已写入 3 个分布式测试包"
+    },
+    {
+      "name": "sync_device_page_title",
+      "value": "%s的清单"
+    },
+    {
+      "name": "sync_ai_sync_section",
+      "value": "分布式同步"
+    },
+    {
+      "name": "sync_ai_config_status",
+      "value": "配置随清单同步·上次应用 %s"
+    },
+    {
+      "name": "sync_ai_key_switch",
+      "value": "同步 API Key"
+    },
+    {
+      "name": "sync_key_confirm",
+      "value": "密钥将进入加密同步库，并出现在您的可信设备上。确定开启？"
+    },
+    {
+      "name": "sync_key_confirm_go",
+      "value": "确定开启"
     }
   ]
 }

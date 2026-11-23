@@ -44,6 +44,16 @@
       "name": "MineAiSettingsView",
       "pageSourceFile": "src/main/ets/view/AiSettingView.ets",
       "buildFunction": "AiSettingViewBuilder"
+    },
+    {
+      "name": "BrewManifestSyncView",
+      "pageSourceFile": "src/main/ets/view/BrewManifestSyncPage.ets",
+      "buildFunction": "BrewManifestSyncPageBuilder"
+    },
+    {
+      "name": "BrewManifestDeviceView",
+      "pageSourceFile": "src/main/ets/view/BrewManifestDevicePage.ets",
+      "buildFunction": "BrewManifestDevicePageBuilder"
     }
   ]
 }

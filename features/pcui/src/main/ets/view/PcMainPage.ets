@@ -32,10 +32,13 @@ import {
   BrewCommandSheet,
   BrewCommandState,
   BrewCommandStatus,
+  BrewManifestSyncService,
+  BrewManifestSyncView,
   BrewSentinelService,
   brewCommandStatusText,
   isBrewCommandEnded,
 } from '@ohos/brewcommon';
+import type { BrewManifestSyncState } from '@ohos/brewcommon';
 import { CustomSideBar } from '../component/CustomSideBar';
 import { DEFAULT_TAB } from '../model/TabBarModel';
 import { HomeView } from './HomeView';
@@ -58,6 +61,12 @@ export struct PcMainPage {
    * Sheet 的开关、侧边栏入口的显示判据、页面按钮的文案都读它。
    */
   @State commandState: BrewCommandState = BrewCommandRunner.getInstance().getState();
+  /**
+   * W′ 同步服务的同一个状态实例（`BrewManifestSyncState` 是 `@Observed`）。
+   * 同步 Sheet 的开关绑在 HdsSideBar 节点上——与命令 Sheet（HdsNavDestination 节点）
+   * **不同节点**：官方 FAQ 写明同一组件上绑多个 bindSheet 不可靠（spec §4.2）。
+   */
+  @State syncState: BrewManifestSyncState = BrewManifestSyncService.getInstance().getState();
   /**
    * 上一次看到的命令状态。用来分辨「刚刚结束」与「进页面时看到的是上次那条命令的结局」，
    * 后者不该再弹一次结束提示。
@@ -188,6 +197,12 @@ export struct PcMainPage {
     })
   }
 
+  /** W′ 同步 Sheet 的内容（sheetMode=true：视图自带标题行）。常驻页复用同一组件（sheetMode=false）。 */
+  @Builder
+  SyncSheetBuilder() {
+    BrewManifestSyncView({ sheetMode: true })
+  }
+
   @Builder
   contentPanelBuilder() {
     GridRow({
@@ -228,6 +243,34 @@ export struct PcMainPage {
           this.contentPanelBuilder()
         },
       })
+      // W′ 同步 Sheet 绑在 HdsSideBar 节点上（命令 Sheet 在 HdsNavDestination——
+      // 同一组件绑多个 bindSheet 不可靠，两个半模态必须分节点）。
+      // 参数与命令 Sheet 同款；onWillAppear 里做 ack（markViewed）+ 权限状态刷新 + 补 sync。
+      .bindSheet(this.syncState.sheetShown, this.SyncSheetBuilder(),
+        MaterialUtil.getMaterialOptions<SheetOptions>({
+          originOption: {
+            showClose: false,
+            preferType: (this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_SM &&
+              !AppStorage.get<boolean>(StorageKey.IS_SIDEBAR_LAYOUT)) ? SheetType.BOTTOM : SheetType.CENTER,
+            height: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ?
+              ((this.globalInfoModel.deviceHeight - this.globalInfoModel.decorHeight) *
+                CommonConstants.SHEET_HEIGHT_RATIO_XL) : SheetSize.LARGE,
+            width: this.globalInfoModel.widthBreakpoint === WidthBreakpoint.WIDTH_XL ?
+              CommonConstants.SHEET_WIDTH_XL :
+              undefined,
+            onWillAppear: () => {
+              BrewManifestSyncService.getInstance().onSheetWillAppear();
+            },
+            onDisappear: () => {
+              BrewManifestSyncService.getInstance().closeSheet();
+            },
+          },
+          param: {
+            style: CustomImmersiveStyle.ULTRA_THICK,
+            backgroundColor: Color.Transparent,
+          },
+        }) as SheetOptions
+      )
     }
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .transition(TransitionEffect.OPACITY)

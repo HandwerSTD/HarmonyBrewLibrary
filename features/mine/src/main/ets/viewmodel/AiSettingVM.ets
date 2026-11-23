@@ -11,6 +11,7 @@ import {
   AI_DEEPSEEK_BASE_URL,
   AI_DEEPSEEK_DEFAULT_MODEL,
   AI_PROVIDER_DEEPSEEK,
+  BrewManifestSyncService,
   isKnownAiProvider,
 } from '@ohos/brewcommon';
 import { AiSettingState } from './AiSettingState';
@@ -31,6 +32,19 @@ export class AiSettingProviderEvent implements BaseVMEvent {
 
 /** 切「自动生成 AI 讲解」开关（即时落盘；与表单保存按钮解耦——开关语义独立）。 */
 export class AiSettingAutoExplainEvent implements BaseVMEvent {
+  public enabled: boolean;
+
+  public constructor(enabled: boolean) {
+    this.enabled = enabled;
+  }
+}
+
+/**
+ * 切「同步 API Key」开关（spec §3.6）。开启前的确认弹窗在 View 侧——
+ * 这里只收最终结果：落开关 → 立即发布一份 AI 配置文档
+ * （开 = 带 Key 进同步库；关 = 不带 Key 的 doc 覆盖，对端已落地的 Key 不再更新）。
+ */
+export class AiSettingKeySyncEvent implements BaseVMEvent {
   public enabled: boolean;
 
   public constructor(enabled: boolean) {
@@ -84,6 +98,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       this.switchProvider(event.provider);
     } else if (event instanceof AiSettingAutoExplainEvent) {
       this.setAutoExplain(event.enabled);
+    } else if (event instanceof AiSettingKeySyncEvent) {
+      this.setKeySync(event.enabled);
     } else if (event instanceof AiSettingSaveEvent) {
       this.saveConfig();
     } else if (event instanceof AiSettingKeySaveEvent) {
@@ -129,6 +145,9 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
     state.testOkLatencyMs = -1;
     state.testErrorKind = '';
     state.savedFlash = false;
+    // W′ 同步区（spec §3.6）：开关与「上次应用」时间读同步服务
+    state.keySyncOn = BrewManifestSyncService.getInstance().keySyncOn();
+    state.aiAppliedAt = BrewManifestSyncService.getInstance().getState().aiAppliedAt;
   }
 
   private switchProvider(provider: string): void {
@@ -156,6 +175,25 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
     }
   }
 
+  /**
+   * 同步 API Key 开关（spec §3.6）。落开关后**两个方向都立即发布一份配置文档**：
+   * 开 = doc 带 Key（Asset 现存值，由 publishAiConfig 内部按开关读取）；
+   * 关 = doc 不带 Key 覆盖旧 doc（对端已落地的 Key 不主动删除，只不再更新）。
+   */
+  private setKeySync(enabled: boolean): void {
+    BrewManifestSyncService.getInstance().saveKeySyncOn(enabled);
+    const state: AiSettingState = this.getState();
+    state.keySyncOn = enabled;
+    BrewManifestSyncService.getInstance().publishAiConfig(AiSettingsStore.loadConfig());
+    Logger.info(TAG, `key sync on=${enabled} publish done`);
+  }
+
+  /** 配置落盘成功后的同步发布（spec §3.6 发布链；publishAiConfig 内部按开关决定是否带 Key）。 */
+  private publishAfterSave(): void {
+    const syncService = BrewManifestSyncService.getInstance();
+    syncService.publishAiConfig(AiSettingsStore.loadConfig());
+  }
+
   private saveConfig(): boolean {
     const state: AiSettingState = this.getState();
     const model: string = state.editingModel.trim();
@@ -174,6 +212,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
     if (ok) {
       state.snapshot = AiSettingsStore.snapshot();
       Logger.info(TAG, `config saved provider=${config.provider} model=${config.model}`);
+      // W′ 发布链（spec §3.6）：本地改配置 → 立即发布到同步库（含 Key 与否由开关决定）
+      this.publishAfterSave();
     }
     return ok;
   }
@@ -194,6 +234,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       state2.savedFlash = true;
       state2.errorText = where === 'memory' ? 'key-memory-only' : '';
       Logger.info(TAG, `key save done store=${where === 'memory' ? 'memory' : 'asset'}`);
+      // W′ 发布链（spec §3.6）：Key 开着同步时，本机 Key 变化也走发布链路
+      this.publishAfterSave();
     });
   }
 

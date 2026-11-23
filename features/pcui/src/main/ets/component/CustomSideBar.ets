@@ -17,8 +17,10 @@ import {
   BrewCommandRunner,
   BrewCommandState,
   BrewCommandStatus,
+  BrewManifestSyncService,
   isBrewCommandEnded,
 } from '@ohos/brewcommon';
+import type { BrewManifestSyncState } from '@ohos/brewcommon';
 import { TabBarData, TABS_LIST } from '../model/TabBarModel';
 
 @Component
@@ -32,8 +34,15 @@ export struct CustomSideBar {
    * 入口的显示判据与图标读它的一级属性。
    */
   @State commandState: BrewCommandState = BrewCommandRunner.getInstance().getState();
+  /**
+   * W′ 同步服务的同一个状态实例（`BrewManifestSyncState` 是 `@Observed`）。
+   * 同步入口的显示判据是 `pendingNewCount > 0`——有新增才出现，消费（ack）后消失。
+   */
+  @State syncState: BrewManifestSyncState = BrewManifestSyncService.getInstance().getState();
   /** Shell 入口的悬停状态 */
   @State shellFocus: boolean = false;
+  /** 同步入口的悬停状态 */
+  @State syncFocus: boolean = false;
   sideBarChange: (index: number) => void = (_index: number) => {
   };
 
@@ -44,6 +53,15 @@ export struct CustomSideBar {
    */
   private shellEntryVisible(): boolean {
     return this.commandState.status !== BrewCommandStatus.IDLE;
+  }
+
+  /**
+   * 同步入口是否展示（spec §4.1：排在 Shell 上面，**有新增才显示**）。
+   * KV 库可用且有未消费的新增；ack 之后 `pendingNewCount` 归零，入口随之消失。
+   * 服务未起（available=false）时不出现——pc_normal 彩蛋场景走 ack 后重现的路径。
+   */
+  private syncEntryVisible(): boolean {
+    return this.syncState.available && this.syncState.pendingNewCount > 0;
   }
 
   /**
@@ -128,6 +146,43 @@ export struct CustomSideBar {
     })
   }
 
+  /** W′ 清单同步入口（spec §4.1）：排在 Shell 上面，有新增才显示；点击拉起同步 Sheet。 */
+  @Builder
+  SyncEntryBuilder() {
+    Row() {
+      SymbolGlyph($r('sys.symbol.arrow_2_circlepath'))
+        .fontSize($r('sys.float.Title_M'))
+        .fontColor([$r('sys.color.icon_secondary')])
+        .renderingStrategy(SymbolRenderingStrategy.MULTIPLE_OPACITY)
+        .padding({
+          left: $r('sys.float.padding_level4'),
+          right: $r('sys.float.padding_level4'),
+        })
+      Text($r('app.string.tab_manifest_sync'))
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_tertiary'))
+      Blank()
+      // +N 角标：新增条数；ack 后 pendingNewCount 归零，整行随判据一起消失
+      Text(`+${this.syncState.pendingNewCount}`)
+        .fontSize($r('sys.float.Body_L'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.interactive_active'))
+    }
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(this.syncFocus ? $r('sys.color.interactive_hover') : Color.Transparent)
+    .width('100%')
+    .height($r('app.float.side_bar_height'))
+    .margin({ bottom: $r('sys.float.padding_level2') })
+    .borderRadius($r('sys.float.corner_radius_level4'))
+    .onHover((isHover: boolean) => {
+      this.syncFocus = isHover;
+    })
+    .onClick(() => {
+      BrewManifestSyncService.getInstance().openSheet();
+    })
+  }
+
   build() {
     Column() {
       Row() {
@@ -153,6 +208,18 @@ export struct CustomSideBar {
 
       // Blank 占掉剩余高度，把入口压在侧边栏最下方；分隔线与入口一起出现、一起消失
       Blank()
+
+      // W′ 同步入口：排在 Shell 上面，有未消费的新增才显示（spec §4.1）
+      if (this.syncEntryVisible()) {
+        Divider()
+          .strokeWidth('1px')
+          .color($r('sys.color.comp_divider'))
+          .margin({
+            top: $r('sys.float.padding_level2'),
+            bottom: $r('sys.float.padding_level2'),
+          })
+        this.SyncEntryBuilder()
+      }
 
       if (this.shellEntryVisible()) {
         Divider()

@@ -59,6 +59,20 @@ struct MineSettingView {
               left: $r('sys.float.padding_level2'),
               right: $r('sys.float.padding_level2'),
             })
+            // W′ 工具清单同步（spec §4.3）：常驻入口。「AI 设置」行下、哨兵行上；
+            // 不挂 isLocalPackagesEnabled()——同步查看与 AI 配置应用在 pc_normal 也是真功能。
+            ListItem() {
+              HmosListItem({
+                title: $r('app.string.mine_setting_manifest_sync'),
+                handleClickAction: () => {
+                  this.pathStack.pushPath({ name: PageEnum.BREW_MANIFEST_SYNC_VIEW });
+                }
+              })
+            }
+            .padding({
+              left: $r('sys.float.padding_level2'),
+              right: $r('sys.float.padding_level2'),
+            })
             // 更新哨兵（H 线）：卡片 + 通知的频控入口。只在 pc_acl 展示——哨兵的一切数据
             // 与通知都来自 brew cli 能力，pc_normal 没有这个能力，入口也随之隐藏（G10）。
             // 放在「关于」之前：「关于」固定收尾

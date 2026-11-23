@@ -7,6 +7,7 @@
   "license": "",
   "dependencies": {
     "@ohos/common": "file:../../common",
+    "@ohos/brewcommon": "file:../../features/brewcommon",
     "@ohos/pcnative": "file:../../features/pcnative",
     "@ohos/pcui": "file:../../features/pcui"
   }

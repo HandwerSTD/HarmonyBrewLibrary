@@ -411,6 +411,38 @@
     {
       "name": "ai_privacy_note",
       "value": "AI 功能会把包元数据与命令错误文本发送给你配置的模型服务商（如 DeepSeek）；不包含账号、设备标识等身份信息。API Key 仅加密存储在本机。"
+    },
+    {
+      "name": "mine_setting_manifest_sync",
+      "value": "Package manifest sync"
+    },
+    {
+      "name": "sync_easter_egg_toast",
+      "value": "3 test packages written to the distributed store"
+    },
+    {
+      "name": "sync_device_page_title",
+      "value": "%s's manifest"
+    },
+    {
+      "name": "sync_ai_sync_section",
+      "value": "Distributed sync"
+    },
+    {
+      "name": "sync_ai_config_status",
+      "value": "Synced with manifests · last applied %s"
+    },
+    {
+      "name": "sync_ai_key_switch",
+      "value": "Sync API Key"
+    },
+    {
+      "name": "sync_key_confirm",
+      "value": "Your API Key will enter the encrypted sync store and appear on your trusted devices. Continue?"
+    },
+    {
+      "name": "sync_key_confirm_go",
+      "value": "Continue"
     }
   ]
 }

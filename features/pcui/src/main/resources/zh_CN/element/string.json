@@ -25,6 +25,10 @@
       "value": "Shell"
     },
     {
+      "name": "tab_manifest_sync",
+      "value": "清单同步"
+    },
+    {
       "name": "hmos_app_name",
       "value": "BrewLibrary"
     }
