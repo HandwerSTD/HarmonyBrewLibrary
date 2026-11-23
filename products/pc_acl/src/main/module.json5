@@ -58,6 +58,16 @@
         "type": "workScheduler"
       }
     ],
+    "skillProfiles": [
+      {
+        "name": "handwer-brew-library",
+        "abilityName": "PcAbility",
+        "srcEntries": [
+          "../../skills/handwer-brew-library/scripts/BrewSkill.ets"
+        ],
+        "version": "1.1.0"
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET",

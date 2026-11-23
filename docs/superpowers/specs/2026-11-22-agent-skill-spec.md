@@ -56,7 +56,7 @@
 | Q1 | 真机 OS 版本与小艺 Work 可用性：OS 是否 ≥ Skill 要求的设备版本？小艺 Work 入口与 Agent 触发是否可用？ | 不满足 → 32 停在 spec，标记「平台门未过」，不排期（L 版本时光机同款规矩） |
 | Q2 | 工具链：本机 DevEco/devecocli 是否有 API 26 SDK；`compatibleSdkVersion/targetSdkVersion` 升 26 后双 product 构建、存量代码是否报错 | 决定升版代价（G2/G12 的范围） |
 | Q3 | Skill 脚本能否 import 跨模块包（`@ohos/brewcommon` 等）：官方示例为模块内相对路径，本项目业务全在 feature 模块 | 不可用则兜底：pc_acl 内写转发薄层 |
-| Q4 | AGC 导入链路：测试版上传 → 导入 Skill → 真机可见，全程是否闭环（账号/资质/签名 profile） | 决定验证路径 |
+| Q4 | ~~Skill 导入与路由验证~~ → 已解：exec-cli 通道真机通过（2026-11-23，小艺 Work 开完全权限后）；剩余验证为小艺可见性、四话术触发、冷启动调起 | 已验证 |
 
 ### 3.2 目录与注册（Q3 放行后）
 
@@ -71,6 +71,12 @@ products/pc_acl/
 ```
 
 `BrewSkill.ets` 只做三件事：按 Schema 前置校验 argv（白名单枚举二次校验）、调用 `BrewSkillBridge`（§3.4）、按契约构造 `ExecuteResult` 并经唯一的 `report()` 出口回包。**业务逻辑一律不进脚本**。
+
+对照真实生产样本（`biandan-assistant`，2026-11-22 需求方提供）后的契约加固与裁决：
+- **单通道收敛（裁决终局，2026-11-23）**：exec-cli（ohos-arkTSScript）**真机验证通过**；首轮失败根因是小艺 Work 未开完全权限，与通道无关。A 通道（云端 invoke：工具注册件 + A/B 路由，完整实现见 commit `82339f8`、验证快照 `92c1f92`）按需求方裁定放弃并移除；日后需要云侧调用时从该提交取回注册件即可。
+- **机制实测（2026-11-23，需求方）**：应用安装后，系统解出 skill 与 ArkTS script 并暴露给 `ohos-arktsscript` 工具；小艺 Work 用自己的 `exec` 工具调用它，即完成应用接入（`exec(command: "ohos-arktsscript --skillName ... --functionName ... --args '{\"...\"}'", timeout_ms)`，实测成功样本 searchPackages / `{"query":"python"}` / 60000）。**系统不把 SKILL.md 文本暴露给小艺 Work，小艺 Work 也不能装本地 skill**——SKILL.md 必须整份投喂到对话框，harness 读完才能写对调用；此约定已写入 SKILL.md 调用方式段并强调。
+- **argv 单 JSON 字符串约定**：SKILL.md 教 harness 先 `JSON.stringify` 再转义 `\"`，脚本端「直接解析 → 失败还原 `\"` 重试一次」双形态兼容；argv 形态错误的 errMsg 带「参数传递格式错误」锚点，SKILL.md 据此指示自动压参重试一次（业务字段缺失与 NOT_FOUND 不自动重试）。
+- **跨模块编译已被样本证明**：样本脚本直接 import 多个跨模块包，探针 Q3 的风险基本排除；本技能的常量本地副本仍是刻意的保守设计（契约检查脚本核对不漂移）。
 
 ### 3.3 四项能力（SKILL.md 能力契约）
 
@@ -142,10 +148,11 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 
 | 文件 | 改动 |
 | --- | --- |
-| `products/pc_acl/skills/handwer-brew-library/SKILL.md` | 声明契约（§3.3 全文） |
+| `products/pc_acl/skills/handwer-brew-library/SKILL.md` | 声明契约（§3.3 全文）：触发场景 / exec-cli 调用约定 / 错误重试纪律 / 四能力 args 与返回 Schema |
 | `products/pc_acl/skills/handwer-brew-library/scripts/BrewSkill.ets` | 四能力薄适配 + 唯一 report 出口 |
 | `products/pc_acl/src/main/module.json5` | `skillProfiles` 注册（Q3 结论决定 srcEntries 写法）；无新增权限 |
 | `products/pc_acl/src/main/ets/skill/BrewSkillBridge.ets` | 只读业务出口（headless）：目录检索 / 盘上快照 / dry-run / 冷启动目录就绪 |
+| `products/pc_acl/src/main/ets/skill/SkillProbe.ets` | 启动自检（G3 探针位）：`skillManager.getSkillInfoForSelf` 查注册状态，只读只打日志（`[skill-probe]`）；17700093 = skillProfiles/SKILL.md 未生效 |
 | `features/brewcommon/src/main/ets/util/BrewDryRunParser.ets` | `--dry-run` 输出解析（Would install 清单 / 体积行 / Not found），纯函数 + 检查脚本用例 |
 | `features/brewcommon/src/main/ets/constant/SkillConstants.ets` | pending 键、超时阈值、路由参数名 |
 | `build-profile.json5` | Q2 放行后 `compatibleSdkVersion/targetSdkVersion` → 26（双 product 同步），升级说明入 decisions.md |
@@ -158,10 +165,12 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 1. **探针（真机，用户执行）**：§3.1 四问逐项记录 → Q1 不过则停（不排期）；Q2/Q3/Q4 决定升版与兜底方案。
 2. **静态**：`node hmosword-build/brew-skill/check_skill_contract.mjs` 与 `audit_skill_no_exec.mjs` 全绿（G11/G6）。
 3. **构建**：升版后双 product `devecocli build` ERROR 0（G2/G9）。
-4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
+4. **AGC + 真机（用户执行）**：测试版上传 → 导入 Skill → **确认小艺 Work 已开完全权限（首轮失败根因）** → 应用启动后看 `[skill-probe]` 日志确认注册状态（`skill registered` + `self skill count=1` 为生效；`17700093` 为未生效，查 name 三处一致与 srcEntries 路径）→ **把 SKILL.md 全文投喂到小艺 Work 对话框（系统不暴露 skill 文本，机制见 §3.2）** → 小艺 Work 触发四话术 + 三类边界话术 + 冷启动调起（G3/G4/G5/G7/G8/G11）；`[skill]` 日志覆盖每次调用与冷启动分支。
 5. **回归（真机）**：API 升版后存量冒烟清单（G12）——tldr 区块、详情页、本机包管理、执行 Sheet、（若已合入）AI 卡片与哨兵卡片。
 
 ## 10. 风险与未决
+
+- **小艺 Work 权限是 exec-cli 的前置条件**（2026-11-23 实测教训）：权限未开全时 exec-cli 调用失败，极易误判为「通道不可用」——本轮就因此误走了一段云端 invoke 弯路。探针文档必须记录权限开启路径，作为 G3 的前置检查项。
 
 - **平台门是第一风险**：Q1 任一分叉（OS 版本不够 / 小艺 Work 不可用）→ 本 spec 停在评审态，进 decisions.md 实测门槛账，与 L 版本时光机同款处理，不强行降级实现（Skill 机制没有「部分可用」形态）。
 - **API 26 升版波及全量代码**：升版可能触发存量 API 弃用告警/行为变化；G2/G12 把代价显性化。若升版代价不可控，备选路径是等 D 线与主线四收尾后再评估（32 本就排序靠后，不阻塞任何线）。
@@ -169,3 +178,50 @@ suggestion 一律中文、口语、不暴露内部错误细节（SKILL.md 示例
 - dry-run 输出格式没有官方契约（brew 版本间可能漂移）：解析器按 tap-trust 实测样本编写，J 落地时共享同一解析器与用例，漂移风险两处同源。
 - SKILL.md 的检索与排序规则（哪个 skill 被小艺选中）平台侧不可控：description 措辞与触发场景边界是唯一抓手，G8 实测后按结果回改措辞。
 - 与 D 线的关系：本 spec 与 D1–D3（应用内 AI）**互不依赖**——Skill 端零 AI 调用；开工排序仍按构建顺序（D 合入后），只因 build-profile 冲突面，不因功能依赖。
+
+## 11. v2 能力面扩充（2026-11-23，需求方裁定「能暴露的都暴露」）
+
+技术验证（真机四话术 + exec 形态）通过后，按需求方裁定把应用的全部只读能力与写操作的
+dry-run 预演一次性暴露进 Skill。四能力扩到十四能力，版本 1.0.0 → 1.1.0。
+
+### 11.1 能力清单（新增十项）
+
+| functionName | 类型 | 数据来源 | 备注 |
+| --- | --- | --- | --- |
+| `listInstalled` | 读 | 盘上快照（缺失时补一次 `brew info --json=v2 --installed`） | filter: all/formula/cask/outdated/updated + query 子串 + limit |
+| `listOutdated` | 读 | 同上快照的 outdated 集 | 与「我的 - 待更新」同口径 |
+| `packageDetail` | 读+网络 | 现网单条（BrewRepository 归一详情，1h 缓存+回落）+ 快照合并 | kind 判定：目录 → 快照 → 兜底试另一侧 |
+| `packageUsage` | 读+网络 | TldrService 候选链 | 增强层：found=false 不算错误 |
+| `listTrending` | 读 | 包表 boards（trending/alltime/fresh × formula/cask） | 零请求；带数据窗口 |
+| `listCategories` | 读 | 包表浏览集分类 | 零请求；带表状态 |
+| `checkBrew` | 读+CLI | `brew config`（只读白名单）+ BrewCli 探测事实 | 回包永远 success，问题进字段 |
+| `previewUpgrade` | 预演 | `brew upgrade <token> --dry-run` | not_installed（快照口径免跑命令）/ nothing_to_upgrade 分支 |
+| `previewUpgradeAll` | 预演 | `brew upgrade [--formula|--cask] --dry-run` | scope: all/formula/cask |
+| `previewUninstall` | 预演 | 快照 + `brew uses --installed`（只读） | plannedCommand 仅展示，绝不执行卸载 |
+
+### 11.2 通道不变量（v2 收紧）
+
+- 命令执行收口两个 helper：`runDryRun`（尾巴恒为 `--dry-run`）与 `runRead`
+  （白名单 `config` / `uses --installed` / `info`）；审计以
+  「`ShellUtils.run` 调用点数量 === 2」锁死，任何新命令必须先过这两个 helper。
+- 原 BRIDGE_FORBIDDEN 的 `upgradeArgs` / `upgradeAllArgs` / `uninstallCommand` 解禁
+  （dry-run 拼装与 plannedCommand 展示需要），`upgradeCommand` 维持禁用。
+- 升级预演的通用名词行（`package(s)`）kind 留空，由 Bridge 按目录 → 快照逐条补齐
+  （`kindGuessOf`）。
+
+### 11.3 新增真机核对项（G13–G18）
+
+- **G13** `brew upgrade --dry-run` 在设备 brew 版本上可用（官方 4.x 为 experimental；
+  若不识别该 flag，回 ERR_INTERNAL，后续可降级为解析 `brew outdated --verbose`）。
+- **G14** Would upgrade 行格式与解析器假设一致（`name 旧 -> 新`、单复数、cask 分行）。
+- **G15** `brew uses --installed` 输出形状（纯名行 / 无噪音）。
+- **G16** `brew config` 四键抽取（API 模式下 Core tap 行缺席可容忍）。
+- **G17** Skill 进程内跑 `packageDetail` / `packageUsage` 的网络链路（AppStorage 上下文
+  与 UI 进程一致假设，§10 未决项的实证）。
+- **G18** listInstalled 冷路径：无快照时自动补一次读取并落快照（与 G11 冷启动话术合并测）。
+
+### 11.4 检查脚本状态
+
+- `check_skill_contract.mjs`：14 abilities / 17 constants 全绿（场景小节正则放宽到
+  `\d{1,2}` 支持两位数编号）。
+- `audit_skill_no_exec.mjs`：2 触达点 + 19 解析用例全绿（dry-run 12 / uses 4 / config 3）。

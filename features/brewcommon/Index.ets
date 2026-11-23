@@ -350,3 +350,51 @@ export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
 export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewInstalledSets } from './src/main/ets/service/BrewInstalledLoader';
 export { BrewInstalledParser } from './src/main/ets/util/BrewInstalledParser';
 export type { BrewCaskDoc, BrewFormulaDoc, BrewInstalledDoc, BrewInstalledKegDoc } from './src/main/ets/model/BrewInstalledDoc';
+
+// ---------------------------------------------------------------- Agent Skill（32 号功能点）
+
+// `brew install/upgrade --dry-run` 输出解析（纯函数层）。Agent Skill 的预演与检查脚本共用同一份；
+// 检查脚本按 tldr 的方式把本文件拷成 .mts 在 node 里跑，因此它保持零 import、字符串常量。
+export { BrewDryRunParser, BrewDryRunItem, BrewDryRunResult } from './src/main/ets/util/BrewDryRunParser';
+
+// `brew uses --installed` 输出解析（纯函数层）：卸载预演的反向依赖查询。
+export { BrewUsesParser, BrewUsesResult, BREW_USES_NAME_RE } from './src/main/ets/util/BrewUsesParser';
+
+// `brew config` 输出解析（纯函数层）：checkBrew 的版本与前缀抽取。
+export { BrewConfigParser, BrewConfigResult } from './src/main/ets/util/BrewConfigParser';
+
+// `brew info <name...>` 多包文本解析（纯函数层）：预演 sizes 补测的当前占用。
+export { BrewInfoSizeParser, BrewInfoSize, BrewInfoSizeResult } from './src/main/ets/util/BrewInfoSizeParser';
+
+// Skill 契约常量（specs/2026-11-22-agent-skill-spec.md §3）。skills/ 目录的入口脚本不引跨模块包，
+// 那边另有逐字一致的本地副本，契约检查脚本核对两处与 SKILL.md 不漂移。
+export {
+  SKILL_BREW_QUICK_TIMEOUT_MS,
+  SKILL_BREW_TIMEOUT_MS,
+  SKILL_CAVEATS_MAX_CHARS,
+  SKILL_ERR_INTERNAL,
+  SKILL_ERR_INVALID_PARAMS,
+  SKILL_ERR_NOT_FOUND,
+  SKILL_FN_CHECK,
+  SKILL_FN_CATEGORIES,
+  SKILL_FN_DETAIL,
+  SKILL_FN_LIST_INSTALLED,
+  SKILL_FN_LIST_OUTDATED,
+  SKILL_FN_PREVIEW,
+  SKILL_FN_PREVIEW_UNINSTALL,
+  SKILL_FN_PREVIEW_UPGRADE,
+  SKILL_FN_PREVIEW_UPGRADE_ALL,
+  SKILL_FN_QUERY,
+  SKILL_FN_REQUEST,
+  SKILL_FN_SEARCH,
+  SKILL_FN_TRENDING,
+  SKILL_FN_USAGE,
+  SKILL_INFO_NAMES_LIMIT,
+  SKILL_LIST_LIMIT,
+  SKILL_NAME,
+  SKILL_SCRIPT_PATH,
+  SKILL_SEARCH_LIMIT,
+  SKILL_TRENDING_LIMIT,
+  SKILL_USAGE_LIMIT,
+  SKILL_VERSION,
+} from './src/main/ets/constant/SkillConstants';

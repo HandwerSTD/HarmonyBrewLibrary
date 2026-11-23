@@ -4,6 +4,7 @@ import { Logger, StorageKey } from '@ohos/common';
 import { ShellStreamProbe } from '@ohos/pcnative';
 import { BaseAbilityHelper } from '@ohos/pcui';
 import { SentinelBootstrap } from '../sentinel/SentinelBootstrap';
+import { SkillProbe } from '../skill/SkillProbe';
 
 const TAG: string = '[PcAbility]';
 
@@ -26,6 +27,8 @@ export default class PcAbility extends UIAbility {
     SentinelBootstrap.init(this.context);
     // 卡片点击 / 通知按钮经 want 进来：落进 AppStorage 待 UI 消费（G2/G4）
     this.captureSentinelWant(want);
+    // Agent Skill 注册自检（G3 / Stage 0 探针）：只读查询本应用技能注册状态，只打日志
+    SkillProbe.probe();
     this.baseAbilityHelper.doOnCreate(this.context, want, launchParam);
   }
 
