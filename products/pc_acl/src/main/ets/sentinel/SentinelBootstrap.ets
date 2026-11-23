@@ -51,7 +51,7 @@ export class SentinelBootstrap {
   private static scheduleWork(context: common.UIAbilityContext): void {
     const info: workScheduler.WorkInfo = {
       workId: SENTINEL_WORK_ID,
-      bundleName: context.applicationInfo.bundleName,
+      bundleName: BrewSentinelService.selfBundleName(),
       abilityName: 'BrewWorkSchedulerExtension',
       isRepeat: true,
       isPersisted: true,

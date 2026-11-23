@@ -58,8 +58,8 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "6.1.0(23)",
-        "targetSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "26.0.0",
+        "targetSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
@@ -70,8 +70,8 @@
       {
         "name": "pc_normal",
         "signingConfig": "normal_debug",
-        "compatibleSdkVersion": "6.1.0(23)",
-        "targetSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "26.0.0",
+        "targetSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {

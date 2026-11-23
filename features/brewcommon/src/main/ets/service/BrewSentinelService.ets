@@ -6,7 +6,7 @@ import { preferences } from '@kit.ArkData';
 import type { BusinessError } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
-import { common, wantAgent } from '@kit.AbilityKit';
+import { bundleManager, common, wantAgent } from '@kit.AbilityKit';
 import type { WantAgent } from '@kit.AbilityKit';
 import { Logger } from '@ohos/common';
 import { BrewInstalledLoader } from './BrewInstalledLoader';
@@ -96,6 +96,27 @@ export class BrewSentinelService {
       BrewSentinelService.instance = new BrewSentinelService();
     }
     return BrewSentinelService.instance;
+  }
+
+  /** 进程内缓存的包名。wantAgent 与 workScheduler 登记都要用 */
+  private static bundleNameCache: string = '';
+
+  /**
+   * 本应用包名。**不走 `context.applicationInfo.bundleName`、也不走 `BundleInfo.bundleName`**：
+   * 本 SDK（API 26 形态）的 ApplicationInfo / BundleInfo 都没有 bundleName 字段
+   * （API 26 构建实测 10505001；bundleInfo.d.ts 里包名就是 `BundleInfo.name`，
+   * applicationInfo.d.ts 对 `name` 的注释「same as bundleName」实锤）。
+   * 改走 bundleManager 自查询（无需权限、扩展进程可用）；进程内缓存，同步 IPC 只付一次。
+   */
+  public static selfBundleName(): string {
+    if (BrewSentinelService.bundleNameCache.length > 0) {
+      return BrewSentinelService.bundleNameCache;
+    }
+    const info: bundleManager.BundleInfo =
+      bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+    BrewSentinelService.bundleNameCache = info.name;
+    Logger.info(TAG, `self bundleName resolved: ${BrewSentinelService.bundleNameCache}`);
+    return BrewSentinelService.bundleNameCache;
   }
 
   /** 进程内缓存的 store 实例。GSKV 实例读的就是共享库数据，跨进程写入对读取方可见 */
@@ -542,7 +563,7 @@ export class BrewSentinelService {
       wants: [
         {
           deviceId: '',
-          bundleName: context.applicationInfo.bundleName,
+          bundleName: BrewSentinelService.selfBundleName(),
           abilityName: 'PcAbility',
           parameters: params,
         }

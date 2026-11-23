@@ -60,7 +60,7 @@ struct BrewSentinelCard {
   @Builder
   CountBody() {
     Text(this.countText())
-      .fontSize($r('sys.float.Title_XL'))
+      .fontSize($r('sys.float.Title_M'))
       .fontWeight(FontWeight.Bold)
       .fontColor($r('sys.color.font_primary'))
       .maxLines(2)
@@ -74,7 +74,7 @@ struct BrewSentinelCard {
   @Builder
   LiveBody() {
     Text(this.countText())
-      .fontSize($r('sys.float.Title_XL'))
+      .fontSize($r('sys.float.Title_M'))
       .fontWeight(FontWeight.Bold)
       .fontColor($r('sys.color.font_primary'))
       .maxLines(2)
@@ -95,7 +95,7 @@ struct BrewSentinelCard {
     .width('100%')
     .margin({ top: $r('sys.float.padding_level1') })
     Text($r('app.string.sentinel_card_asof', this.asOfText))
-      .fontSize($r('sys.float.Body_XS'))
+      .fontSize($r('sys.float.Body_S'))
       .fontColor($r('sys.color.font_tertiary'))
       .margin({ top: $r('sys.float.padding_level2') })
   }
