@@ -13,6 +13,7 @@ import {
   BrewDocAbsentError,
   BrewDryRunParser,
   BrewFormulaModel,
+  BrewInfoSizeParser,
   BrewInstalledLoader,
   BrewKindText,
   BrewSearchModel,
@@ -21,6 +22,7 @@ import {
   SKILL_BREW_QUICK_TIMEOUT_MS,
   SKILL_BREW_TIMEOUT_MS,
   SKILL_CAVEATS_MAX_CHARS,
+  SKILL_INFO_NAMES_LIMIT,
   SKILL_LIST_LIMIT,
   SKILL_SEARCH_LIMIT,
   SKILL_TRENDING_LIMIT,
@@ -31,6 +33,7 @@ import type { BrewCaskDetail } from '@ohos/brewcommon';
 import type { BrewConfigResult } from '@ohos/brewcommon';
 import type { BrewDryRunResult } from '@ohos/brewcommon';
 import type { BrewFormulaDetail } from '@ohos/brewcommon';
+import type { BrewInfoSizeResult } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import type { BrewInstalledSets } from '@ohos/brewcommon';
 import type { BrewSearchResult } from '@ohos/brewcommon';
@@ -72,6 +75,15 @@ export class SkillPreviewItem {
   public fromVersion: string = '';
 }
 
+/** 预演 sizes 补测的一行（SKILL.md data.sizes[].）——brew info 实测的当前已装占用，仅已装包有值 */
+export class SkillPreviewSize {
+  public name: string = '';
+  public version: string = '';
+  /** brew 原文体积串（如 `548.2KB` / `1.9MB`），直接转述 */
+  public sizeText: string = '';
+  public files: number = 0;
+}
+
 /** previewInstall / requestInstall / previewUpgrade / previewUpgradeAll 共用的回包（SKILL.md data） */
 export class SkillPreviewResult {
   public ok: boolean = false;
@@ -86,6 +98,8 @@ export class SkillPreviewResult {
   /** 实际下发的命令行（`brew ... --dry-run`），进回包供小艺转述，可溯源 */
   public cmdline: string = '';
   public exitCode: number = 0;
+  /** 已装包的当前占用补测（brew info 实测）。新装包无数据，失败静默置空——增强层 */
+  public sizes: SkillPreviewSize[] = [];
 }
 
 /** listInstalled / listOutdated 回包里的一行（盘上快照口径） */
@@ -344,6 +358,7 @@ export class BrewSkillBridge {
       result.ok = true;
       result.declaredCount = parsed.declaredCount;
       BrewSkillBridge.fillPreviewItems(result, parsed);
+      result.sizes = await BrewSkillBridge.collectSizes(result.items);
       Logger.info(TAG, 'preview token=' + token + ' ok items=' + result.items.length +
         ' declared=' + result.declaredCount + ' ms=' + (Date.now() - started));
     } else {
@@ -474,6 +489,7 @@ export class BrewSkillBridge {
       result.ok = true;
       result.declaredCount = parsed.declaredCount;
       BrewSkillBridge.fillPreviewItems(result, parsed);
+      result.sizes = await BrewSkillBridge.collectSizes(result.items);
       Logger.info(TAG, 'upgrade token=' + token + ' ok items=' + result.items.length +
         ' ms=' + (Date.now() - started));
     } else if (shellResult.ok && parsed.failureMessage === 'no Would install line in output') {
@@ -513,6 +529,7 @@ export class BrewSkillBridge {
       result.ok = true;
       result.declaredCount = parsed.declaredCount;
       BrewSkillBridge.fillPreviewItems(result, parsed);
+      result.sizes = await BrewSkillBridge.collectSizes(result.items);
       Logger.info(TAG, 'upgradeAll scope=' + scope + ' ok items=' + result.items.length +
         ' ms=' + (Date.now() - started));
     } else if (shellResult.ok && parsed.failureMessage === 'no Would install line in output') {
@@ -933,6 +950,48 @@ export class BrewSkillBridge {
       one.fromVersion = item.fromVersion;
       result.items.push(one);
     }
+  }
+
+  /**
+   * 预演成功后的「当前已装占用」补测：`brew info <全部条目名>` 多包一次命令（runRead
+   * 白名单的 info 段），BrewInfoSizeParser 提取已装项的 `(N files, X)` 行。新装包与
+   * 查询失败都静默置空——sizes 是增强层，绝不影响预演本身的结果。
+   */
+  private static async collectSizes(items: SkillPreviewItem[]): Promise<SkillPreviewSize[]> {
+    const rows: SkillPreviewSize[] = [];
+    if (items.length === 0 || !BrewCli.isReady()) {
+      return rows;
+    }
+    const names: string[] = [];
+    for (const item of items) {
+      if (names.length >= SKILL_INFO_NAMES_LIMIT) {
+        break;
+      }
+      if (names.indexOf(item.name) < 0) {
+        names.push(item.name);
+      }
+    }
+    if (names.length === 0) {
+      return rows;
+    }
+    try {
+      const shellResult: ShellResult = await BrewSkillBridge.runRead('info ' + names.join(' '));
+      const parsed: BrewInfoSizeResult =
+        BrewInfoSizeParser.parse(shellResult.stdout + '\n' + shellResult.stderr);
+      for (const one of parsed.sizes) {
+        const row: SkillPreviewSize = new SkillPreviewSize();
+        row.name = one.name;
+        row.version = one.version;
+        row.sizeText = one.sizeText;
+        row.files = one.files;
+        rows.push(row);
+      }
+    } catch (err) {
+      const error = err as Error;
+      Logger.warn(TAG, 'sizes collect failed, reason=' + error.message);
+    }
+    Logger.info(TAG, 'sizes collected=' + rows.length + '/' + names.length);
+    return rows;
   }
 
   /** 预演条目的 kind 兜底：目录 → 盘上快照 → 空串 */

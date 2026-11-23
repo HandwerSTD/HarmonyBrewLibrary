@@ -27,6 +27,7 @@ import type {
   SkillOutdatedResult,
   SkillPreviewItem,
   SkillPreviewResult,
+  SkillPreviewSize,
   SkillQueryResult,
   SkillSearchRow,
   SkillTrendingResult,
@@ -290,6 +291,7 @@ export default class BrewSkill {
         'cmdline': r.cmdline,
         'declaredCount': r.declaredCount,
         'wouldUpgrade': BrewSkill.upgradePayload(r.items),
+        'sizes': BrewSkill.sizesRows(r.sizes),
       };
       await this.reply(info, 0, BrewSkill.successPayload(data, SUGGEST_UPGRADE_PREVIEW_OK));
     } catch (err) {
@@ -332,6 +334,7 @@ export default class BrewSkill {
         'cmdline': r.cmdline,
         'declaredCount': r.declaredCount,
         'wouldUpgrade': BrewSkill.upgradePayload(r.items),
+        'sizes': BrewSkill.sizesRows(r.sizes),
       };
       await this.reply(info, 0, BrewSkill.successPayload(data, SUGGEST_UPGRADE_ALL_PREVIEW_OK));
     } catch (err) {
@@ -589,6 +592,7 @@ export default class BrewSkill {
         'cmdline': preview.cmdline,
         'declaredCount': preview.declaredCount,
         'wouldInstall': BrewSkill.previewPayload(preview.items),
+        'sizes': BrewSkill.sizesRows(preview.sizes),
       };
       const suggestion: string = isRequest ? SUGGEST_CONFIRM : SUGGEST_PREVIEW_OK;
       await this.reply(info, 0, BrewSkill.successPayload(data, suggestion));
@@ -661,6 +665,20 @@ export default class BrewSkill {
         'fromVersion': item.fromVersion,
         'version': item.version,
         'kind': item.kind,
+      };
+      list.push(one);
+    }
+    return list;
+  }
+
+  private static sizesRows(rows: SkillPreviewSize[]): Array<Record<string, Object>> {
+    const list: Array<Record<string, Object>> = [];
+    for (const row of rows) {
+      const one: Record<string, Object> = {
+        'name': row.name,
+        'version': row.version,
+        'sizeText': row.sizeText,
+        'files': row.files,
       };
       list.push(one);
     }

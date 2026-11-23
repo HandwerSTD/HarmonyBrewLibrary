@@ -31,6 +31,7 @@ const BRIDGE = join(ROOT, 'products', 'pc_acl', 'src', 'main', 'ets', 'skill', '
 const PARSER = join(ROOT, 'features', 'brewcommon', 'src', 'main', 'ets', 'util', 'BrewDryRunParser.ets');
 const USES_PARSER = join(ROOT, 'features', 'brewcommon', 'src', 'main', 'ets', 'util', 'BrewUsesParser.ets');
 const CONFIG_PARSER = join(ROOT, 'features', 'brewcommon', 'src', 'main', 'ets', 'util', 'BrewConfigParser.ets');
+const INFO_PARSER = join(ROOT, 'features', 'brewcommon', 'src', 'main', 'ets', 'util', 'BrewInfoSizeParser.ets');
 
 /** 剥掉注释再扫描：注释里的禁词是文档，代码里的禁词才是违规 */
 const stripComments = (text) => text
@@ -106,11 +107,13 @@ const loadParser = async (sourcePath, name) => {
 const parserMod = await loadParser(PARSER, 'BrewDryRunParser.mts');
 const usesMod = await loadParser(USES_PARSER, 'BrewUsesParser.mts');
 const configMod = await loadParser(CONFIG_PARSER, 'BrewConfigParser.mts');
+const infoMod = await loadParser(INFO_PARSER, 'BrewInfoSizeParser.mts');
 rmSync(tmpDir, { recursive: true, force: true });
 
 const { BrewDryRunParser, BREW_DRYRUN_KIND_FORMULA, BREW_DRYRUN_KIND_CASK } = parserMod;
 const { BrewUsesParser } = usesMod;
 const { BrewConfigParser } = configMod;
+const { BrewInfoSizeParser } = infoMod;
 
 // 设备实测样本（docs/knowledge/2026-11-21-brew-tap-trust.md）
 const sample = BrewDryRunParser.parse('==> Would install 1 formula: wget 1.25.0_2');
@@ -253,5 +256,23 @@ const cfgGarbage = BrewConfigParser.parse('nothing useful here');
 assert.strictEqual(cfgGarbage.ok, false);
 assert.strictEqual(cfgGarbage.failureMessage, 'no HOMEBREW_VERSION line in output');
 
+// ---- 3.4 brew info 占用解析（v3 sizes 补测，设备实测 2026-11-23）----
+const infoSizes = BrewInfoSizeParser.parse(
+  '==> acl: stable 2.4.0 (bottled)\nInstalled (as dependency)\n' +
+  'acl 2.4.0 (67 files, 548.2KB) [Linked]\n' +
+  'https://www.alsa-project.org/\n' +
+  'alsa-lib 1.2.16.1_1 (147 files, 1.9MB) [Linked]\n');
+assert.strictEqual(infoSizes.sizes.length, 2);
+assert.strictEqual(infoSizes.sizes[0].name, 'acl');
+assert.strictEqual(infoSizes.sizes[0].version, '2.4.0');
+assert.strictEqual(infoSizes.sizes[0].files, 67);
+assert.strictEqual(infoSizes.sizes[0].sizeText, '548.2KB');
+assert.strictEqual(infoSizes.sizes[1].name, 'alsa-lib');
+assert.strictEqual(infoSizes.sizes[1].sizeText, '1.9MB');
+
+// 未安装的包没有版本占用行 → 无数据（诚实缺省）
+const infoNoSize = BrewInfoSizeParser.parse('wget: stable 1.26.0 (bottled)\nInternet file retriever\n');
+assert.strictEqual(infoNoSize.sizes.length, 0);
+
 console.log('audit_skill_no_exec: all green (2 touchpoints, '
-  + (16 + 4 + 3) + ' parser cases)');
+  + (16 + 4 + 3 + 2) + ' parser cases)');

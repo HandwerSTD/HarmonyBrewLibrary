@@ -280,6 +280,9 @@ export { BrewUsesParser, BrewUsesResult, BREW_USES_NAME_RE } from './src/main/et
 // `brew config` 输出解析（纯函数层）：checkBrew 的版本与前缀抽取。
 export { BrewConfigParser, BrewConfigResult } from './src/main/ets/util/BrewConfigParser';
 
+// `brew info <name...>` 多包文本解析（纯函数层）：预演 sizes 补测的当前占用。
+export { BrewInfoSizeParser, BrewInfoSize, BrewInfoSizeResult } from './src/main/ets/util/BrewInfoSizeParser';
+
 // Skill 契约常量（specs/2026-11-22-agent-skill-spec.md §3）。skills/ 目录的入口脚本不引跨模块包，
 // 那边另有逐字一致的本地副本，契约检查脚本核对两处与 SKILL.md 不漂移。
 export {
@@ -303,6 +306,7 @@ export {
   SKILL_FN_SEARCH,
   SKILL_FN_TRENDING,
   SKILL_FN_USAGE,
+  SKILL_INFO_NAMES_LIMIT,
   SKILL_LIST_LIMIT,
   SKILL_NAME,
   SKILL_SCRIPT_PATH,
