@@ -75,6 +75,13 @@ export const AI_PREFS_KEY_CONFIG: string = 'brew_ai_config';
 export const AI_PROVIDER_DEEPSEEK: string = 'deepseek';
 export const AI_PROVIDER_CUSTOM: string = 'custom';
 
+/**
+ * 「自动生成 AI 讲解」开关的偏好键（默认开）：
+ * 开 = 详情页装配时有 Key 即自动触发讲解请求（缓存链路复用，失败静默）；
+ * 关 = 显式按钮触发。布尔单独存，不进 config JSON（与 nonStreaming 曾用的模式同构）。
+ */
+export const AI_PREFS_KEY_AUTO_EXPLAIN: string = 'brew_ai_auto_explain';
+
 /** DeepSeek 预置模板（spec §3.1）。baseURL 不含 `/chat/completions` 尾段。 */
 export const AI_DEEPSEEK_BASE_URL: string = 'https://api.deepseek.com';
 export const AI_DEEPSEEK_DEFAULT_MODEL: string = 'deepseek-chat';

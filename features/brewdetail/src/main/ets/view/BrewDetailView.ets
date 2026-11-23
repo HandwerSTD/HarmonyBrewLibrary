@@ -332,20 +332,20 @@ export struct BrewDetailView {
           BrewLifecycleBanner({ notice: this.detailState.data.lifecycle })
         }
 
-        // AI 讲解卡（spec §4：命令卡之前——先读讲解再看命令；自动生成由
-        // ai_settings_auto_explain 开关控制，显式触发链路保留）
+        // 2 安装命令 + 复制（主操作按钮不在这里，见 ActionBarBuilder）
+        BrewInstallCommandCard({ command: this.detailState.data.installCommand })
+
+        // 3 元信息
+        BrewDetailMetaBar({ rows: this.detailState.data.meta })
+
+        // AI 讲解卡（spec §4：元信息条之后、各分区之前——命令卡是刚性的，
+        // 讲解是增强的；自动生成由 ai_settings_auto_explain 开关控制）
         BrewAiExplainCard({
           input: this.aiExplainInput(),
           onConfigureKey: () => {
             this.openAiSettings();
           },
         })
-
-        // 2 安装命令 + 复制（主操作按钮不在这里，见 ActionBarBuilder）
-        BrewInstallCommandCard({ command: this.detailState.data.installCommand })
-
-        // 3 元信息
-        BrewDetailMetaBar({ rows: this.detailState.data.meta })
 
         // 4/5/6/7/11 各分区（数据驱动；空分区不会出现在数组里）
         ForEach(this.detailState.data.sections, (section: BrewInfoSection) => {
