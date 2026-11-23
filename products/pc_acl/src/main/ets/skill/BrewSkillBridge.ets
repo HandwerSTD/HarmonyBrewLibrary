@@ -653,7 +653,15 @@ export class BrewSkillBridge {
               result.failureMessage = 'doc absent upstream';
               return result;
             }
-            throw inner;
+            // 换边重试也失败：与外层非缺席错误同一收口（arkts-limited-throw：
+            // catch 进来的值不保证是 Error，不能直接重抛；就地归一成 failureMessage）
+            const innerError = inner as Error;
+            result.failureMessage = innerError.message.length > 0
+              ? innerError.message
+              : 'detail fetch failed';
+            Logger.warn(TAG, 'detail token=' + token + ' failed on fallback side, reason=' +
+              result.failureMessage);
+            return result;
           }
         }
         result.notFound = true;
