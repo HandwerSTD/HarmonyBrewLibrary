@@ -97,7 +97,8 @@
 
 ## 4. D1 · AI 讲解卡（详情页）
 
-- **入口**：详情页「AI 讲解」按钮（描述分区之后、用法示例之前；显式触发，不自动消耗）。
+- **入口**：详情页「AI 讲解」按钮（**安装命令卡之前**——先读讲解再看命令，2026-11-23 用户指示从
+  「描述分区之后、用法示例之前」上移；显式触发或自动生成，见下）。
 - **输入（grounding 严格限定）**：`token`、`desc`、`caveats`、`dependencies`（全部来自既有详情数据）；可选注入 tldr 说明段。总长超限先截 caveats。
 - **输出 JSON**：`{定位一句话, 适用场景[≤3], 注意与坑[≤3]（caveats 中文化 + 风险点）, 上手三步[3]}`。
 - **prompt 约束**：system 声明——中文、仅基于提供的字段、不得虚构版本号 / 命令 / 功能、无法判断就直说。
@@ -210,7 +211,7 @@
 | 模块 | 改动 |
 |---|---|
 | `features/brewcommon` | 新增 `service/AiClient.ets`、`service/AiSettingsStore.ets`（Asset Store 封装）、`model/AiTypes.ets`（D1/D2/D3 的请求 / 响应 / 错误类型）、`constant/AiConstants.ets`（promptVersion / TTL / 截断常量）、`util/AiTaskWords.ets`（28 词表加载与匹配） |
-| `features/brewdetail` | AI 讲解卡组件 + 装配（描述分区之后、tldr 之前） |
+| `features/brewdetail` | AI 讲解卡组件 + 装配（安装命令卡之前） |
 | `features/brewsearch` | 「AI 帮我找工具」入口 + 结果列表 + 词表降级 |
 | `features/mine` | AI 设置页（provider / baseURL / Key / model / 测试连接） |
 | 执行 Sheet | 失败终态新增 D3 入口与结果卡（不动执行链路） |
