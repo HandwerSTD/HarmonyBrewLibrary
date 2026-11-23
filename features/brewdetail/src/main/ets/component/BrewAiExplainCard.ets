@@ -74,7 +74,7 @@ export struct BrewAiExplainCard {
     this.requestExplain();
   }
 
-  private requestExplain(): void {
+  private requestExplain(force: boolean = false): void {
     if (this.loading) {
       return;
     }
@@ -87,7 +87,7 @@ export struct BrewAiExplainCard {
       if (refreshed !== null) {
         this.card = refreshed;
       }
-    })
+    }, force)
       .then((card: AiExplainCard) => {
         this.card = card;
         this.loading = false;
@@ -228,7 +228,8 @@ export struct BrewAiExplainCard {
               .onClick(() => {
                 if (!this.loading) {
                   this.card = null;
-                  this.startLoad();
+                  // 重新生成 = 旁路缓存强制取数；入口按钮/自动生成仍走缓存命中秒开
+                  this.requestExplain(true);
                 }
               })
               .padding({ left: 8 })

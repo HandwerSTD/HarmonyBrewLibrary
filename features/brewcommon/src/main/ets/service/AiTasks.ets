@@ -71,10 +71,18 @@ export class AiTasks {
    * 取讲解卡：缓存命中直接返回（G3 秒开）；否则调模型、写缓存。
    * stale 时先返回旧值，再在后台刷新（G10，刷新结果经 onRefreshed 回调给 UI）。
    */
-  public static explain(input: AiExplainInput, onRefreshed: (card: AiExplainCard) => void):
-    Promise<AiExplainCard> {
+  /**
+   * D1 取数。force=false（默认）走缓存命中秒开（G3）与 stale-while-revalidate（G10）；
+   * force=true（「重新生成」按钮）**旁路缓存**直接取数——否则 7 天 TTL 内点击永远原样
+   * 返回缓存卡（2026-11-23 验收实测「重新生成没反应」的根因）。两条路径都写回缓存。
+   */
+  public static explain(input: AiExplainInput, onRefreshed: (card: AiExplainCard) => void,
+    force: boolean = false): Promise<AiExplainCard> {
     const cacheKey: string = input.token;
     const providerKey: string = AiTasks.providerModelKey();
+    if (force) {
+      return AiTasks.fetchExplain(input, providerKey, onRefreshed);
+    }
     const cached: AiCacheLookup = AiTasks.lookup('d1', providerKey, cacheKey,
       AI_PROMPT_VERSION_D1, AI_CACHE_TTL_D1_MS);
     if (cached.hit) {
