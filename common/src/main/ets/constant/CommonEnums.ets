@@ -100,4 +100,12 @@ export enum StorageKey {
   BREW_CLI_ENABLED = 'hmos_world_brewCliEnabled',
   /** 内置 Harmonybrew 源是否可用。由 entry 的 UIAbility 注入，未注入时为 false */
   BREW_HARMONYBREW_SOURCE_ENABLED = 'hmos_world_brewHarmonybrewSourceEnabled',
+  /**
+   * 更新哨兵的待处理路由（卡片点击 / 通知「全部升级」）。由 PcAbility 从 want.parameters
+   * 落进来，MineHomeView 消费后清空。哨兵自身的跨进程键在 brewcommon 的 SentinelConstants
+   * （GSKV），不入本枚举——AppStorage 只在本进程有效，见 spec §2。
+   */
+  SENTINEL_PENDING_ROUTE = 'hmos_world_SentinelPendingRoute',
+  /** 更新哨兵「稍后」待处理标记。PcAbility 写入，PcMainPage 消费（撤通知 + 记已提醒）后清空 */
+  SENTINEL_PENDING_DISMISS = 'hmos_world_SentinelPendingDismiss',
 }

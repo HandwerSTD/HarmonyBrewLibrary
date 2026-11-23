@@ -23,6 +23,8 @@ export enum PageEnum {
   COMPONENT_DETAIL_VIEW = 'ComponentDetailView',
   MINE_VIEW = 'MineView',
   MINE_SETTING_VIEW = 'MineSettingsView',
+  /** 「我的 - 设置 - 更新哨兵」子页（features/mine 的 SentinelSettingView） */
+  SENTINEL_SETTING_VIEW = 'SentinelSettingView',
   MINE_PACKAGES_VIEW = 'MinePackagesView',
   BREW_SOURCE_SETTING_VIEW = 'BrewSourceSettingView',
   BREW_SOURCE_EDIT_VIEW = 'BrewSourceEditView',
