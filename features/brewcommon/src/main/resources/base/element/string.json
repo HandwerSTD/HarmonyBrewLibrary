@@ -617,8 +617,6 @@
       "value": "Run example: %s"
     },
     {
-      "name": "brew_tldr_command_hint",
-      "value": "%s provides the command %s",
       "name": "ai_settings_title",
       "value": "AI 设置"
     },
@@ -832,6 +830,11 @@
     },
     {
       "name": "ai_d2_related",
-      "value": "目录相关"    }
+      "value": "目录相关"
+    },
+    {
+      "name": "brew_tldr_command_hint",
+      "value": "%s provides the command %s"
+    }
   ]
 }

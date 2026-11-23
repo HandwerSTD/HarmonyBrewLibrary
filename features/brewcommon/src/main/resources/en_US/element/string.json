@@ -831,6 +831,10 @@
     {
       "name": "brew_cat_formula_lib",
       "value": "Libraries & Frameworks"
+    },
+    {
+      "name": "brew_tldr_command_hint",
+      "value": "%s provides the command %s"
     }
   ]
 }

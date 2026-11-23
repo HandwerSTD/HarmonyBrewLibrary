@@ -406,8 +406,11 @@
     },
     {
       "name": "sentinel_setting_auth_go",
-      "value": "Enable",
+      "value": "Enable"
+    },
+    {
       "name": "ai_privacy_note",
-      "value": "AI features send package metadata and command error text to the model provider you configure (e.g. DeepSeek); no account or device identifiers are included. Your API key is stored encrypted on this device only."    }
+      "value": "AI features send package metadata and command error text to the model provider you configure (e.g. DeepSeek); no account or device identifiers are included. Your API key is stored encrypted on this device only."
+    }
   ]
 }
