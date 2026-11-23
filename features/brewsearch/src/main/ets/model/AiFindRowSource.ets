@@ -6,6 +6,12 @@ import { BrewBrowseBuilder, BrewKind, BrewPackageItem } from '@ohos/brewcommon';
 import type { AiToolCandidate, AiToolResult } from '@ohos/brewcommon';
 
 /**
+ * 目录补充召回行（spec §5 第 2.5 步）的 why 文案：AI 提名的 why 为空串时，
+ * 渲染层用这条资源文案（「目录内相关工具」）与 AI 提名行区分。
+ */
+export const AI_FIND_ROW_RELATED: string = 'related';
+
+/**
  * 「AI 找工具」的渲染行：包行组件（BrewPackageRow）需要的 BrewPackageItem + 推荐理由。
  * 与 `BrewSearchRow` 同构（包行 + 附带信息），不共用是为了不把 AI 字段漏进主搜索。
  */
@@ -81,7 +87,9 @@ export class AiFindResultSource {
       item.id = BrewBrowseBuilder.tokenId(cand.token);
       item.token = cand.token;
       item.subTitle = cand.token;
-      item.title = cand.why;
+      // why 空串 = 目录补充召回行：title 用 token（包行正常显示），理由行由
+      // BrewAiFindCard 按 related 标记渲染固定模板文案（见 AiFindRow.why 注）。
+      item.title = cand.why.length > 0 ? cand.why : cand.token;
       const kind: BrewKind = kindOf !== undefined ? kindOf(cand.token) : BrewKind.FORMULA;
       rows.push(new AiFindRow(kind, item, cand.why));
     });

@@ -322,6 +322,10 @@ export struct AiSettingView {
     if (this.state.errorText === 'key-empty') {
       return $r('app.string.ai_settings_key_hint');
     }
+    if (this.state.errorText === 'key-memory-only') {
+      // Asset 不可用退内存兜底：给用户明确预期（重启丢失 + 可重试）
+      return $r('app.string.ai_settings_key_memory_only');
+    }
     return $r('app.string.ai_error_e4');
   }
 }

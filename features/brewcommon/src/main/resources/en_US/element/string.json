@@ -799,6 +799,10 @@
     {
       "name": "ai_settings_auto_explain_hint",
       "value": "Generate explanation automatically on detail page open; turn off to require tapping \"AI explain\""
+    },
+    {
+      "name": "ai_d2_related",
+      "value": "In catalog"
     }
   ]
 }

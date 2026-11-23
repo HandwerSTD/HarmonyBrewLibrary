@@ -178,17 +178,28 @@ export struct BrewAiFindCard {
                     .fontWeight(FontWeight.Medium)
                     .fontColor($r('sys.color.font_primary'))
                     .layoutWeight(1)
-                  Text($r('app.string.brew_search_action'))
-                    .fontSize($r('sys.float.Body_S'))
-                    .fontColor($r('sys.color.font_emphasize'))
+                  // 目录补充召回行（AI 提名的 why 为空串）：打「目录相关」标记与
+                  // AI 提名行区分（两召回源互补，spec §5 第 2.5 步）。
+                  if (row.why.length === 0) {
+                    Text($r('app.string.ai_d2_related'))
+                      .fontSize($r('sys.float.Body_S'))
+                      .fontColor($r('sys.color.font_tertiary'))
+                      .padding({ left: 8 })
+                  } else {
+                    Text($r('app.string.brew_search_action'))
+                      .fontSize($r('sys.float.Body_S'))
+                      .fontColor($r('sys.color.font_emphasize'))
+                  }
                 }
                 .width('100%')
-                Text(row.why)
-                  .fontSize($r('sys.float.Body_S'))
-                  .fontColor($r('sys.color.font_secondary'))
-                  .width('100%')
-                  .maxLines(2)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                if (row.why.length > 0) {
+                  Text(row.why)
+                    .fontSize($r('sys.float.Body_S'))
+                    .fontColor($r('sys.color.font_secondary'))
+                    .width('100%')
+                    .maxLines(2)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
               }
               .width('100%')
               .alignItems(HorizontalAlign.Start)

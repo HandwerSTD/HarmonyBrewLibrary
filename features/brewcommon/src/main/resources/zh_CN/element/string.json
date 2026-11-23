@@ -803,6 +803,10 @@
     {
       "name": "ai_settings_auto_explain_hint",
       "value": "进入详情页时自动生成讲解；关闭后需手动点击「AI 讲解」按钮"
+    },
+    {
+      "name": "ai_d2_related",
+      "value": "目录相关"
     }
   ]
 }

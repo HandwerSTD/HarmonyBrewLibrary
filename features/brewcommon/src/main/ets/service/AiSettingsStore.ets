@@ -55,7 +55,10 @@ export class AiSettingsStore {
       const attrs: asset.AssetMap = new Map<asset.Tag, asset.Value>();
       attrs.set(asset.Tag.SECRET, AiSettingsStore.toBytes(trimmed));
       attrs.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
-      attrs.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_POWERED_ON);
+      // ACCESSIBILITY 用默认值（省略该属性 = DEVICE_FIRST_UNLOCKED，首次解锁后可访问，
+      // 未设锁屏密码时等同开机可访问——对 PC/2in1 无锁屏密码场景最宽容）。
+      // 此前的 DEVICE_POWERED_ON 是高嫌疑错误源：部分设备/ROM 上该枚举与锁屏
+      // 状态校验的交互有差异（24000005 锁屏状态不匹配 / 24000004 访问被拒绝）。
       try {
         // 先删旧值：asset 对同 alias 的重复 add 抛 24000003。remove 的 NOT_FOUND 不是错误。
         asset.removeSync(attrs);
@@ -72,6 +75,8 @@ export class AiSettingsStore {
       return '';
     } catch (err) {
       const e: BusinessError = err as BusinessError;
+      // 错误码打全供真机日志诊断（24000001 服务不可用 / 24000005 锁屏不匹配 /
+      // 24000018 参数校验失败 / 24000004 访问被拒绝——含义见 asset 错误码表）。
       Logger.error(TAG, `asset add failed, code=${e.code}, msg=${e.message}`);
       // Asset 不可用：退进程内存（spec §13 方案 B 的保守形态——不落盘版本）。
       AiSettingsStore.memoryKey = trimmed;

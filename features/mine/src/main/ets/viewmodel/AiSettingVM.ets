@@ -192,7 +192,7 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       state2.snapshot = AiSettingsStore.snapshot();
       state2.keyMemoryOnly = where === 'memory';
       state2.savedFlash = true;
-      state2.errorText = '';
+      state2.errorText = where === 'memory' ? 'key-memory-only' : '';
       Logger.info(TAG, `key save done store=${where === 'memory' ? 'memory' : 'asset'}`);
     });
   }

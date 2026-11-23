@@ -264,7 +264,50 @@ export class AiTasks {
       result.candidates.push(cand);
     });
     Logger.info(TAG, `d2 filtered dropped=${result.dropped} kept=${result.candidates.length}`);
-    return AiTasks.rankCandidates(result, entries, intent);
+    AiTasks.rankCandidates(result, entries, intent);
+    // 目录侧补充召回（spec §5 第 2.5 步）：LLM 的知识里没有 Harmonybrew 特有包
+    // （鸿蒙生态 token 不在训练语料里），提名阶段就永远不会出现——但本地目录索引
+    // 有。结果不足 LIMIT 时用意图原文跑一次引擎排序，取未被 AI 候选覆盖的条目
+    // 补足（why 用固定模板文案，与 AI 提名行区分）。这些行**来自目录本身**，
+    // G5 无幻觉风险。空态也受益：AI 候选 + 词表全空时仍可能有目录相关结果。
+    AiTasks.supplementFromCatalog(result, entries, intent);
+    return result;
+  }
+
+  /**
+   * 目录补充召回：引擎对意图原文的排序命中里，取未被 AI 候选覆盖的条目补进结果
+   * （补足到 AI_D2_RESULT_LIMIT 封顶）。AI 候选为空时同样生效——「候选太少」与
+   * 「空态」统一退化为「至少有目录相关结果」。dropped 只统计 AI 提名的目录外数，
+   * 补充行不计入。
+   */
+  private static supplementFromCatalog(result: AiToolResult, entries: BrewSearchEntry[],
+    intent: string): void {
+    const room: number = AI_D2_RESULT_LIMIT - result.candidates.length;
+    if (room <= 0) {
+      return;
+    }
+    const covered: Set<string> = new Set<string>();
+    result.candidates.forEach((cand: AiToolCandidate) => {
+      covered.add(cand.token.trim().toLowerCase());
+    });
+    const hits: BrewSearchHit[] = BrewSearchEngine.rank(intent, entries, 0);
+    let added: number = 0;
+    for (let i: number = 0; i < hits.length && added < room; i++) {
+      const hit: BrewSearchHit = hits[i];
+      const token: string = hit.token.trim().toLowerCase();
+      if (token.length === 0 || covered.has(token)) {
+        continue;
+      }
+      covered.add(token);
+      const cand: AiToolCandidate = new AiToolCandidate();
+      cand.token = hit.token;
+      cand.why = ''; // why 由渲染层用 ai_d2_related 资源文案（补充行标记），不走 AI 文本
+      result.candidates.push(cand);
+      added++;
+    }
+    if (added > 0) {
+      Logger.info(TAG, `d2 supplement added=${added} total=${result.candidates.length}`);
+    }
   }
 
   /** 引擎重排：AI 只提名，顺序由 BrewSearchEngine 说了算（spec §5 第 3 步）。 */
