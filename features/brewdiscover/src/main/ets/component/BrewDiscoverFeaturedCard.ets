@@ -9,9 +9,10 @@ import {
   SuffixCustomBuilder,
 } from '@kit.UIDesignKit';
 import { CommonConstants } from '@ohos/common';
-import { BrewFormat, BrewIconSize, BrewPackageIcon } from '@ohos/brewcommon';
+import { BrewFormat, BrewIconSize, BrewPackageIcon, AiBoardInsightEntry, AiBoardInsightInput } from '@ohos/brewcommon';
 import type { BrewDiscoverFeatured, BrewKind } from '@ohos/brewcommon';
 import { BrewBoardStyle } from '../model/BrewBoardStyle';
+import { BrewAiBoardInsightCard } from './BrewAiBoardInsightCard';
 import {
   BREW_FEATURED_ARROW_BG,
   BREW_FEATURED_ARROW_INK,
@@ -66,7 +67,32 @@ import {
 @Component
 export struct BrewDiscoverFeaturedCard {
   @Prop @Require item: BrewDiscoverFeatured;
+  /** 目录快照日期（AI 解读来源行用，BaseView 透传）。 */
+  @Prop snapshotDate: string = '';
+  /** AI 解读自动开关（`AiSettingsStore.autoExplain()`，BaseView 透传）。 */
+  @Prop autoStart: boolean = false;
   handleItemClick?: (item: BrewDiscoverFeatured) => void;
+
+  /**
+   * AI 解读的 grounding 输入：单包聚焦卡恒 1 条（scope='featured'，缓存键用
+   * token+snapshotDate）。HEAD/ghcr 在单包卡上下文不可得，保持 -1（不渲染那两行）。
+   */
+  private featuredInsightInput(): AiBoardInsightInput {
+    const input: AiBoardInsightInput = new AiBoardInsightInput();
+    input.scope = 'featured';
+    input.boardKey = this.item.boardKey;
+    input.kind = this.item.kind;
+    input.snapshotDate = this.snapshotDate;
+    const entry: AiBoardInsightEntry = new AiBoardInsightEntry();
+    entry.token = this.item.token;
+    entry.rank = this.item.rank;
+    entry.installs30d = this.item.installs30d;
+    entry.installs365d = this.item.installs365d;
+    entry.priorMonthly = this.item.priorMonthly;
+    entry.velocity = this.item.velocity;
+    input.entries = [entry];
+    return input;
+  }
 
   /**
    * 配色方案：**按 `item.id` 确定性选取**（同一个包永远同一套配色）。
@@ -296,37 +322,48 @@ export struct BrewDiscoverFeaturedCard {
   }
 
   build() {
-    Stack({ alignContent: Alignment.BottomStart }) {
-      // ① 背景层：渐变 + 图画，作为一个整体
-      this.ArtBackgroundBuilder()
+    // AI 二期 P1-1：原 Stack（图画卡）保持定高整体不动，AI 解读行挂在它下方；
+    // 卡片外壳（圆角/裁切/点击）上移到外层 Column。解读行自带白底（comp_background_primary
+    // 在外层 Column 上），与上方渐变形成上下两段——这正是 spec §4 的「底部折叠行」形态。
+    Column() {
+      Stack({ alignContent: Alignment.BottomStart }) {
+        // ① 背景层：渐变 + 图画，作为一个整体
+        this.ArtBackgroundBuilder()
 
-      // ② 内容层：徽章 + 底部内容块，整体叠在背景之上。
-      //    高度占满整卡，靠 `layoutWeight(1)` 让徽章那行吃掉图画区（400 - 176 = 224vp）
-      Column() {
-        // 上部只留右上角的增速徽章：来源徽章（「今日热门 · 第 1 名」）与包名小字行
-        // 都已按要求撤掉
-        Row() {
-          Blank()
-          this.BadgeBuilder($r('app.string.brew_discover_velocity_badge',
-            this.item.velocity > 0 ? this.item.velocity.toFixed(1) : '—'))
+        // ② 内容层：徽章 + 底部内容块，整体叠在背景之上。
+        //    高度占满整卡，靠 `layoutWeight(1)` 让徽章那行吃掉图画区（400 - 176 = 224vp）
+        Column() {
+          // 上部只留右上角的增速徽章：来源徽章（「今日热门 · 第 1 名」）与包名小字行
+          // 都已按要求撤掉
+          Row() {
+            Blank()
+            this.BadgeBuilder($r('app.string.brew_discover_velocity_badge',
+              this.item.velocity > 0 ? this.item.velocity.toFixed(1) : '—'))
+          }
+          .width(CommonConstants.FULL_PERCENT)
+          .layoutWeight(1)
+          .alignItems(VerticalAlign.Top)
+          .padding({
+            left: $r('sys.float.padding_level6'),
+            right: $r('sys.float.padding_level6'),
+            top: $r('sys.float.padding_level4'),
+          })
+
+          this.CaptionBuilder()
         }
         .width(CommonConstants.FULL_PERCENT)
-        .layoutWeight(1)
-        .alignItems(VerticalAlign.Top)
-        .padding({
-          left: $r('sys.float.padding_level6'),
-          right: $r('sys.float.padding_level6'),
-          top: $r('sys.float.padding_level4'),
-        })
-
-        this.CaptionBuilder()
+        .height(CommonConstants.FULL_PERCENT)
+        .alignItems(HorizontalAlign.Start)
       }
       .width(CommonConstants.FULL_PERCENT)
-      .height(CommonConstants.FULL_PERCENT)
-      .alignItems(HorizontalAlign.Start)
+      .height($r('app.float.brew_discover_featured_height'))
+
+      // AI 解读行：数据到达前整行不渲染；行内点击不触发整卡进详情（手势不冒泡）
+      BrewAiBoardInsightCard({ input: this.featuredInsightInput(), snapshotDate: this.snapshotDate, autoStart: this.autoStart })
     }
     .width(CommonConstants.FULL_PERCENT)
-    .height($r('app.float.brew_discover_featured_height'))
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor($r('sys.color.comp_background_primary'))
     .borderRadius($r('sys.float.corner_radius_level8'))
     .clip(true)
     .clickEffect({ level: ClickEffectLevel.MIDDLE })

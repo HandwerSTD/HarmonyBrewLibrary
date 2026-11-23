@@ -3,14 +3,18 @@
  */
 
 import { CommonConstants } from '@ohos/common';
-import { BrewFormat } from '@ohos/brewcommon';
+import { BrewFormat, AiBoardInsightEntry, AiBoardInsightInput } from '@ohos/brewcommon';
 import type { BrewDiscoverBoard, BrewDiscoverEntry } from '@ohos/brewcommon';
 import { BrewBoardStyle } from '../model/BrewBoardStyle';
+import { BrewAiBoardInsightCard } from './BrewAiBoardInsightCard';
 import { BrewDiscoverHero } from './BrewDiscoverHero';
 import { BrewDiscoverRow, BrewDiscoverRowDivider } from './BrewDiscoverRow';
 
 /** 卡内预览条数。整张榜有 10 条，剩下的走「查看全部」 */
 export const DISCOVER_PREVIEW_COUNT: number = 5;
+
+/** AI 解读 grounding 里带的条目上限（AI 二期 spec §3 P1-1：截前 10 条）。 */
+const AI_INSIGHT_ENTRY_LIMIT: number = 10;
 
 /**
  * 一张榜单大卡。
@@ -35,11 +39,43 @@ export const DISCOVER_PREVIEW_COUNT: number = 5;
 @Component
 export struct BrewDiscoverBoardCard {
   @Prop @Require board: BrewDiscoverBoard;
+  /** 目录快照日期（AI 解读来源行「数据截至」用，BaseView 从 discoverState 透传）。 */
+  @Prop snapshotDate: string = '';
+  /** AI 解读自动开关（`AiSettingsStore.autoExplain()`，BaseView 透传）。 */
+  @Prop autoStart: boolean = false;
   handleEntryClick?: (entry: BrewDiscoverEntry) => void;
   handleViewAll?: (board: BrewDiscoverBoard) => void;
 
   private previewEntries(): BrewDiscoverEntry[] {
     return this.board.entries.slice(0, DISCOVER_PREVIEW_COUNT);
+  }
+
+  /**
+   * AI 解读的 grounding 输入（A 级：数字全部来自榜条目，AI 只准原样引用）。
+   * 截前 10 条与「整张榜」口径一致（榜单页条目即 10 条）；HEAD/ghcr 在榜单
+   * 上下文不可得，保持 -1（UI 不渲染那两行）。
+   */
+  private insightInput(): AiBoardInsightInput {
+    const input: AiBoardInsightInput = new AiBoardInsightInput();
+    input.scope = 'board';
+    input.boardKey = this.board.boardKey;
+    input.kind = this.board.kind;
+    input.snapshotDate = this.snapshotDate;
+    const entries: AiBoardInsightEntry[] = [];
+    const top: BrewDiscoverEntry[] = this.board.entries.slice(0, AI_INSIGHT_ENTRY_LIMIT);
+    for (let i: number = 0; i < top.length; i++) {
+      const one: BrewDiscoverEntry = top[i];
+      const mapped: AiBoardInsightEntry = new AiBoardInsightEntry();
+      mapped.token = one.token;
+      mapped.rank = one.rank;
+      mapped.installs30d = one.installs30d;
+      mapped.installs365d = one.installs365d;
+      mapped.priorMonthly = one.priorMonthly;
+      mapped.velocity = one.velocity;
+      entries.push(mapped);
+    }
+    input.entries = entries;
+    return input;
   }
 
   @Builder
@@ -102,6 +138,8 @@ export struct BrewDiscoverBoardCard {
     Column() {
       this.HeroBuilder()
       this.RowsBuilder()
+      // AI 解读行（P1-1）：数据到达前整行不渲染（失败静默），不占位不抖行高
+      BrewAiBoardInsightCard({ input: this.insightInput(), snapshotDate: this.snapshotDate, autoStart: this.autoStart })
       // 预览装不下才给入口。新星榜常常不足 5 条，那时「查看全部」会指向一个没有增量的页面
       if (this.board.entryCount > DISCOVER_PREVIEW_COUNT) {
         this.ViewAllBuilder()

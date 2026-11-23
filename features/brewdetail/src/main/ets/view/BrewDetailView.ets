@@ -29,6 +29,7 @@ import {
   BREW_ACTION_BUTTON_HEIGHT,
   BREW_ACTION_BAR_HEIGHT,
   BREW_SECTION_KEY_EXECUTABLES,
+  BrewCommandGenerator,
   BrewCommandRunner,
   BrewCommandStartResult,
   BrewCommandState,
@@ -42,8 +43,15 @@ import {
   brewLogActionBar,
   brewTitleBarStyle,
 } from '@ohos/brewcommon';
-import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } from '@ohos/brewcommon';
-import { AiExplainInput, AiSettingsStore } from '@ohos/brewcommon';
+import type {
+  BrewAiGrounding,
+  BrewDetailParams,
+  BrewInfoPageData,
+  BrewInfoRow,
+  BrewInfoSection,
+  BrewPackageItem,
+} from '@ohos/brewcommon';
+import { AiExplainInput, AiLifecycleInput, AiSettingsStore } from '@ohos/brewcommon';
 import { BrewAiExplainCard } from '../component/BrewAiExplainCard';
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
@@ -147,14 +155,18 @@ export struct BrewDetailView {
   /**
    * D1 讲解卡的 grounding 输入（spec §4：只用既有详情数据）。
    * dependencies 从归一化分区里取「依赖」行的原文平铺，避免二次遍历 detail 结构。
+   * AI 二期 P1-2：追加 5 字段 grounding（构建依赖/macOS 自带库/别名/版本化包名/
+   * bottle 标签）——全部取自 `data.aiGrounding`（normalizer 单源填充，formula 全量、
+   * cask 只有依赖）。D1_SYSTEM 对空字段的约定是不渲染对应分组。
    */
   private aiExplainInput(): AiExplainInput {
     const input: AiExplainInput = new AiExplainInput();
-    input.token = this.detailState.data.name;
+    const data: BrewInfoPageData = this.detailState.data;
+    input.token = data.name;
     input.kind = this.kind === BrewKind.CASK ? 'cask' : 'formula';
-    input.desc = this.detailState.data.desc;
-    input.caveats = this.detailState.data.caveats;
-    this.detailState.data.sections.forEach((section: BrewInfoSection) => {
+    input.desc = data.desc;
+    input.caveats = data.caveats;
+    data.sections.forEach((section: BrewInfoSection) => {
       if (section.rows.length === 0) {
         return;
       }
@@ -166,6 +178,22 @@ export struct BrewDetailView {
           input.dependencies.push(this.resourceText(row.value));
         });
       }
+    });
+    const grounding: BrewAiGrounding = data.aiGrounding;
+    grounding.buildDependencies.forEach((name: string) => {
+      input.buildDependencies.push(name);
+    });
+    grounding.usesFromMacos.forEach((name: string) => {
+      input.usesFromMacos.push(name);
+    });
+    grounding.aliases.forEach((alias: string) => {
+      input.aliases.push(alias);
+    });
+    grounding.versionedFormulae.forEach((name: string) => {
+      input.versionedFormulae.push(name);
+    });
+    grounding.bottleTags.forEach((tag: string) => {
+      input.bottleTags.push(tag);
     });
     return input;
   }
@@ -182,6 +210,50 @@ export struct BrewDetailView {
     } catch (error) {
       return '';
     }
+  }
+
+  /**
+   * P1-3 弃用解读的 grounding 输入（A 级：日期/原因/替代包全部来自生命周期结构化字段）。
+   * 字段全部取自 `BrewInfoPageData` 的 lifecycle grounding 组（normalizer 与 banner
+   * 同源填充）；`state` 取上游实际态：disabled 优先（三态里 disabled 是 deprecated
+   * 的后续），日期按状态取对应字段。
+   */
+  private lifecycleAiInput(): AiLifecycleInput {
+    const input: AiLifecycleInput = new AiLifecycleInput();
+    const data: BrewInfoPageData = this.detailState.data;
+    input.token = data.shortName;
+    input.kind = this.kind === BrewKind.CASK ? 'cask' : 'formula';
+    if (data.lifecycleState === 'disabled') {
+      input.state = 'disabled';
+      input.reason = data.lifecycle.reason;
+      input.disableDate = data.disableDate;
+    } else if (data.lifecycleState === 'deprecated') {
+      input.state = 'deprecated';
+      input.reason = data.lifecycle.reason;
+      input.deprecationDate = data.deprecationDate;
+    } else {
+      // 正常态本组件不会渲染（调用方 if(lifecycle) 把关），给个空输入保平安
+      return input;
+    }
+    input.replacementFormula = data.replacementFormula;
+    input.replacementCask = data.replacementCask;
+    return input;
+  }
+
+  /** 替代包 chip → 跳替代包详情。kind 由「哪个替代字段命中」反推（G5：替代包零编造）。 */
+  private openReplacement(token: string): void {
+    if (token.trim().length === 0 || !BrewCommandGenerator.isSafeName(token)) {
+      return;
+    }
+    const isFormula: boolean = this.detailState.data.replacementFormula === token;
+    const params: BrewDetailParams = {
+      kind: isFormula ? BrewKind.FORMULA : BrewKind.CASK,
+      title: token,
+      id: 0,
+      token: token,
+      categoryKey: '',
+    };
+    this.detailState.pathStack?.pushPath({ name: PageEnum.BREW_DETAIL_VIEW, param: params }, true);
   }
 
   /** E1 引导：跳「我的 - 设置 - AI 设置」（页面栈从详情页回退到「我的」再 push 不现实，
@@ -329,9 +401,17 @@ export struct BrewDetailView {
         // 1 Hero
         BrewDetailHero({ data: this.detailState.data, kind: this.kind })
 
-        // 9 生命周期警示（deprecated / disabled）—— 位置靠前，因为它影响"要不要装"
+        // 9 生命周期警示（deprecated / disabled）—— 位置靠前，因为它影响"要不要装"。
+        // AI 二期 P1-3：替代包 chip 可跳详情 + AI 弃用解读段（失败/无 Key 静默）
         if (this.detailState.data.hasLifecycle) {
-          BrewLifecycleBanner({ notice: this.detailState.data.lifecycle })
+          BrewLifecycleBanner({
+            notice: this.detailState.data.lifecycle,
+            aiInput: this.lifecycleAiInput(),
+            autoStart: AiSettingsStore.autoExplain(),
+            onOpenReplacement: (token: string) => {
+              this.openReplacement(token);
+            },
+          })
         }
 
         // 2 安装命令 + 复制（主操作按钮不在这里，见 ActionBarBuilder）

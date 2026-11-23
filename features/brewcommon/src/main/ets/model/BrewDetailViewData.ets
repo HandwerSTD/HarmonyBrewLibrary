@@ -53,6 +53,28 @@ export class BrewInfoSection {
 /** BrewInfoSection.key 的取值。目前只有「提供的命令」需要被按名装配 */
 export const BREW_SECTION_KEY_EXECUTABLES: string = 'executables';
 
+/**
+ * AI grounding 的结构化原文（AI Companion 二期，spec G2 A 级）。
+ *
+ * 为什么独立成类而不是塞进 sections：AI prompt 需要的是**逐项原始值**
+ * （依赖名、别名、bottle tag），而 sections 里是拼接好的展示字符串。
+ * 由 `BrewDetailNormalizer` 从归一化输入一次性填充，与 sections 同源不漂移。
+ */
+export class BrewAiGrounding {
+  /** 依赖名平铺（formula=dependencies；cask=dependsOn.formula+cask） */
+  public dependencies: string[] = [];
+  /** 构建依赖名平铺（formula 独有；cask 恒空） */
+  public buildDependencies: string[] = [];
+  /** macOS 系统库（uses_from_macos 的 formula/macos 键；cask 恒空） */
+  public usesFromMacos: string[] = [];
+  /** 别名 */
+  public aliases: string[] = [];
+  /** 版本化变体名 */
+  public versionedFormulae: string[] = [];
+  /** bottle tag 排序列表 */
+  public bottleTags: string[] = [];
+}
+
 /** 生命周期提示（废弃 / 停用）。命中任何一个才创建。 */
 export class BrewLifecycleNotice {
   /** 提示条主标题：brew_state_deprecated / brew_state_disabled */
@@ -110,6 +132,18 @@ export class BrewInfoPageData {
   public lifecycle: BrewLifecycleNotice = new BrewLifecycleNotice('', '', '', '');
   /** 是否命中 deprecated / disabled */
   public hasLifecycle: boolean = false;
+  /**
+   * 生命周期结构化 grounding（AI 二期 P1-3，与 `lifecycle` 同源由 normalizer 填充）：
+   * 上游实际态（deprecated/disabled）、ISO 日期（YYYY-MM-DD）与按类型的替代包 token。
+   * Banner 展示用 `lifecycle`，AI prompt 用这里——展示文案是本地化资源，喂不得。
+   */
+  public lifecycleState: string = '';
+  public deprecationDate: string = '';
+  public disableDate: string = '';
+  public replacementFormula: string = '';
+  public replacementCask: string = '';
+  /** AI grounding 结构化原文（P1-2 依赖与版本解释的 A 级 grounding）。 */
+  public aiGrounding: BrewAiGrounding = new BrewAiGrounding();
   /** 是否本地已安装（mock 阶段恒为 false，接 brew info --json 后才有值） */
   public installed: boolean = false;
 }

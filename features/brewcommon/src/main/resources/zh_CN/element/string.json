@@ -833,6 +833,54 @@
       "value": "目录相关"
     },
     {
+      "name": "ai_board_insight",
+      "value": "AI 解读"
+    },
+    {
+      "name": "ai_board_head_note",
+      "value": "其中含 %d 次 HEAD 安装"
+    },
+    {
+      "name": "ai_board_ghcr_note",
+      "value": "另有 ghcr 拉取 %d 次（口径不同）"
+    },
+    {
+      "name": "ai_deps_explain",
+      "value": "依赖与版本"
+    },
+    {
+      "name": "ai_lifecycle_title",
+      "value": "弃用解读"
+    },
+    {
+      "name": "ai_lifecycle_replacement",
+      "value": "官方指定替代：%s"
+    },
+    {
+      "name": "ai_lifecycle_no_replacement",
+      "value": "上游未指定替代包"
+    },
+    {
+      "name": "ai_diag_title",
+      "value": "诊断解读"
+    },
+    {
+      "name": "ai_diag_from_probe",
+      "value": "基于本机探测：HTTP %d · %d ms"
+    },
+    {
+      "name": "ai_sources_analytics",
+      "value": "基于目录统计 · 数据截至 %s"
+    },
+    {
+      "name": "ai_sources_upstream",
+      "value": "基于上游公告"
+    },
+    {
+      "name": "ai_privacy_note_2",
+      "value": "AI 解读榜单与弃用状态时，会把安装统计与生命周期字段（日期、原因、替代包名）发送给你配置的 AI 服务；数据源诊断会把探测错误文本（已抹去本机路径）一并发送。不包含你的个人信息。"
+    },
+    {
       "name": "brew_tldr_command_hint",
       "value": "%s 提供的命令是 %s"
     }

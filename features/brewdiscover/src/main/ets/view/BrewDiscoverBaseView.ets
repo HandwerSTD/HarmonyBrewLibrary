@@ -17,6 +17,7 @@ import type {
   BrewDiscoverBoardParams,
   BrewDiscoverEntry,
 } from '@ohos/brewcommon';
+import { AiSettingsStore } from '@ohos/brewcommon';
 import { BrewDiscoverBoardCard } from '../component/BrewDiscoverBoardCard';
 import { BrewDiscoverFeaturedCard } from '../component/BrewDiscoverFeaturedCard';
 import { BrewDiscoverFeedItem, BrewDiscoverFeedType } from '../model/BrewDiscoverFeedItem';
@@ -153,6 +154,8 @@ export struct BrewDiscoverBaseView {
             // 单 App 大图卡：一张卡 = 一个包
             BrewDiscoverFeaturedCard({
               item: feed.featured ?? new BrewDiscoverFeatured(),
+              snapshotDate: this.discoverState.snapshotDate,
+              autoStart: AiSettingsStore.autoExplain(),
               handleItemClick: (clicked: BrewDiscoverFeatured) => {
                 this.jumpFeatured(clicked);
               },
@@ -160,6 +163,8 @@ export struct BrewDiscoverBaseView {
           } else {
             BrewDiscoverBoardCard({
               board: feed.board ?? new BrewDiscoverBoardClass(),
+              snapshotDate: this.discoverState.snapshotDate,
+              autoStart: AiSettingsStore.autoExplain(),
               handleEntryClick: (entry: BrewDiscoverEntry) => {
                 this.jumpDetail(entry, feed.board ?? new BrewDiscoverBoardClass());
               },

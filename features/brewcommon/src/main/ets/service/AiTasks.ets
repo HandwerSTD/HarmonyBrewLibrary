@@ -6,21 +6,34 @@ import { Logger } from '@ohos/common';
 import { BrewSearchEngine } from '../model/BrewSearchEngine';
 import type { BrewSearchEntry, BrewSearchHit } from '../model/BrewSearchEngine';
 import {
+  AI_CACHE_TTL_BI_MS,
   AI_CACHE_TTL_D1_MS,
-  AI_PROMPT_MAX_CHARS,
   AI_CACHE_TTL_D2_MS,
+  AI_CACHE_TTL_LC_MS,
   AI_D2_MAX_CANDIDATES,
   AI_D2_RESULT_LIMIT,
   AI_D3_STDERR_TAIL_CHARS,
   AI_D3_STDOUT_TAIL_CHARS,
+  AI_FEATURE_BI,
+  AI_FEATURE_LC,
+  AI_PROMPT_MAX_CHARS,
+  AI_MAX_TOKENS_BI,
   AI_MAX_TOKENS_D1,
   AI_MAX_TOKENS_D2,
   AI_MAX_TOKENS_D3,
+  AI_MAX_TOKENS_LC,
+  AI_MAX_TOKENS_SD,
+  AI_PROMPT_VERSION_BI,
   AI_PROMPT_VERSION_D1,
   AI_PROMPT_VERSION_D2,
+  AI_PROMPT_VERSION_LC,
+  AI_PROMPT_VERSION_SD,
+  AI_TEMPERATURE_BI,
   AI_TEMPERATURE_D1,
   AI_TEMPERATURE_D2,
   AI_TEMPERATURE_D3,
+  AI_TEMPERATURE_LC,
+  AI_TEMPERATURE_SD,
 } from '../constant/AiConstants';
 import {
   AiError,
@@ -30,9 +43,15 @@ import {
   AiFailureCard,
   AiFailureInput,
   AiIntentInput,
+  AiBoardInsightInput,
+  AiDiagnosisInput,
+  AiInsightCard,
+  AiLifecycleInput,
   AiToolCandidate,
   AiToolResult,
+  aiMaskLocalPaths,
 } from '../model/AiTypes';
+import { AnalyticsNumberParser } from '../util/AnalyticsNumberParser';
 import { AiCache, AiCacheReadResult } from './AiCache';
 import { AiClient } from './AiClient';
 import type { AiClientTask, AiCompletion as AiCompletion2 } from './AiClient';
@@ -126,26 +145,47 @@ export class AiTasks {
   }
 
   private static d1UserPrompt(input: AiExplainInput): string {
-    // grounding：全部字段来自详情页既有数据；超限先截 caveats（spec §4）
+    // grounding：全部字段来自详情页既有数据；超限先截 caveats（spec §4）。
+    // 二期 P1-2：追加依赖/版本口径字段（buildDependencies / usesFromMacos /
+    // aliases / versionedFormulae / bottleTags），模型据此输出 deps_explain / version_notes。
     let caveats: string = input.caveats;
     let deps: string = input.dependencies.join(', ');
-    let base: string = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
-      `caveats: ${caveats}\ndependencies: ${deps}`;
+    let base: string = AiTasks.d1GroundingBase(input, caveats, deps);
     while ((AiTasks.D1_SYSTEM.length + base.length) > AI_PROMPT_MAX_CHARS &&
       caveats.length > 0) {
       // 先砍 caveats，再砍 dependencies；desc 与 token 是定位的最小集合，不砍
       caveats = caveats.substring(0, Math.floor(caveats.length / 2));
-      base = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
-        `caveats: ${caveats}\ndependencies: ${deps}`;
+      base = AiTasks.d1GroundingBase(input, caveats, deps);
       if (caveats.length < 32) {
         caveats = '';
         deps = '';
-        base = `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
-          `caveats: \ndependencies: `;
+        base = AiTasks.d1GroundingBase(input, caveats, deps);
         break;
       }
     }
     return base + '\n请按 schema 输出 JSON。';
+  }
+
+  /** D1 grounding 正文（caveats/deps 由截断循环控制，其余字段原样拼装）。 */
+  private static d1GroundingBase(input: AiExplainInput, caveats: string, deps: string): string {
+    let extra: string = '';
+    if (input.buildDependencies.length > 0) {
+      extra += `\nbuild_dependencies: ${input.buildDependencies.join(', ')}`;
+    }
+    if (input.usesFromMacos.length > 0) {
+      extra += `\nuses_from_macos: ${input.usesFromMacos.join(', ')}（macOS 系统自带库，不会重复安装）`;
+    }
+    if (input.aliases.length > 0) {
+      extra += `\naliases: ${input.aliases.join(', ')}`;
+    }
+    if (input.versionedFormulae.length > 0) {
+      extra += `\nversioned_formulae: ${input.versionedFormulae.join(', ')}`;
+    }
+    if (input.bottleTags.length > 0) {
+      extra += `\nbottle_tags: ${input.bottleTags.join(', ')}`;
+    }
+    return `token: ${input.token}\nkind: ${input.kind}\ndesc: ${input.desc}\n` +
+      `caveats: ${caveats}\ndependencies: ${deps}${extra}`;
   }
 
   private static readonly D1_SYSTEM: string = '你是 Homebrew 包讲解助手，像懂行的朋友向新手介绍这个包，' +
@@ -154,9 +194,14 @@ export class AiTasks {
     '风格：要点 2–5 条、长短自然，不硬凑等长；summary 用自然的口语衔接，不用「该包」「本工具」开头。\n' +
     '空字段原则：某输入字段为空（caveats/dependencies 栏空白）时，对应数组输出 []，' +
     '**禁止**输出「未提供」「为空」「暂无」之类的填充句——宁可少一段，不写废话。\n' +
+    'deps_explain：解释这个包为什么带这些依赖、构建依赖与运行依赖的差别、' +
+    'uses_from_macos 是 macOS 系统自带库不会重复安装；没有可解释的就输出 []。\n' +
+    'version_notes：解释版本口径——bottle_tags 表示官方预编译覆盖的平台、' +
+    'versioned_formulae 是并行安装的版本化配方、aliases 是别名；没有可说的就输出 []。\n' +
     '输出仍然必须是 JSON，字段结构不变：' +
     '{"summary":"定位一句话或两句话","scenarios":["适用场景，0–3条，自然短语"],' +
-    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"]}。';
+    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"],' +
+    '"deps_explain":["依赖与版本解释，0–3条"],"version_notes":["版本口径备注，0–2条"]}。';
 
   private static parseExplain(text: string, outcome?: ParseOutcome): AiExplainCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiExplainCard | null => {
@@ -166,6 +211,9 @@ export class AiTasks {
       card.caveats = stringArrayOf(obj['caveats'], 3);
       // steps 上限 3（isValid 收 2–3 条）；解析层 6 是给「超限即格式不符」判据留的余量口径不变
       card.steps = stringArrayOf(obj['steps'], 3);
+      // 二期 P1-2：依赖与版本两段（空数组 UI 不渲染该分区）
+      card.depsExplain = stringArrayOf(obj['deps_explain'], 3);
+      card.versionNotes = stringArrayOf(obj['version_notes'], 2);
       if (!card.isValid()) {
         return null;
       }
@@ -494,6 +542,232 @@ export class AiTasks {
       }
       return card;
     });
+  }
+
+  // ------------------------------------------------- BI · 榜单解读（二期 P1-1）
+
+  /**
+   * 榜单/单包统计解读（spec ai-companion-phase2 §3 P1-1）。
+   * 缓存键 = `<scope>_<boardKey 或单 token>_<snapshotDate>`：同一快照日内数字不变，
+   * TTL 1 天。grounding JSON 全量进 user prompt；解析后走 G5 数字回溯过滤
+   * （fresh 路径带 grounding；缓存路径跳过——写缓存前已过滤）。
+   */
+  public static boardInsight(input: AiBoardInsightInput,
+    onRefreshed: (card: AiInsightCard) => void, force: boolean = false): Promise<AiInsightCard> {
+    const cacheKey: string = AiTasks.biCacheKey(input);
+    const providerKey: string = AiTasks.providerModelKey();
+    if (force) {
+      return AiTasks.fetchBoardInsight(input, providerKey, onRefreshed);
+    }
+    const cached: AiCacheLookup = AiTasks.lookup(AI_FEATURE_BI, providerKey, cacheKey,
+      AI_PROMPT_VERSION_BI, AI_CACHE_TTL_BI_MS);
+    if (cached.hit) {
+      const card: AiInsightCard | null = AiTasks.parseInsight(cached.dataJson, '');
+      if (card !== null) {
+        Logger.info(TAG, `bi cache hit key=${cacheKey} age=${cached.age}`);
+        return Promise.resolve(card);
+      }
+    }
+    if (cached.stale) {
+      const staleCard: AiInsightCard | null = AiTasks.parseInsight(cached.dataJson, '');
+      if (staleCard !== null) {
+        Logger.info(TAG, `stale-while-revalidate feature=bi key=${cacheKey}`);
+        AiTasks.fetchBoardInsight(input, providerKey, onRefreshed);
+        return Promise.resolve(staleCard);
+      }
+    }
+    return AiTasks.fetchBoardInsight(input, providerKey, onRefreshed);
+  }
+
+  /** 缓存键：featured 用单 token（一卡一包），board 用 boardKey（一榜一键）。 */
+  private static biCacheKey(input: AiBoardInsightInput): string {
+    const scopeToken: string =
+      input.scope === 'featured' && input.entries.length === 1 ? input.entries[0].token : input.boardKey;
+    return `${input.scope}_${scopeToken}_${input.snapshotDate}`;
+  }
+
+  private static fetchBoardInsight(input: AiBoardInsightInput, providerKey: string,
+    onRefreshed: (card: AiInsightCard) => void): Promise<AiInsightCard> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.INSIGHT_SYSTEM;
+    task.user = AiTasks.insightUserPrompt(
+      '以下是目录统计 grounding JSON（数字只能从这里原样引用）：\n' + JSON.stringify(input), '');
+    task.temperature = AI_TEMPERATURE_BI;
+    task.maxTokens = AI_MAX_TOKENS_BI;
+    return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
+      // fresh 路径：grounding 原文参与数字回溯过滤
+      const card: AiInsightCard | null =
+        AiTasks.parseInsight(completion.content, JSON.stringify(input), outcome);
+      if (card === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `bi reason=${e4ReasonOf(completion, outcome.reason)}`);
+      }
+      AiCache.write(AI_FEATURE_BI, providerKey, AiTasks.biCacheKey(input), AI_PROMPT_VERSION_BI,
+        completion.model, JSON.stringify(card));
+      Logger.info(TAG, `bi ok latency=${completion.latencyMs}`);
+      onRefreshed(card);
+      return card;
+    });
+  }
+
+  // ------------------------------------------------- LC · 弃用解读（二期 P1-3）
+
+  /** 生命周期解读（P1-3）。缓存键带日期：上游改排期即产生新键，旧值自然过期。 */
+  public static lifecycleExplain(input: AiLifecycleInput,
+    onRefreshed: (card: AiInsightCard) => void, force: boolean = false): Promise<AiInsightCard> {
+    const cacheKey: string = `${input.token}_${input.state}_` +
+      `${input.deprecationDate.length > 0 ? input.deprecationDate : input.disableDate}`;
+    const providerKey: string = AiTasks.providerModelKey();
+    if (force) {
+      return AiTasks.fetchLifecycle(input, providerKey, onRefreshed);
+    }
+    const cached: AiCacheLookup = AiTasks.lookup(AI_FEATURE_LC, providerKey, cacheKey,
+      AI_PROMPT_VERSION_LC, AI_CACHE_TTL_LC_MS);
+    if (cached.hit) {
+      const card: AiInsightCard | null = AiTasks.parseInsight(cached.dataJson, '');
+      if (card !== null) {
+        Logger.info(TAG, `lc cache hit token=${input.token} age=${cached.age}`);
+        return Promise.resolve(card);
+      }
+    }
+    if (cached.stale) {
+      const staleCard: AiInsightCard | null = AiTasks.parseInsight(cached.dataJson, '');
+      if (staleCard !== null) {
+        Logger.info(TAG, `stale-while-revalidate feature=lc token=${input.token}`);
+        AiTasks.fetchLifecycle(input, providerKey, onRefreshed);
+        return Promise.resolve(staleCard);
+      }
+    }
+    return AiTasks.fetchLifecycle(input, providerKey, onRefreshed);
+  }
+
+  private static fetchLifecycle(input: AiLifecycleInput, providerKey: string,
+    onRefreshed: (card: AiInsightCard) => void): Promise<AiInsightCard> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.INSIGHT_SYSTEM;
+    task.user = AiTasks.insightUserPrompt(
+      '以下是该包的生命周期 grounding JSON（日期与替代包名只能从这里原样引用）：\n' + JSON.stringify(input),
+      AiTasks.LIFECYCLE_RULE);
+    task.temperature = AI_TEMPERATURE_LC;
+    task.maxTokens = AI_MAX_TOKENS_LC;
+    return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
+      const card: AiInsightCard | null =
+        AiTasks.parseInsight(completion.content, JSON.stringify(input), outcome);
+      if (card === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `lc reason=${e4ReasonOf(completion, outcome.reason)}`);
+      }
+      const cacheKey: string = `${input.token}_${input.state}_` +
+        `${input.deprecationDate.length > 0 ? input.deprecationDate : input.disableDate}`;
+      AiCache.write(AI_FEATURE_LC, providerKey, cacheKey, AI_PROMPT_VERSION_LC,
+        completion.model, JSON.stringify(card));
+      Logger.info(TAG, `lc ok token=${input.token} latency=${completion.latencyMs}`);
+      onRefreshed(card);
+      return card;
+    });
+  }
+
+  // ------------------------------------------------- SD · 数据源诊断（二期 P1-4）
+
+  /**
+   * 数据源诊断（P1-4）。**不缓存**（对齐 D3：每次探测结果都可能不同）。
+   * detail 是 B 级 grounding：任务层统一过 `aiMaskLocalPaths` 脱敏（spec §6）——
+   * 脱敏责任收在发送边界，调用方漏做也不会泄露用户目录。
+   */
+  public static sourceDiagnosis(input: AiDiagnosisInput): Promise<AiInsightCard> {
+    const masked: AiDiagnosisInput = new AiDiagnosisInput();
+    masked.sourceId = input.sourceId;
+    masked.sourceName = input.sourceName;
+    masked.baseUrl = input.baseUrl;
+    masked.httpCode = input.httpCode;
+    masked.tookMs = input.tookMs;
+    masked.reason = input.reason;
+    masked.detail = aiMaskLocalPaths(input.detail);
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.INSIGHT_SYSTEM;
+    task.user = AiTasks.insightUserPrompt(
+      '以下是数据源探测结果 grounding JSON（HTTP 码/耗时/原因码只能从这里原样引用）：\n' +
+      JSON.stringify(masked), AiTasks.DIAGNOSIS_RULE);
+    task.temperature = AI_TEMPERATURE_SD;
+    task.maxTokens = AI_MAX_TOKENS_SD;
+    return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
+      // 诊断文本没有需要回溯的统计数字：grounding 传空 = 跳过数字过滤（要点不丢）
+      const card: AiInsightCard | null = AiTasks.parseInsight(completion.content, '', outcome);
+      if (card === null) {
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `sd reason=${e4ReasonOf(completion, outcome.reason)}`);
+      }
+      Logger.info(TAG, `sd ok latency=${completion.latencyMs}`);
+      return card;
+    });
+  }
+
+  // ------------------------------------------------- insight 三任务共用件
+
+  /** insight 形态的输出 schema（P1-1/3/4 共用，spec §3）。 */
+  private static readonly INSIGHT_SCHEMA_JSON: string =
+    '{"one_liner":"一句话解读","points":["要点，0–3条"],"action_hint":"行动提示，可为空串"}';
+
+  /**
+   * insight 任务的 system：三任务共用输出形态，差异在「事实来源与禁止事项」——
+   * 由各任务在 user prompt 首行声明（见 fetchBoardInsight / fetchLifecycle / sourceDiagnosis）。
+   */
+  private static readonly INSIGHT_SYSTEM: string = '你是 Homebrew 目录数据解读助手。基于用户提供的 ' +
+    'grounding JSON 回答，用简体中文。数字规则：只能原样引用 grounding 里出现的数字，' +
+    '不得换算单位、不得编造任何 grounding 里没有的数字或百分比；velocity 与 priorMonthly ' +
+    '为 0 表示没有历史数据，不要解读成「下降」。日期原样引用（YYYY-MM-DD）。' +
+    '禁止编造包名、URL 或端口号。空字段原则：没有可说的就输出 []，' +
+    '禁止输出「暂无数据」之类的填充句。\n' +
+    `输出仍然必须是 JSON：${AiTasks.INSIGHT_SCHEMA_JSON}。`;
+
+  /** P1-3 专属补充：替代包口径（没指定替代就必须明说，这是 G5「替代包零编造」的落实位）。 */
+  private static readonly LIFECYCLE_RULE: string =
+    '本任务解读包的弃用/禁用排期。replacement_formula 与 replacement_cask 都为空时，' +
+    'one_liner 或 points 必须明确「上游未指定替代包」，禁止猜一个。';
+
+  /** P1-4 专属补充：诊断只读（G7：建议只描述操作，不输出可执行命令）。 */
+  private static readonly DIAGNOSIS_RULE: string =
+    '本任务解读数据源探测失败原因。nextStep 类建议只描述操作（如「检查地址是否以 https 开头」），' +
+    '禁止输出可执行命令行；action_hint 同样只放操作描述文字。';
+
+  /**
+   * insight 任务 user prompt：任务专属规则行（可空）+ grounding JSON + schema 收尾。
+   * rules 按任务传：LC 传 LIFECYCLE_RULE、SD 传 DIAGNOSIS_RULE、BI 传空串
+   * （INSIGHT_SYSTEM 已覆盖 BI 的数字口径，再拼规则只会稀释重点）。
+   */
+  private static insightUserPrompt(groundingBlock: string, rules: string): string {
+    // 超长护栏（对齐 D1 循环砍半思路）：grounding JSON 里可牺牲的是 detail / entries，
+    // 这里先整体砍半再判断（三任务输入量级都在 1–2KB，一般触发不了）。
+    let block: string = groundingBlock;
+    while ((AiTasks.INSIGHT_SYSTEM.length + rules.length + block.length) > AI_PROMPT_MAX_CHARS &&
+      block.length > 256) {
+      block = block.substring(0, Math.floor(block.length / 2));
+    }
+    return `${rules.length > 0 ? rules + '\n' : ''}${block}\n请按 schema 输出 JSON。`;
+  }
+
+  /** insight 解析：schema 三字段 + G5 数字回溯（groundingJson 为空 = 跳过过滤）。 */
+  private static parseInsight(text: string, groundingJson: string, outcome?: ParseOutcome): AiInsightCard | null {
+    const card: AiInsightCard | null = parseJsonSafe(text,
+      (obj: Record<string, Object>): AiInsightCard | null => {
+        const out: AiInsightCard = new AiInsightCard();
+        out.oneLiner = typeof obj['one_liner'] === 'string' ? obj['one_liner'] as string : '';
+        out.points = stringArrayOf(obj['points'], 3);
+        out.actionHint = typeof obj['action_hint'] === 'string' ? obj['action_hint'] as string : '';
+        if (!out.isValid()) {
+          return null;
+        }
+        return out;
+      }, outcome);
+    if (card === null || groundingJson.length === 0) {
+      return card;
+    }
+    // G5 数字回溯制：要点里出现 grounding 中不存在的数字 → 整条丢弃（spec §6）
+    card.points = AnalyticsNumberParser.filterTraceable(card.points, groundingJson);
+    return card;
   }
 
   // ------------------------------------------------------------ 缓存与工具

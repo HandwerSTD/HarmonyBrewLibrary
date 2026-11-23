@@ -84,6 +84,21 @@ export struct StatementView {
               bottom: $r('sys.float.padding_level2'),
             })
             .margin({ top: $r('sys.float.padding_level2') })
+
+          // AI 二期数据披露增补（spec §6）：榜单/生命周期解读发送聚合统计与生命周期字段；
+          // 数据源诊断会把探测错误文本（已抹掉本地路径段）发给 provider。同为纯声明行。
+          Text($r('app.string.ai_privacy_note_2'))
+            .fontColor($r('sys.color.font_secondary'))
+            .fontWeight(FontWeight.Regular)
+            .fontSize($r('sys.float.Body_S'))
+            .textAlign(TextAlign.Start)
+            .width('100%')
+            .padding({
+              left: $r('sys.float.padding_level6'),
+              right: $r('sys.float.padding_level6'),
+              top: $r('sys.float.padding_level2'),
+              bottom: $r('sys.float.padding_level2'),
+            })
         }
         .alignItems(HorizontalAlign.Start)
         .padding({

@@ -6,7 +6,13 @@ import { common } from '@kit.AbilityKit';
 import { TextModifier } from '@kit.ArkUI';
 import { HdsListItemCard, PrefixCustomBuilder, SuffixCustomBuilder } from '@kit.UIDesignKit';
 import { BreakpointType, CommonConstants, GlobalInfoModel, PageEnum, ResourceUtil, StorageKey } from '@ohos/common';
-import { BrewSourceHealth, BrewSourceReach } from '@ohos/brewcommon';
+import {
+  AiDiagnosisInput,
+  AiSettingsStore,
+  BrewAiDiagnosisCard,
+  BrewSourceHealth,
+  BrewSourceReach,
+} from '@ohos/brewcommon';
 import {
   BrewSourceClearEvent,
   BrewSourceDeleteEvent,
@@ -264,6 +270,13 @@ export struct BrewSourceSettingView {
       // 状态区自己带上下内缩与底色，这里只负责左右对齐到卡片内缩
       Column() {
         this.StatusArea(row)
+        // AI 二期 P1-4：探测失败时追加 AI 诊断解读（无 Key / 失败整卡静默，原生结论自足）
+        if (this.hasProbeResult(row) && !this.state.probeResultOk) {
+          BrewAiDiagnosisCard({
+            input: this.diagnosisInput(row),
+            autoStart: AiSettingsStore.autoExplain(),
+          })
+        }
       }
       .width(CommonConstants.FULL_PERCENT)
       .alignItems(HorizontalAlign.Start)
@@ -533,6 +546,23 @@ export struct BrewSourceSettingView {
    */
   private hasProbeResult(row: BrewSourceRow): boolean {
     return !this.isProbing(row) && this.state.probeResultId === row.source.id;
+  }
+
+  /**
+   * P1-4 诊断卡的 grounding 输入（AI Companion 二期）。
+   * 全部字段取自本源当次探测结果（A 级结构化 + B 级 detail，detail 的脱敏收在
+   * `AiTasks.sourceDiagnosis` 的发送边界，这里不做二次处理）。
+   */
+  private diagnosisInput(row: BrewSourceRow): AiDiagnosisInput {
+    const input: AiDiagnosisInput = new AiDiagnosisInput();
+    input.sourceId = row.source.id;
+    input.sourceName = row.source.name;
+    input.baseUrl = row.source.baseUrl;
+    input.httpCode = this.state.probeResultCode;
+    input.tookMs = this.state.probeResultTookMs;
+    input.reason = this.state.probeReason;
+    input.detail = this.state.probeResultDetail;
+    return input;
   }
 
   /**

@@ -92,4 +92,6 @@ export class BrewSourceSettingState extends BaseState {
   public probeResultCode: number = 0;
   /** 探测返回的补充诊断信息，例如 bodyLen、content-type 或平台错误消息。 */
   public probeResultDetail: string = '';
+  /** 探测耗时（ms，P1-4 诊断 AI 卡的 grounding 字段之一；与 probeResult* 同生命周期）。 */
+  public probeResultTookMs: number = 0;
 }

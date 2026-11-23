@@ -12,6 +12,7 @@ import type {
 } from '../model/BrewModels';
 import {
   BREW_SECTION_KEY_EXECUTABLES,
+  BrewAiGrounding,
   BrewInfoPageData,
   BrewInfoRow,
   BrewInfoSection,
@@ -49,6 +50,8 @@ export class BrewDetailNormalizer {
     data.caveats = detail.caveats;
     data.lifecycle = BrewDetailNormalizer.lifecycleOf(detail);
     data.hasLifecycle = detail.deprecated || detail.disabled;
+    BrewDetailNormalizer.fillLifecycleGrounding(detail, data);
+    BrewDetailNormalizer.fillAiGroundingFormula(detail, data.aiGrounding);
 
     // 4 提供的命令。原始清单单独留给 tldr 候选名链（spec §3.1）；key 供详情页把
     // tldr「用法示例」装配在它正下方（formula 独有，cask 路径不创建这个分区，
@@ -123,6 +126,10 @@ export class BrewDetailNormalizer {
     data.caveats = detail.caveats;
     data.lifecycle = BrewDetailNormalizer.lifecycleOf(detail);
     data.hasLifecycle = detail.deprecated || detail.disabled;
+    BrewDetailNormalizer.fillLifecycleGrounding(detail, data);
+    // cask 的 AI grounding：只有依赖有语义（formula/cask 两类平铺合并），其余留空表
+    data.aiGrounding.dependencies = BrewDetailNormalizer.dependencyNames(detail.dependsOn.formula)
+      .concat(BrewDetailNormalizer.dependencyNames(detail.dependsOn.cask));
 
     // 4 安装内容（artifacts）
     if (detail.artifacts.length > 0) {
@@ -258,6 +265,36 @@ export class BrewDetailNormalizer {
         $r('app.string.brew_hint_deprecated'), detail.deprecationReason, replacement);
     }
     return new BrewLifecycleNotice('', '', '', '');
+  }
+
+  /**
+   * 生命周期 grounding 原文字段（AI 二期 P1-3）。与 `lifecycleOf` 同一次判定、
+   * 同一份输入：state/日期/按类型替代包。cask 的 deprecationDate 等字段同样存在
+   * （BrewLifecycleInfo 两类包共用），无需分叉。
+   */
+  private static fillLifecycleGrounding(detail: BrewFormulaDetail | BrewCaskDetail,
+    data: BrewInfoPageData): void {
+    data.replacementFormula = detail.deprecationReplacementFormula;
+    data.replacementCask = detail.deprecationReplacementCask;
+    if (detail.disabled) {
+      data.lifecycleState = 'disabled';
+      data.disableDate = detail.disableDate;
+      return;
+    }
+    if (detail.deprecated) {
+      data.lifecycleState = 'deprecated';
+      data.deprecationDate = detail.deprecationDate;
+    }
+  }
+
+  /** formula 的 AI grounding 原文（P1-2）。cask 无 build/uses/bottle 语义，留空表。 */
+  private static fillAiGroundingFormula(detail: BrewFormulaDetail, grounding: BrewAiGrounding): void {
+    grounding.dependencies = BrewDetailNormalizer.dependencyNames(detail.dependencies);
+    grounding.buildDependencies = BrewDetailNormalizer.dependencyNames(detail.buildDependencies);
+    grounding.usesFromMacos = detail.usesFromMacos;
+    grounding.aliases = detail.aliases;
+    grounding.versionedFormulae = detail.versionedFormulae;
+    grounding.bottleTags = detail.bottleTags;
   }
 
   private static dependencyNames(list: BrewDependency[]): string[] {

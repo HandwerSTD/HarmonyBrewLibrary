@@ -27,6 +27,7 @@ export { BrewDiscoverBoardKey } from './src/main/ets/model/BrewModels';
 // 详情页展示数据（已归一化）。UI 需要 new 出来做兜底，所以是值导出。
 export {
   BREW_SECTION_KEY_EXECUTABLES,
+  BrewAiGrounding,
   BrewInfoPageData,
   BrewInfoRow,
   BrewInfoSection,
@@ -145,6 +146,9 @@ export { BrewCommandSheet } from './src/main/ets/component/BrewCommandSheet';
 
 // D3 · AI 报错解读卡（执行 Sheet 失败终态的附加卡；G13：下一步只有复制、没有执行入口）。
 export { BrewAiFailureCard } from './src/main/ets/component/BrewAiFailureCard';
+
+// P1-4 · 数据源诊断 AI 解读卡（AI Companion 二期；失败静默，原生探测结论自足；G7：只复制不执行）。
+export { BrewAiDiagnosisCard } from './src/main/ets/component/BrewAiDiagnosisCard';
 
 // 标题栏模糊：brew 所有页共用一份实现（区间位置/长度只在 BrewTitleBar.ets 里定义）。
 // 改模糊表现只改这里 —— 各页原先各写一份，结果出现「有的页没有渐变、有的页先空行程再猛增」。
@@ -342,6 +346,37 @@ export {
   AI_PREFS_KEY_AUTO_EXPLAIN,
 } from './src/main/ets/constant/AiConstants';
 export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
+
+// ------------------------------------------------------------------ AI Companion 二期（榜单解读 / 弃用解读 / 数据源诊断）
+
+export { AnalyticsNumberParser, AiInlineAnalyticsCounts } from './src/main/ets/util/AnalyticsNumberParser';
+export { aiMaskLocalPaths } from './src/main/ets/model/AiTypes';
+export {
+  AiInsightCard,
+  AiBoardInsightEntry,
+  AiBoardInsightInput,
+  AiLifecycleInput,
+  AiDiagnosisInput,
+} from './src/main/ets/model/AiTypes';
+export {
+  AI_PROMPT_VERSION_BI,
+  AI_PROMPT_VERSION_LC,
+  AI_PROMPT_VERSION_SD,
+  AI_CACHE_TTL_BI_MS,
+  AI_CACHE_TTL_LC_MS,
+  AI_FEATURE_BI,
+  AI_FEATURE_LC,
+  AI_FEATURE_SD,
+  AI_TEMPERATURE_BI,
+  AI_TEMPERATURE_LC,
+  AI_TEMPERATURE_SD,
+  AI_MAX_TOKENS_BI,
+  AI_MAX_TOKENS_LC,
+  AI_MAX_TOKENS_SD,
+  AI_GROUNDING_BI,
+  AI_GROUNDING_LC,
+  AI_GROUNDING_SD,
+} from './src/main/ets/constant/AiConstants';
 
 // ------------------------------------------------------------------ 本机包（设备上的 brew 安装记录）
 

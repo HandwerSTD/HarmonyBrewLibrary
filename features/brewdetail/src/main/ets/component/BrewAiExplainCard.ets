@@ -216,6 +216,20 @@ export struct BrewAiExplainCard {
             }, (item: string, index: number) => `stp_${index}`)
           }
 
+          // 「依赖与版本」组（AI 二期 P1-2）：依赖条目的解释 + 版本口径备注。
+          // 仍然空数组整体不渲染；grounding 与指令见 AiTasks.D1_SYSTEM v2（promptVersion=2）。
+          if (this.card.depsExplain.length > 0) {
+            this.SectionTitle($r('app.string.ai_deps_explain'))
+            ForEach(this.card.depsExplain, (item: string) => {
+              this.Bullet(item)
+            }, (item: string, index: number) => `dep_${index}`)
+          }
+          if (this.card.versionNotes.length > 0) {
+            ForEach(this.card.versionNotes, (item: string) => {
+              this.Bullet(item)
+            }, (item: string, index: number) => `vnt_${index}`)
+          }
+
           // 底部角标行：AI 生成声明 + 重新生成
           Row() {
             Text($r('app.string.ai_d1_badge'))

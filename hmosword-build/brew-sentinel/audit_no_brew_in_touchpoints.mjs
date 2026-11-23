@@ -1,9 +1,15 @@
 /**
- * 更新哨兵触达点「零执行」审计（G5，spec §6）。
+ * 更新哨兵触达点「零执行」审计（G5，spec §6）+ AI 卡组件「零执行」审计（AI Companion 二期）。
  *
  * 哨兵全链路（卡片页、FormExtensionAbility、WorkScheduler 回调、SentinelBootstrap、
  * 哨兵服务）必须只做三件事：读盘上快照、推卡片数据、发通知。它**不允许出现任何 brew
  * 命令拼装/执行符号**——「替用户按回车」的红线在本功能里没有例外路径。
+ *
+ * AI Companion 二期（同一红线的新触点）：AI 卡组件（榜单解读卡 / 数据源诊断卡）
+ * 只渲染 AI 输出文本与复制 chip，**不得 import 命令层、不得拼 brew 字面量、
+ * 不得出现 --dry-run**（spec G7/G11：AI 建议只复制不执行）。扫描对象：
+ *   - features/brewdiscover/src/main/ets/component/BrewAiBoardInsightCard.ets；
+ *   - features/brewcommon/src/main/ets/component/BrewAiDiagnosisCard.ets。
  *
  * 扫描对象（触达点集合）：
  *   - products/pc_acl/src/main/ets/sentinel/ 下全部 .ets（递归）；
@@ -30,6 +36,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const SENTINEL_DIR = 'products/pc_acl/src/main/ets/sentinel';
 const SERVICE_FILE = 'features/brewcommon/src/main/ets/service/BrewSentinelService.ets';
+
+/** AI Companion 二期卡组件（清单缺失/移动时 fail-fast，与哨兵目录同一纪律） */
+const AI2_FILES = [
+  'features/brewdiscover/src/main/ets/component/BrewAiBoardInsightCard.ets',
+  'features/brewcommon/src/main/ets/component/BrewAiDiagnosisCard.ets',
+];
 
 /** 命令生成/执行层的符号。哨兵触达点出现任何一个都意味着数据链路越界（spec §6） */
 const FORBIDDEN_SYMBOLS = [
@@ -182,6 +194,14 @@ const title = 'homebrew updater';
 const url = "https://formulae.brew.sh";
 `,
   },
+  {
+    name: 'AI 卡片段：AI 文本渲染 + 复制 chip（G7 允许形态）',
+    code: `
+import { PasteboardUtil } from '@ohos/common';
+Text(this.card.oneLiner)
+Text($r('app.string.brew_action_copy')).onClick(() => { PasteboardUtil.copyText(this.card.actionHint); })
+`,
+  },
 ];
 
 const POSITIVE_CASES = [
@@ -194,6 +214,8 @@ const POSITIVE_CASES = [
   { name: '--dry-run 拼装', code: `const cmd = commandLine + ' --dry-run';\n` },
   { name: '使用 AppStorage', code: `const v = AppStorage.get<boolean>('x') ?? false;\n` },
   { name: 'import AppStorage', code: `import { AppStorage } from '@ohos/arkui';\n` },
+  { name: 'AI 卡 import 命令生成器', code: `import { BrewCommandGenerator } from '@ohos/brewcommon';\n` },
+  { name: 'AI 卡拼装命令字面量', code: `const hint = 'brew reinstall ' + name;\n` },
 ];
 
 function runSelfTests() {
@@ -228,8 +250,26 @@ function main() {
     throw new Error(`触达点文件数异常（${files.length}），检查 sentinel 目录是否被移动`);
   }
 
+  if (AI2_FILES.length < 2) {
+    throw new Error(`AI 卡组件清单异常（${AI2_FILES.length}）`);
+  }
+
   let violations = 0;
   for (const rel of files) {
+    const content = readFileSync(join(ROOT, rel), 'utf-8');
+    const found = scanContent(content);
+    if (found.length > 0) {
+      for (const v of found) {
+        console.error(`FAIL ${rel}:${v.line} [${v.rule}] ${v.snippet}`);
+        violations++;
+      }
+    } else {
+      console.log(`PASS ${rel}`);
+    }
+  }
+
+  // AI Companion 二期卡组件：同一红线（命令符号 + brew 字面量 + dry-run + AppStorage 全禁）
+  for (const rel of AI2_FILES) {
     const content = readFileSync(join(ROOT, rel), 'utf-8');
     const found = scanContent(content);
     if (found.length > 0) {
@@ -253,10 +293,10 @@ function main() {
 
   console.log(`self-tests: ${selfTestCount} passed (${NEGATIVE_CASES.length} negative, ${POSITIVE_CASES.length} positive)`);
   if (violations > 0) {
-    console.error(`audit failed: ${violations} violation(s) in ${files.length} touchpoint file(s)`);
+    console.error(`audit failed: ${violations} violation(s) in ${files.length + AI2_FILES.length} touchpoint file(s)`);
     process.exit(1);
   }
-  console.log(`audit passed: ${files.length} touchpoint file(s), zero command/exec references`);
+  console.log(`audit passed: ${files.length} sentinel + ${AI2_FILES.length} ai-card file(s), zero command/exec references`);
 }
 
 main();

@@ -133,12 +133,13 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
 
   /** 记录一条探测结果，并把它**绑定到源 id** —— 渲染条件靠它，否则结果会串到别的卡片上 */
   private setProbeResult(id: string, ok: boolean, reason: string, code: number = 0,
-    detail: string = ''): void {
+    detail: string = '', tookMs: number = 0): void {
     this.state.probeResultId = id;
     this.state.probeResultOk = ok;
     this.state.probeReason = ok ? '' : reason;
     this.state.probeResultCode = code;
     this.state.probeResultDetail = detail;
+    this.state.probeResultTookMs = tookMs;
   }
 
   /** 清掉上一次的探测结果（重新进页面 / 开始新增或编辑 / 取消编辑时） */
@@ -148,6 +149,7 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
     this.state.probeReason = '';
     this.state.probeResultCode = 0;
     this.state.probeResultDetail = '';
+    this.state.probeResultTookMs = 0;
   }
 
   public setEditingName(value: string): void {
@@ -315,7 +317,7 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
       this.state.probingId = '';
       BrewSourceStore.noteProbe(id, result.ok, result.reason);
       this.acceptProbeIdentity(id, source.baseUrl, result);
-      this.setProbeResult(id, result.ok, result.reason, result.httpCode, result.detail);
+      this.setProbeResult(id, result.ok, result.reason, result.httpCode, result.detail, result.tookMs);
       if (!result.ok) {
         // 硬阻断：不写 activeId，不改任何状态
         this.refresh();
@@ -363,7 +365,7 @@ export class BrewSourceSettingVM extends BaseVM<BrewSourceSettingState> {
       this.state.probingId = '';
       BrewSourceStore.noteProbe(id, result.ok, result.reason);
       this.acceptProbeIdentity(id, source.baseUrl, result);
-      this.setProbeResult(id, result.ok, result.reason, result.httpCode, result.detail);
+      this.setProbeResult(id, result.ok, result.reason, result.httpCode, result.detail, result.tookMs);
       this.refresh();
     }).catch((err: Error) => {
       this.state.probingId = '';

@@ -833,6 +833,54 @@
       "value": "Libraries & Frameworks"
     },
     {
+      "name": "ai_board_insight",
+      "value": "AI insights"
+    },
+    {
+      "name": "ai_board_head_note",
+      "value": "Including %d HEAD installs"
+    },
+    {
+      "name": "ai_board_ghcr_note",
+      "value": "Plus %d ghcr pulls (different metric)"
+    },
+    {
+      "name": "ai_deps_explain",
+      "value": "Dependencies & versions"
+    },
+    {
+      "name": "ai_lifecycle_title",
+      "value": "Deprecation explained"
+    },
+    {
+      "name": "ai_lifecycle_replacement",
+      "value": "Official replacement: %s"
+    },
+    {
+      "name": "ai_lifecycle_no_replacement",
+      "value": "No replacement named upstream"
+    },
+    {
+      "name": "ai_diag_title",
+      "value": "Diagnosis"
+    },
+    {
+      "name": "ai_diag_from_probe",
+      "value": "Based on local probe: HTTP %d · %d ms"
+    },
+    {
+      "name": "ai_sources_analytics",
+      "value": "Based on catalog analytics · as of %s"
+    },
+    {
+      "name": "ai_sources_upstream",
+      "value": "Based on upstream announcements"
+    },
+    {
+      "name": "ai_privacy_note_2",
+      "value": "When explaining rankings and deprecation status, install analytics and lifecycle fields (dates, reasons, replacement names) are sent to the AI service you configured; source diagnosis also sends the probe error text (local paths masked). No personal information is included."
+    },
+    {
       "name": "brew_tldr_command_hint",
       "value": "%s provides the command %s"
     }

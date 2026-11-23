@@ -105,6 +105,17 @@ brew 数据曾**不使用** `supportDevice` 子目录（只面向 2in1），因�
 | `installCommand` | `brew install [--cask] <qualified-name>`，第三方 tap 补 `tap/token` |
 | ~~`recommendList`~~ / ~~`contentType`~~ | **已删字段**：实测详情页与 `BrewDetailNormalizer` 对它们零引用（同类包走的是首页快照，不是这个字段） |
 
+> **勘误（2026-11-23 实测回写，AI Companion 二期依赖此口径）**：
+> - 内嵌 `analytics.install_on_request.30d` 等**已是扁平 map** `{"<token>": 123059, "<token> --HEAD": 296}`
+>   —— 值是裸数字，不再是 `{count, percent}` 对象，也没有 `days` 数组；HEAD 行单列展示、不计入主计数。
+>   解析器 `AnalyticsNumberParser.parseInlineAnalytics` 按此实现。
+> - 聚合端点（`/api/analytics/install/{30d,90d,365d}.json`）的 `items[].count` 是**带逗号字符串**
+>   （`"516,535"`）、`percent` 同（`"2.11"`）；`items` 有截尾，长尾包不在榜单——回退用内嵌扁平 map。
+> - formula 单条新增顶层字段 `github_packages_downloads` `{source, all_time, last_30_days, fetched_at,
+>   analytics_30d, analytics_ratio}`：ghcr 拉取量与 install-on-request 口径不同，UI 副行展示时必须标注。
+> - `versions.json` / `history.json` 不存在（404）——官方 API 无版本历史；另 formulae.brew.sh 为
+>   GitHub Pages，瞬时 503（Unicorn）必须与 404 区分（503→重试，404→判不存在）。
+
 ### 4.3 生命周期三态
 
 Homebrew 的废弃不是布尔值，而是**三态**：正常 → `deprecated`（可装但警告）→ `disabled`（不可装）。
