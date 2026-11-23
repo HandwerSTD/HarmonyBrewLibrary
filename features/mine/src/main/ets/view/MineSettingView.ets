@@ -59,20 +59,9 @@ struct MineSettingView {
               left: $r('sys.float.padding_level2'),
               right: $r('sys.float.padding_level2'),
             })
-            ListItem() {
-              HmosListItem({
-                title: $r('app.string.about'),
-                handleClickAction: () => {
-                  this.pathStack.pushPath({ name: 'AboutView' });
-                }
-              })
-            }
-            .padding({
-              left: $r('sys.float.padding_level2'),
-              right: $r('sys.float.padding_level2'),
-            })
             // 更新哨兵（H 线）：卡片 + 通知的频控入口。只在 pc_acl 展示——哨兵的一切数据
-            // 与通知都来自 brew cli 能力，pc_normal 没有这个能力，入口也随之隐藏（G10）
+            // 与通知都来自 brew cli 能力，pc_normal 没有这个能力，入口也随之隐藏（G10）。
+            // 放在「关于」之前：「关于」固定收尾
             if (isLocalPackagesEnabled()) {
               ListItem() {
                 HmosListItem({
@@ -87,6 +76,18 @@ struct MineSettingView {
                 right: $r('sys.float.padding_level2'),
               })
             }
+            ListItem() {
+              HmosListItem({
+                title: $r('app.string.about'),
+                handleClickAction: () => {
+                  this.pathStack.pushPath({ name: 'AboutView' });
+                }
+              })
+            }
+            .padding({
+              left: $r('sys.float.padding_level2'),
+              right: $r('sys.float.padding_level2'),
+            })
           }
           .divider({
             strokeWidth: $r('app.float.mine_divider'),

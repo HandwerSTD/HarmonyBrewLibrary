@@ -38,7 +38,6 @@ const ERR_NOTIFICATION_REFUSED: number = 1600004;
  */
 @Component
 struct SentinelSettingView {
-  pathStack: NavPathStack = new NavPathStack();
   /** 当前频控档位。aboutToAppear 从 GSKV 读初值 */
   @State frequency: string = SENTINEL_FREQUENCY_DAILY;
   /** 通知授权状态。同步接口取值，进入页面即反映系统设置的真实状态 */
@@ -107,7 +106,9 @@ struct SentinelSettingView {
   }
 
   build() {
-    Navigation(this.pathStack) {
+    // 本页经 route_map 由系统路由表 pushPath 打开，根组件必须是 NavDestination
+    //（Navigation 不能作为路由目的地内容，否则推入后不渲染）
+    NavDestination() {
       Column() {
         List() {
           ListItemGroup() {
@@ -163,12 +164,9 @@ struct SentinelSettingView {
       .height('100%')
       .width('100%')
     }
-    .backgroundColor($r('sys.color.background_secondary'))
-    .hideBackButton(true)
     .title($r('app.string.sentinel_setting_row'))
-    .titleMode(NavigationTitleMode.Mini)
     .padding({ top: $r('sys.float.padding_level4') })
-    .mode(NavigationMode.Stack)
+    .backgroundColor($r('sys.color.background_secondary'))
   }
 }
 
