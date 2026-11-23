@@ -2,8 +2,9 @@
 
 > 日期：2026-11-23。状态：**已立项**（需求方当日裁定：W′ 以分布式同步实现，取代本日早些
 > 时候的 v0 文件流方案；`round4.md` 与 `rejected.md` 已同步修订）。
-> 范围：分布式键值数据库（distributedKVStore）承载的工具清单与 AI 模型配置跨设备同步、
-> 侧边栏新增入口 + 半模态 Sheet、设置常驻页、批量安装队列、pc_normal 隐藏测试能力。
+> 范围：分布式键值数据库（distributedKVStore）承载的工具清单与 AI 模型配置（含显式
+> 授权后的 API Key 同步）跨设备同步、侧边栏新增入口 + 半模态 Sheet、设置常驻页、
+> 批量安装队列、pc_normal 隐藏测试能力。
 > 叙事定位：主线四「工具链跟着人走」——多台鸿蒙 PC 组网互见工具清单，换机一键复制、
 > 双机互见跟装（`relatedwork.md` 主线四；brainstorm 轮次定义见 `round5.md` §2）。
 >
@@ -26,16 +27,16 @@
 | G1 | 组网（同账号、可信设备）的两台 2in1 上，A 机新装一个包后，B 机侧边栏底部出现「清单同步」入口 | B 机日志 `[sync] pending new=1 from=<deviceId>`；侧边栏 Shell 入口上方出现入口行 |
 | G2 | 入口**仅在存在未消费的新增时显示**；点开 Sheet 即视为已消费，入口消失；再有远端新增则重新出现 | 入口可见性 = `pendingNewCount > 0`；`onWillAppear` 触发 ack（G6）；日志 `[sync] ack device=<id> at=<updatedAt>` |
 | G3 | 同步库为**加密 + 最高安全等级 S4**：`encrypt: true`、`securityLevel: SecurityLevel.S4` | 代码常量断言；日志 `[sync] kv open store=brew_manifest_sync encrypt=true sl=S4 ok=true` |
-| G4 | AI 模型配置（provider / baseUrl / model）跨设备同步；**API Key 永不进同步库**（每设备各自持有 Asset Store Key） | A 机改配置 → B 机设置页刷新出新值；同步库内 `ai/config` 值无 key 字段；日志 `[sync] ai config applied provider=… model=…` |
+| G4 | AI 模型配置（provider / baseUrl / model）跨设备同步；**API Key 仅在用户显式开启「同步 API Key」后进同步库**（默认不同步、开关可随时关）；同步 UI（状态展示 + Key 开关）住**设置-AI 配置页**（`AiSettingView` 新增「分布式同步」区），不在清单同步 Sheet | A 机改配置 → B 机 AI 配置页刷新出新值；未开启时 `ai/config` 值无 key 字段；开启后同步库含 key 字段、对端写入本机 Asset Store；日志 `[sync] ai config applied provider=… model=… key=<true|false>` |
 | G5 | 清单口径 = **只同步主动安装**（formula 取 installedOnRequest，cask 视为主动），含各包 tap；依赖包不同步 | 复用 `BrewInstalledParser` 投影（§2）；日志 `[sync] publish device=<id> packages=N taps=M ms=N` |
 | G6 | 已读语义同命令 Sheet 的 `resultViewed`：Sheet 打开即 ack 当前各设备 manifest 的 `updatedAt` | ack 落本地 preferences `brew_sync_state`（不进同步库）；入口随 ack 消失 |
-| G7 | 常驻界面 =「我的 → 设置 → 工具清单同步」二级页（全功能、无新增也可见） | `MineSettingView` 新行 push `BrewManifestSyncPage`；页内可见设备卡 / AI 配置同步状态 |
+| G7 | 常驻界面 =「我的 → 设置 → 工具清单同步」二级页（全功能、无新增也可见）；设备清单卡 = Formulae 分类卡同构（前 5 条 + 「查看全部」二级页全量清单） | `MineSettingView` 新行 push `BrewManifestSyncPage`；页内设备卡复用 `BrewCategoryCardHeader` / `BrewPackageRow` / `BREW_CATEGORY_PREVIEW_COUNT` 口径；卡片「查看全部」可进 `BrewManifestDevicePage` |
 | G8 | 新增包可勾选并**批量安装**：队列逐条 `brew install`、失败域隔离、进度续看（复用命令 Sheet） | `install_queue.json` 落盘；逐条日志 `[queue] start/ok/fail token=…`；中途关 Sheet 重开续看 |
 | G9 | pc_normal（无执行通道）：同步查看、AI 配置应用照常；**安装动作不出现**（同 G10 行为闸） | `BrewCli.isEnabled() === false` 时无勾选框与批量安装条 |
-| G10 | 隐藏测试能力：**仅 pc_normal**，设置-关于页 app 图标 4 连点 → 向同步库写入 3 个测试包（`python@3.12`、`deepseek-harness`、`reasonix`，来源设备名「分布式测试」） | 4 次点击后 Toast + 日志 `[sync] easter egg written packages=3`；侧边栏入口随即出现（本地写读链路，无需组网） |
+| G10 | 隐藏测试能力：**仅 pc_normal**，设置-关于页 app 图标 4 连点 → 向同步库写入 3 个测试包（`python@3.12`、`deepseek-harness`、`reasonix`，来源身份取**本机真实 deviceId/设备名**，与其他 manifest 同源同构） | 4 次点击后 Toast + 日志 `[sync] easter egg written packages=3`；侧边栏入口随即出现（本地写读链路，无需组网） |
 | G11 | 权限 `ohos.permission.DISTRIBUTED_DATASYNC` 双 product 声明，常驻页首次打开时动态申请；拒绝不崩溃，视图内引导授权 | module.json5 声明 + 日志 `[sync] permission grant=true`；拒绝态显示引导行 |
 | G12 | 双 product 构建绿 | `devecocli build --product default`、`devecocli build --product pc_normal` 均无错误 |
-| G13 | 关键链路全部打点 | §3.6 打点表 |
+| G13 | 关键链路全部打点 | §3.9 打点表 |
 
 范围外（明确不做）：
 - **云端账号同步**——数据不出设备信任圈，无服务端、无用户协议负担（`rejected.md` §2 第 3 条重写后的边界）。
@@ -56,7 +57,11 @@
 | `features/brewcommon/src/main/ets/service/BrewCommandRunner.ets` | 单命令执行（单飞 BUSY / interrupt / 超时）；`openSheet()/closeSheet()/markViewed()` 管理 Sheet 生命周期。**队列的执行底座，但当前无队列概念** |
 | `features/brewcommon/src/main/ets/model/BrewCommandModels.ets` | `BrewCommandState` @Observed（含 `sheetShown`、`resultViewed`）——同步服务状态类同构仿写 |
 | `features/brewcommon/src/main/ets/component/BrewCommandSheet.ets` | 命令执行 Sheet 组件；宿主 `PcMainPage`。**BrewManifestSyncView 的样板** |
-| `features/brewcommon/src/main/ets/service/AiSettingsStore.ets:38` | BYOK 存储：Key 只进 Asset Store（`AI_ASSET_ALIAS_API_KEY`）；provider/baseUrl/model 存 GSKV 偏好（store `AI_PREFS_STORE`，key `AI_PREFS_KEY_CONFIG`）；`saveConfig`/`loadConfig`/`snapshot`。**AI 同步的本地真源** |
+| `features/brewcommon/src/main/ets/service/AiSettingsStore.ets:38` | BYOK 存储：Key 只进 Asset Store（`AI_ASSET_ALIAS_API_KEY`）；provider/baseUrl/model 存 GSKV 偏好（store `AI_PREFS_STORE`，key `AI_PREFS_KEY_CONFIG`）；`saveConfig`/`loadConfig`/`snapshot`。**AI 同步的本地真源；Key 读写方法（`saveApiKey`/`loadApiKey`）现成，远端 Key 应用直接复用** |
+| `features/brewcommon/src/main/ets/component/BrewCategoryCardView.ets` | Formulae/Casks 分类卡：卡头（`BrewCategoryCardHeader`）+ 前几条 + 「查看全部」行；`previewLimit` / `showViewAllEntry` 两 prop 支持一级预览与二级全量复用同一组件。**设备清单卡的视觉母版（§4.2.1）** |
+| `features/brewcommon/src/main/ets/component/BrewPackageRow.ets` | 卡内包行：HDS `HdsListItemCard` + 包图标基底 + token 主文本/desc 副文本 + 热度右槽（`hideRank` 可关）。**设备卡与二级页的行组件** |
+| `features/brewcommon/src/main/ets/constant/BrewConstants.ets:268` | `BREW_CATEGORY_PREVIEW_COUNT = 5`——预览条数与数据层 `hasMore` 判据同源。**设备卡复用同一常量，不新设** |
+| `features/brewformulae/src/main/ets/view/BrewFormulaCategoryView.ets` | 分类「查看全部」二级页：`List` + `LazyForEach` 虚拟滚动 + 让位首项 + 首末项圆角拼卡。**设备清单二级页的版式母版（§4.2.2）** |
 | `features/brewcommon/src/main/ets/model/AiTypes.ets:47` | `AiProviderConfig { provider; baseUrl; model }`——同步的恰好是不含密钥的三个字段 |
 | `features/pcui/src/main/ets/component/CustomSideBar.ets:45,157` | `shellEntryVisible()` = 命令状态离开 IDLE 即常显；`if` 块 = Divider + ShellEntryBuilder 压在 `Blank()` 之后。**同步入口插在它上面，同构** |
 | `features/pcui/src/main/ets/view/PcMainPage.ets:240` | 命令 Sheet 的 bindSheet 绑在 `HdsNavDestination` 上。**同一节点多绑 bindSheet 不可靠**（官方 FAQ：多半模态应绑不同组件）——同步 Sheet 绑在内层 `HdsSideBar` 节点 |
@@ -122,7 +127,8 @@ options  = {
 { "schema": 1, "updatedAt": 1763892345678,
   "provider": "deepseek",           // AI_PROVIDER_DEEPSEEK | AI_PROVIDER_CUSTOM
   "baseUrl": "https://api.deepseek.com",
-  "model": "deepseek-chat" }        // 与 AiProviderConfig 三字段一一对应；无 Key 字段（G4）
+  "model": "deepseek-chat",         // 与 AiProviderConfig 三字段一一对应
+  "key": "sk-…" }                   // 可选；仅当本机「同步 API Key」开关开着时写入/应用（G4）
 ```
 
 - 包投影（G5）：`BrewInstalledLoader.snapshot().sets.installed` 过滤 `installedOnRequest === true`
@@ -168,7 +174,8 @@ kvStore.on('dataChange', SUBSCRIBE_TYPE_REMOTE, listener)
 ```
 
 - 「新增」的完整判定 = **远端 manifest 有未 ack 的更新** ∧ **包含本机未安装的包**；
-  Sheet 新装区显示后者（互见句 + 勾选安装都面向它），设备卡展开显示前者全部清单（只读）。
+  Sheet 新装区显示后者（互见句 + 勾选安装都面向它）；前者由每设备一张卡承载
+  （§4.2.1：卡内前 5 条 + 「查看全部」进二级页看全量只读清单）。
 - 本机已装集合：`BrewInstalledLoader.snapshot()`（null 时按空集处理，pc_normal 恒空集）。
 
 ### 3.5 同步触发时机（autoSync 之外的四次显式 sync）
@@ -191,16 +198,34 @@ kvStore.on('dataChange', SUBSCRIBE_TYPE_REMOTE, listener)
 本地改：AiSettingVM.save()
   → AiSettingsStore.saveConfig(config)               // 现状不动（prefs 是渲染真源）
   → BrewManifestSyncService.publishAiConfig(config)  // put('ai/config', {…, updatedAt: now}) + sync(PUSH)
+      // keySyncOn === true 时 doc 里带 key 字段（值 = Asset Store 现存 Key），否则不带
 
 远端来：dataChange 里 Key === 'ai/config' 的条目
   → AiSettingsStore.saveConfig(远端三字段)           // 只改 prefs，绝不回写 KV（防回环）
+  → 若 doc.key 非空 && 本机 keySyncOn：AiSettingsStore.saveApiKey(doc.key)  // 写入本机 Asset Store
   → service 通知已注册的 AiSettingVM.refresh()      （VM aboutToAppear 注册 / aboutToDisappear 注销）
   → AiClient 下次请求读 loadConfig() 自然生效
 ```
 
 - 冲突：两台设备并发改 → KV 层 LWW；本地 prefs 只是渲染缓存，接受「最后写入生效」。
-- `autoExplain` 开关与 **API Key 均不同步**：Key 是每设备各自的 Asset Store 私有物
-  （BYOK 哲学，G1 无折中档——同步库里出现密钥等于把密钥广播到信任圈全部设备）。
+- **API Key 的显式授权同步**（2026-11-23 需求方裁定修订）：`ai/config` Value schema 增加
+  可选 `key` 字段。开关「同步 API Key」：
+  - 默认 **关**——关着时 `publishAiConfig` 不带 key 字段；开关从开转关时，本机发布一个
+    **不含 key 的 doc 覆盖**同步库里的旧值（对端 LWW 覆盖后不再收到 key；对端
+    prefs/Asset 里**已落地**的 Key 不主动删除，只不再更新——删除对端密钥超出本机
+    开关的权限边界）；
+  - 开启动作发生在 **设置-AI 配置页**（`AiSettingView`「分布式同步」区新增开关行，
+    2026-11-23 需求方裁定：AI 配置同步的 UI 不放 ManifestSyncSheet），开启即弹确认
+    （`sync_key_confirm` 文案：密钥将进入加密同步库并出现在可信设备上）；
+  - 关闭后远端传来的 doc 里的 key 字段被**忽略**（本机开关是应用侧的闸，不是对端的）；
+  - 开着时本机 Key 变化（保存 / 清除）也走 `publishAiConfig` 同步链路。
+- `autoExplain` 开关不同步（设备偏好非模型配置）。
+- **Asset → KV 的单向闸**：Key 值只在 `publishAiConfig`（用户开关开着时）这一个出口
+  离开 Asset Store；日志永不打 key 值（打 `key=<true|false>` 布尔）。
+- **UI 归属**（m00337）：AI 配置同步的状态展示（provider/model/baseUrl 三字段的同步
+  情况与上次应用时间）与「同步 API Key」开关都在 `AiSettingView` 的「分布式同步」区；
+  `BrewManifestSyncView`（Sheet 与常驻页）**不渲染任何 AI 卡**。`AiSettingVM` 在
+  aboutToAppear 注册 / aboutToDisappear 注销远端应用回调（刷新本页展示）。
 
 ### 3.7 批量安装队列（G8，回收 v1 文件流 spec 的设计）
 
@@ -226,8 +251,8 @@ AboutView 图标 onClick（draggable(false) 的 app 图标）：
   if (BREW_CLI_ENABLED === true) return          // pc_acl 点了无反应——彩蛋只在 pc_normal
   计数器 +1；相邻两次间隔 > 800ms 则清零
   第 4 次：
-    put(`device:dz-test/manifest`, {
-      schema: 1, deviceId: 'dz-test', deviceName: '分布式测试', updatedAt: now,
+    put(`device:<myId>/manifest`, {
+      schema: 1, deviceId: <本机真实 deviceId>, deviceName: <本机真实设备名>, updatedAt: now,
       packages: [
         { token: 'python@3.12',      kind: 'formula', tap: '' },
         { token: 'deepseek-harness', kind: 'formula', tap: '' },
@@ -240,8 +265,17 @@ AboutView 图标 onClick（draggable(false) 的 app 图标）：
 - 为什么 put 后 refresh 能看到：可见性来自**读路径**（getEntries + ack diff），不依赖
   REMOTE 事件——彩蛋在单机无组网时也能完整验证入口出现 → Sheet 展示 → 3 包只读
   （pc_normal 无安装按钮，G9）的整条 UX。
-- 彩蛋写的是**伪设备 Key**（`dz-test`），不污染本机 manifest；`ack` 后入口消失，重触发
-  （updatedAt 更新）再出现。
+- **来源设备名取本机真实名称**（2026-11-23 需求方裁定）：deviceId / deviceName 均为
+  `deviceManager.getLocalDeviceSync()` 的真实值——与其他任何 manifest 同源同构，互见句
+  显示的就是「你的 <本机真实名> 新装了 3 个包」。彩蛋与发布链共用同一设备身份，不引入
+  任何伪设备 Key。
+- pc_normal 发布闸不动：彩蛋走的 put 是**旁路直写**（不经过 `BrewCli.isEnabled()` 的
+  发布闸——闸管的是 snapshot 投影链路，彩蛋写的是固定 3 包）。真实 manifest 的 Key
+  与彩蛋 manifest 的 Key 相同（`device:<myId>/manifest`），pc_normal 无 brew 永不发布
+  真实清单，所以该 Key 在 pc_normal 上只承载彩蛋数据；pc_normal 若升级为 pc_acl
+  （BREW_CLI_ENABLED=true），下一次发布链 put 会覆盖彩蛋数据——这是可接受的语义
+  （彩蛋本就是测试能力，真实清单优先）。
+- `ack` 后入口消失，重触发（updatedAt 更新）再出现。
 
 ### 3.9 打点表（G13）
 
@@ -253,7 +287,7 @@ AboutView 图标 onClick（draggable(false) 的 app 图标）：
 | `[sync] pending new=<N> from=<deviceId>` | refresh 判定出新增 |
 | `[sync] ack device=<id> at=<updatedAt>` | Sheet 打开 ack |
 | `[sync] sync complete devices=<N> failed=<N> ms=<N>` | syncComplete |
-| `[sync] ai config applied provider=<p> model=<m>` | 远端 AI 配置应用 |
+| `[sync] ai config applied provider=<p> model=<m> key=<bool>` | 远端 AI 配置应用（布尔，永不打 Key 值） |
 | `[sync] easter egg written packages=3` | 彩蛋触发 |
 | `[queue] start/ok/fail token=<t> remain=<N>` | 队列条目流转 |
 | `[sync] permission grant=<bool>` | 动态授权结果 |
@@ -304,16 +338,62 @@ BrewManifestSyncSheet 内容（自上而下）：
    行右侧状态 chip：待装 / 已入队 / 安装中 / 已完成 / 失败（重试）
 ④ 批量安装条（pc_acl 且勾选数 > 0）：「安装所选 (N)」强调按钮 → enqueue → 队列跑起来
    后按钮变「查看进度」拉起命令 Sheet（微观明细归命令 Sheet）
-⑤ 设备区：每设备一张卡（设备名 / 更新时间 / 包数 / 本机标记），点开展开该设备完整
-   清单（只读行）；pc_normal 也渲染（接收端视角）
-⑥ AI 配置同步卡：当前 provider / model + 上次同步时间 + 「去设置」链接（push AiSettingView）
-⑦ 底部行：「立即同步」（执行中转圈）+ 「上次同步 14:32」；未授权时替换为授权引导行
+⑤ 设备区：每台设备一张**安装包卡片**（视觉与交互仿 Formulae 页 `BrewCategoryCardView`，
+   见 §4.2.1）；pc_normal 也渲染（接收端视角）
+⑥ 底部行：「立即同步」（执行中转圈）+ 「上次同步 14:32」；未授权时替换为授权引导行
+   ——AI 配置同步不在此 Sheet（见 §3.6/§4.3：入口与开关都在设置-AI 配置页）
 ```
 
 - **ack 时机**：Sheet `onWillAppear` → `markViewed()`（ack 各远端 manifest 当前 updatedAt，
   G6）——与命令 Sheet `onWillAppear → markViewed()` 同一生命周期钩子、同一语义。
 - Sheet 关闭登记在 `onDisappear`（官方约束：onWillDisappear 不允许改状态变量）——
   与命令 Sheet 现有写法一致。
+
+### 4.2.1 每台设备的安装包卡片（Formulae 分类卡同构）
+
+设备区的卡 = **Formulae 页 `BrewCategoryCardView` 的同构复刻**，只换数据语义
+（分类 → 设备）。同步场景的每台设备 manifest 只有 KB 级几十条，但卡片模式
+照搬的理由不是数据量，而是**视觉与交互的统一**：用户在 Formulae 页已经学会的
+「卡头 → 前几条 → 查看全部」心智，在同步视图里零学习成本。
+
+| Formulae 分类卡 | 设备清单卡（本 spec） |
+|---|---|
+| 卡头：分类 symbol + 分类名 + 包数 | 卡头：设备 symbol（`sys.symbol.laptopcomputer`/`pc`）+ 设备名 + 包数 + 「本机」标记 |
+| `BrewCategoryCardHeader`（brewcommon 共享组件） | 同一组件复用，`kind` 传设备语义 |
+| 卡内前 `BREW_CATEGORY_PREVIEW_COUNT`（5）条 | 同常量（**预览条数与 hasMore 判据同源**，brewcommon `BrewConstants.ets:268`） |
+| 每行 `BrewPackageRow`（HdsListItemCard：包图标基底 + token 主文本 + desc 副文本 + 热度右槽） | 同一组件；**右槽替换**：热度（排名/安装量）→ 同步状态 chip（待装/已入队/安装中/已完成/失败）或「已在本机」灰字 |
+| 底部「查看全部」行（`hasMore` 时） | 同款 `ViewAllBuilder`；点击 → 二级页（§4.2.2） |
+| 整卡点击 = 查看全部 | 同款（`clickEffect` MIDDLE；点行优先，ArkUI 手势不冒泡已验证） |
+
+- **`BREW_CATEGORY_PREVIEW_COUNT` 不引入新常量**：同步清单卡与浏览分类卡共用一个
+  预览条数口径，卡内截断与 `hasMore` 判据永远同源（分开写会漂成「预览装得下却
+  给了查看全部」——`BrewCategoryCardView.ets` 注释原话）。「查看全部」文案同样复用
+  既有资源 `app.string.brew_action_view_all`（§7 不新设）。
+- 设备 manifest 的包投影 `BrewSyncManifestDoc.packages` → `BrewPackageRow` 需要的
+  `BrewPackageItem` 投影：`subTitle=token`（主文本）、`title = tap 非空 ? tap : kind 描述`
+  （副文本）；`categoryRank/installs30d` 置 0 且 `hideRank: true`（同步语境无排名概念）。
+- 行右槽的同步状态 chip：本机已装的包显示「已在本机」灰字（无 chip）；新装清单
+  ③ 区的条目 chip 状态机（待装/已入队/安装中/已完成/失败）仅在 ③ 区——设备卡行的
+  右槽只表达「装没装在本机」这一个二值事实，避免两区状态机漂移。
+- 排序口径：manifest 内按 `token` 字典序（**清单是集合不是榜单**，字典序稳定可 diff）。
+  「新增」引导不设在设备卡——新装行的勾选与安装能力集中在 Sheet ③ 区，设备卡只负责
+  该设备的全量只读视角，两区不重复。
+
+### 4.2.2 设备清单二级页（查看全部）
+
+`features/mine/src/main/ets/view/BrewManifestDevicePage.ets`（新）：
+
+- **版式照搬 `BrewFormulaCategoryView`**（`brewformulae` 分类二级页）：标题栏（标题 =
+  设备名）+ `List` + `LazyForEach` 虚拟滚动 + 让位首项 `ListItem` + 首项圆上角/末项
+  圆下角拼卡 + 底部让位导航条。chip bar 不需要（单设备无分类切换）。
+- 行仍用 `BrewPackageRow`（`hideRank: true`），点击进包详情（`BrewDetailParams` 派生
+  token/kind/tap）；**与 ③ 新装列表不同**：本页是全量只读清单（每台设备几十条），
+  不提供勾选（勾选集中在 Sheet ③ 区——引导路径单一）。
+- 路由：`router_map.json` 登记 `BrewManifestDevicePage`，`PageEnum` 加
+  `BREW_MANIFEST_DEVICE_VIEW`；路由参数 `{ deviceId }`，页内从 service state 取该
+  设备 manifest（内存数据，零加载等待）。
+- pc_acl 点击行 → 进包详情（可安装/升级，既有详情页能力）；pc_normal 同样可进详情
+  （详情页浏览能力与执行闸 G9 无关——与现有 G10 模式一致）。
 
 ### 4.3 常驻页（形态二，G7）
 
@@ -351,7 +431,8 @@ BrewManifestSyncSheet 内容（自上而下）：
 |---|---|---|
 | 清单发布（put 本机 manifest） | ✅ | ❌（无 brew，永不发布） |
 | 接收 / 新增入口 / Sheet 查看 | ✅ | ✅ |
-| AI 配置同步（双向） | ✅ | ✅ |
+| 设备卡「查看全部」二级页 / 行点进包详情 | ✅ | ✅（浏览能力不受 G9 闸） |
+| AI 配置同步（双向，UI 在设置-AI 配置页） | ✅ | ✅ |
 | 勾选 + 批量安装 | ✅ | ❌（G9：不渲染勾选框与安装条） |
 | 关于图标 4 连点彩蛋 | ❌（点了无反应） | ✅（G10） |
 | 常驻入口行（设置） | ✅ | ✅ |
@@ -377,10 +458,11 @@ BrewManifestSyncSheet 内容（自上而下）：
 
 - **库级**：`encrypt: true` + `SecurityLevel.S4`——组网传输与落盘均处最高标签；数据不出
   设备信任圈（无云端、零服务端性格不变）。
-- **密钥边界（G4，红线）**：API Key 只存在于各设备 Asset Store（`AiSettingsStore` 既有
-  纪律：不进偏好、不进日志、不进缓存文件——本 spec 增加第四条：**不进同步库**）。
-  同步库 Value schema 里没有 Key 字段；`publishAiConfig` 入参类型即 `AiProviderConfig`
-  （类型上装不下 Key，与 `saveConfig` 同款保险）。
+- **密钥边界（G4，2026-11-23 需求方裁定修订）**：API Key 默认只存在于各设备 Asset Store
+  （`AiSettingsStore` 既有纪律：不进偏好、不进日志、不进缓存文件）。**用户显式开启
+  「同步 API Key」后**，Key 才进同步库（值 schema 可选 `key` 字段）——且这是 Asset 的
+  唯一出口（§3.6 单向闸）：发布侧仅 `publishAiConfig` 在开关开着时读取；应用侧仅本机
+  开关开着时写回 Asset；关闭开关后远端 `key` 字段一律忽略。日志永不打 Key 值。
 - **数据最小化**：只同步主动安装包名 + tap（KB 级），不含版本、安装时间、使用痕迹。
 - **日志纪律**：打点表全部字段不含 Key 值、不列完整清单（计数 + deviceId 级）。
 - **彩蛋**：pc_normal 专属 + 4 连点隐匿触发，不进任何菜单与文档可见入口；写入的伪设备
@@ -404,11 +486,15 @@ BrewManifestSyncSheet 内容（自上而下）：
 | sync_last_failed | 上次同步失败 · {time} |
 | sync_permission_row | 需要授权才能与组网设备同步 |
 | sync_permission_go | 去授权 |
-| sync_ai_config_card | AI 模型配置已随清单同步 |
-| sync_go_ai_setting | 去设置 |
+| sync_ai_sync_section | 分布式同步 |（设置-AI 配置页「分布式同步」区标题，m00337）
+| sync_ai_config_status | 配置随清单同步 · 上次应用 {time} |（AI 配置页同步状态行）
+| sync_ai_key_switch | 同步 API Key |（AI 配置页开关行）
+| sync_key_confirm | 密钥将进入加密同步库，并出现在您的可信设备上。确定开启？ |（开启开关的确认弹窗）
 | sync_device_self | 本机 |
 | sync_pkg_kind_formula / _cask | 命令行工具 / 图形应用 |
 | sync_pkg_status_pending/_queued/_running/_done/_failed | 待装 / 已入队 / 安装中 / 已完成 / 失败 |
+| sync_pkg_installed_here | 已在本机 |（设备卡行右槽的灰字态，替代热度槽）
+| sync_device_page_title | {device}的清单 |（设备清单二级页标题兜底；首选路由参数直接给设备名）
 | sync_retry | 重试 |
 | sync_kv_unavailable | 同步库不可用，重启应用重试 |
 | sync_schema_too_new | 清单版本过新，请升级应用 |
@@ -426,17 +512,19 @@ BrewManifestSyncSheet 内容（自上而下）：
 | brewcommon | `src/main/ets/model/BrewSyncModels.ets` | 新增：`BrewSyncPackage` / `BrewSyncManifestDoc` / `BrewSyncAiConfigDoc` / `BrewSyncDeviceView` / `BrewSyncNewItem` + schema 校验 |
 | brewcommon | `src/main/ets/service/BrewManifestSyncService.ets` | 新增：单例；KV open / 订阅 / refresh / 发布 / ack / syncNow / openSheet / closeSheet / markViewed / `BrewManifestSyncState` @Observed / AI 配置发布与应用 / 彩蛋写入 API |
 | brewcommon | `src/main/ets/service/BrewInstallQueue.ets` | 新增：§3.7 队列（落盘 + 事件驱动） |
-| brewcommon | `src/main/ets/component/BrewManifestSyncView.ets` | 新增：§4.2/§4.3 双形态视图组件（`sheetMode` prop） |
-| brewcommon | `src/main/ets/service/AiSettingsStore.ets` | 微改：暴露供 service 应用的入口（saveConfig 复用即可，预计零改动或仅加注释） |
+| brewcommon | `src/main/ets/component/BrewManifestSyncView.ets` | 新增：§4.2/§4.3 双形态视图组件（`sheetMode` prop）；设备卡 = Formulae 分类卡同构（§4.2.1：复用 `BrewCategoryCardHeader` / `BrewPackageRow` / `ViewAllBuilder` 模式，`BrewPackageItem` 由 manifest 投影、`hideRank: true`） |
+| brewcommon | `src/main/ets/component/BrewManifestDeviceCard.ets` | 新增（或并入 SyncView 文件）：§4.2.1 设备清单卡组件 |
+| brewcommon | `src/main/ets/service/AiSettingsStore.ets` | 微改：暴露供 service 应用的入口（saveConfig/saveApiKey 复用即可，预计零改动或仅加注释） |
 | brewcommon | `Index.ets` | 导出上述类型 / 服务 / 组件 |
 | pcui | `src/main/ets/component/CustomSideBar.ets` | 修改：§4.1 同步入口（Shell 上方） |
 | pcui | `src/main/ets/view/PcMainPage.ets` | 修改：`HdsSideBar` 节点绑定同步 Sheet（§4.2） |
 | mine | `src/main/ets/view/BrewManifestSyncPage.ets` | 新增：常驻页薄壳（§4.3） |
-| mine | `src/main/resources/base/profile/router_map.json` | 登记 `BrewManifestSyncPage` |
+| mine | `src/main/ets/view/BrewManifestDevicePage.ets` | 新增：§4.2.2 设备清单二级页（版式照搬 `BrewFormulaCategoryView`：`List` + `LazyForEach` + 让位首项 + 首末项圆角拼卡；行点进包详情） |
+| mine | `src/main/resources/base/profile/router_map.json` | 登记 `BrewManifestSyncPage` 与 `BrewManifestDevicePage` |
 | mine | `src/main/ets/view/MineSettingView.ets` | 修改：新增「工具清单同步」行（常显，§4.3） |
 | mine | `src/main/ets/view/AboutView.ets` | 修改：图标 4 连点彩蛋（§3.8，pc_normal 闸） |
-| mine | `src/main/ets/viewmodel/AiSettingVM.ets` | 修改：save 后 `publishAiConfig`；注册远端应用回调刷新 |
-| common | `src/main/ets/model/PageEnum.ets` | 加 `BREW_MANIFEST_SYNC_VIEW` |
+| mine | `src/main/ets/view/AiSettingView.ets`、`src/main/ets/viewmodel/AiSettingVM.ets` | 修改（m00337/m00306）：AI 配置页新增「分布式同步」区（provider/model/baseUrl 同步状态 + 上次应用时间 + `sync_ai_key_switch` 开关行 + `sync_key_confirm` 确认弹窗）；VM save 后 `publishAiConfig`、Key 变化在开关开着时也发布；aboutToAppear 注册 / aboutToDisappear 注销远端应用回调刷新 |
+| common | `src/main/ets/model/PageEnum.ets` | 加 `BREW_MANIFEST_SYNC_VIEW`、`BREW_MANIFEST_DEVICE_VIEW` |
 | common | `src/main/ets/constant/StorageKey.ets` | 预留 `SYNC_*` 键（如需要） |
 | products | `pc_acl/src/main/module.json5`、`pc_normal/src/main/module.json5` | 补 `DISTRIBUTED_DATASYNC` 声明 + reason string |
 | products | `pc_acl/…/pcability/PcAbility.ets`、`pc_normal/…/pcability/PcAbility.ets` | onCreate 尾部 `BrewManifestSyncService.getInstance().init(this.context)` |
@@ -452,8 +540,10 @@ BrewManifestSyncSheet 内容（自上而下）：
 单机链路（无组网，pc_normal 即可走通）：
 1. 安装 pc_normal → 设置 → 关于 → 图标 4 连点 → Toast「已写入 3 个分布式测试包」→
    日志 `[sync] easter egg written packages=3`；
-2. 侧边栏底部 Shell 上方出现「清单同步 +3」→ 点击拉起 Sheet → 互见句「你的分布式测试
-   新装了 3 个包」→ 3 行只读（无勾选框，G9）→ 关闭 Sheet → 入口消失（ack 生效）；
+2. 侧边栏底部 Shell 上方出现「清单同步 +3」→ 点击拉起 Sheet → 互见句「你的
+   <本机真实设备名> 新装了 3 个包」（m00326：来源身份 = `getLocalDeviceSync()` 真实值，
+   与组网场景同构）→ 3 行只读（无勾选框，G9）→ 设备卡按 §4.2.1 渲染（前 5 条 + 卡头
+   设备名/包数；3 条 < 5 无「查看全部」行）→ 关闭 Sheet → 入口消失（ack 生效）；
 3. 再连点 4 次 → 入口重新出现（updatedAt 前移）。
 
 双机链路（真机组网，同账号可信设备，模拟器不支持端端同步）：
@@ -461,8 +551,12 @@ BrewManifestSyncSheet 内容（自上而下）：
 2. A 机（pc_acl）`brew install <pkg>` → 刷新已装 → 日志 `[sync] publish device=<A> packages=N`；
 3. B 机（pc_acl）侧边栏出现「清单同步 +N」→ Sheet 勾选 → 「安装所选」→ 队列逐条执行
    （命令 Sheet 明细可关可重开续看）→ 完成后 `install_queue.json` 条目全部 DONE；
-4. B 机设置 → AI 设置改 provider/model → A 机设置页（保持打开或重进）显示新值 +
-   日志 `[sync] ai config applied …`；确认同步库中无 Key 值；
+   设备卡「查看全部」→ `BrewManifestDevicePage` 全量清单 → 行点击进包详情；
+4. B 机设置 → AI 配置页改 provider/model → A 机 AI 配置页（保持打开或重进）显示新值 +
+   日志 `[sync] ai config applied …`；默认（未开 Key 开关）时 `ai/config` 值无 key 字段；
+   B 机开启「同步 API Key」→ 确认弹窗 → B 机保存 Key → A 机（开关也开）AI 配置页出现
+   Key 已同步状态、本机 Asset Store 可查询到该 alias；A 机开关关闭 → B 机后续发布带
+   key 的 doc 被 A 机忽略（日志 `key=false`）；
 5. 断连重连场景：A 机离线期间装 2 个包 → 重连后 B 机 syncComplete 日志
    `devices=1 failed=0` → 入口出现（增量同步不退化为全量）。
 
