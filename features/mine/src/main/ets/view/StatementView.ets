@@ -68,6 +68,22 @@ export struct StatementView {
           .onClick(() => {
             this.openTldrRepo();
           })
+
+          // AI 数据披露（spec §9：发送给 provider 的内容 = 包元数据 + 错误文本，不含用户身份）。
+          // 纯声明行：不可点击、不跳转——发送什么在 AI 设置页的语境里看更完整，这里只做告知。
+          Text($r('app.string.ai_privacy_note'))
+            .fontColor($r('sys.color.font_secondary'))
+            .fontWeight(FontWeight.Regular)
+            .fontSize($r('sys.float.Body_S'))
+            .textAlign(TextAlign.Start)
+            .width('100%')
+            .padding({
+              left: $r('sys.float.padding_level6'),
+              right: $r('sys.float.padding_level6'),
+              top: $r('sys.float.padding_level4'),
+              bottom: $r('sys.float.padding_level2'),
+            })
+            .margin({ top: $r('sys.float.padding_level2') })
         }
         .alignItems(HorizontalAlign.Start)
         .padding({
