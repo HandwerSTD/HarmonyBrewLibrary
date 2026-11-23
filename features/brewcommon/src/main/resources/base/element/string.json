@@ -795,6 +795,14 @@
     {
       "name": "ai_error_e5_detail",
       "value": "请求被拒绝（%s）"
+    },
+    {
+      "name": "ai_settings_auto_explain",
+      "value": "自动生成 AI 讲解"
+    },
+    {
+      "name": "ai_settings_auto_explain_hint",
+      "value": "进入详情页时自动生成讲解；关闭后需手动点击「AI 讲解」按钮"
     }
   ]
 }

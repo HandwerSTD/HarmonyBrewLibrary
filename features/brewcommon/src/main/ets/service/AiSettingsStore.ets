@@ -9,6 +9,7 @@ import { preferences } from '@kit.ArkData';
 import { Logger, StorageKey } from '@ohos/common';
 import {
   AI_ASSET_ALIAS_API_KEY,
+  AI_PREFS_KEY_AUTO_EXPLAIN,
   AI_PREFS_KEY_CONFIG,
   AI_PREFS_STORE,
 } from '../constant/AiConstants';
@@ -209,7 +210,40 @@ export class AiSettingsStore {
     out.config = AiSettingsStore.loadConfig();
     out.hasKey = AiSettingsStore.hasApiKey();
     out.keyMemoryOnly = AiSettingsStore.memoryKey.length > 0;
+    out.autoExplain = AiSettingsStore.autoExplain();
     return out;
+  }
+
+  /**
+   * 「自动生成 AI 讲解」开关（默认开）。**无 Key 时恒返回 false**——
+   * 详情页装配只看这一个结论，不开也不引导（避免每个详情页推销 AI）。
+   */
+  public static autoExplain(): boolean {
+    if (!AiSettingsStore.hasApiKey()) {
+      return false;
+    }
+    const store: preferences.Preferences | null = AiSettingsStore.open();
+    if (store === null) {
+      return false;
+    }
+    return store.getSync(AI_PREFS_KEY_AUTO_EXPLAIN, true) === true;
+  }
+
+  /** 写自动生成开关（布尔单独存，不进 config JSON；不含 Key）。 */
+  public static saveAutoExplain(enabled: boolean): boolean {
+    const store: preferences.Preferences | null = AiSettingsStore.open();
+    if (store === null) {
+      return false;
+    }
+    try {
+      store.putSync(AI_PREFS_KEY_AUTO_EXPLAIN, enabled === true);
+      Logger.info(TAG, `auto explain saved enabled=${enabled}`);
+      return true;
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      Logger.error(TAG, `auto explain save failed, code=${e.code}, msg=${e.message}`);
+      return false;
+    }
   }
 
   /** 清空全部 AI 设置（含 Key）。 */
@@ -219,6 +253,7 @@ export class AiSettingsStore {
     if (store !== null) {
       try {
         store.deleteSync(AI_PREFS_KEY_CONFIG);
+        store.deleteSync(AI_PREFS_KEY_AUTO_EXPLAIN);
       } catch (err) {
         const e: BusinessError = err as BusinessError;
         Logger.error(TAG, `config delete failed, code=${e.code}`);

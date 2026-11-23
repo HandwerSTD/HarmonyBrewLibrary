@@ -791,6 +791,14 @@
     {
       "name": "ai_error_e5_detail",
       "value": "Request rejected (%s)"
+    },
+    {
+      "name": "ai_settings_auto_explain",
+      "value": "Auto-generate AI explanation"
+    },
+    {
+      "name": "ai_settings_auto_explain_hint",
+      "value": "Generate explanation automatically on detail page open; turn off to require tapping \"AI explain\""
     }
   ]
 }

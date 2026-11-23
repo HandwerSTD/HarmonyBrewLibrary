@@ -9,6 +9,7 @@ import {
   AI_PROVIDER_DEEPSEEK,
 } from '@ohos/brewcommon';
 import {
+  AiSettingAutoExplainEvent,
   AiSettingInitEvent,
   AiSettingKeyClearEvent,
   AiSettingKeySaveEvent,
@@ -252,6 +253,32 @@ export struct AiSettingView {
         }
         .width(CommonConstants.FULL_PERCENT)
         .margin({ top: 8 })
+      }
+
+      // 「自动生成 AI 讲解」开关（默认开）。仅已配 Key 时显示——无 Key 时
+      // 自动生成恒不生效（AiSettingsStore.autoExplain 恒回 false），不显示避免误导。
+      if (this.state.snapshot.hasKey) {
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text($r('app.string.ai_settings_auto_explain'))
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_primary'))
+            Text($r('app.string.ai_settings_auto_explain_hint'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.state.editingAutoExplain })
+            .selectedColor($r('sys.color.ohos_id_color_emphasize'))
+            .onChange((isOn: boolean) => {
+              AiSettingVM.getInstance().sendEvent(new AiSettingAutoExplainEvent(isOn));
+            })
+        }
+        .width(CommonConstants.FULL_PERCENT)
+        .margin({ top: 12 })
+        .alignItems(VerticalAlign.Center)
       }
 
       if (this.state.errorText.length > 0) {

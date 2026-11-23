@@ -42,7 +42,7 @@ import {
   brewTitleBarStyle,
 } from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewInfoRow, BrewInfoSection, BrewPackageItem } from '@ohos/brewcommon';
-import { AiExplainInput } from '@ohos/brewcommon';
+import { AiExplainInput, AiSettingsStore } from '@ohos/brewcommon';
 import { BrewAiExplainCard } from '../component/BrewAiExplainCard';
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
@@ -339,9 +339,11 @@ export struct BrewDetailView {
         BrewDetailMetaBar({ rows: this.detailState.data.meta })
 
         // AI 讲解卡（spec §4：元信息条之后、各分区之前——命令卡是刚性的，
-        // 讲解是增强的；自动生成由 ai_settings_auto_explain 开关控制）
+        // 讲解是增强的）。autoStart = 自动生成开关开且有 Key（快照判据，
+        // 无 Key 恒 false：不自动请求也不显示引导）；失败静默在卡内处理。
         BrewAiExplainCard({
           input: this.aiExplainInput(),
+          autoStart: AiSettingsStore.autoExplain(),
           onConfigureKey: () => {
             this.openAiSettings();
           },

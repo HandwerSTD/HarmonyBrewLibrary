@@ -108,6 +108,14 @@
   - **渲染基调**：像一段讲解、不是一张表——分区标题是弱化引导词（Normal 字重 + tertiary 色），要点行无符号、靠缩进表达从属；
   - 校验配套：`AiExplainCard.isValid()` 中 summary 必填，scenarios 放宽为 0–3（空字段原则下模型可输出 []），caveats ≤3、steps 2–3 不变。
 - **失败**：E1 → 引导进 AI 设置；E2/E3/E4 → 卡内重试按钮；任何失败不阻塞详情页其它分区。
+- **自动生成（2026-11-23，默认开）**：AI 设置页「自动生成 AI 讲解」开关
+  （`ai_settings_auto_explain`，偏好键 `AI_PREFS_KEY_AUTO_EXPLAIN`，布尔单独存不进 config
+  JSON；仅已配 Key 时显示该开关）。开 = 详情页装配时替用户点一次按钮——缓存命中秒开
+  （G3）、stale-while-revalidate 原样复用（G10），重复进入同一包不重复调用（TTL 内走缓存）；
+  **无 Key 时恒不自动请求也不显示引导**（避免每个详情页推销 AI，判据
+  `AiSettingsStore.autoExplain()` 恒回 false）。**失败静默**：自动模式的请求失败不显示
+  错误卡（用户没主动要求），入口按钮保持原位可手动重试；手动点击的失败照常分级展示。
+  关 = 现状的显式按钮触发。
 
 ---
 
@@ -193,6 +201,8 @@
 | `ai_settings_key` | API Key |
 | `ai_settings_test` | 测试连接 |
 | `ai_settings_test_ok_detail` | 连接成功 · %s · %d ms（带参资源；**禁止模板字符串内插 `$r()`**——Resource 对象会 toString 成 `[object Object]`） |
+| `ai_settings_auto_explain` | 自动生成 AI 讲解 |
+| `ai_settings_auto_explain_hint` | 进入详情页时自动生成讲解；关闭后需手动点击「AI 讲解」按钮 |
 | `ai_d1_button` | AI 讲解 |
 | `ai_d1_badge` | AI 生成 · 仅供参考 |
 | `ai_d2_entry` | AI 帮我找工具 |

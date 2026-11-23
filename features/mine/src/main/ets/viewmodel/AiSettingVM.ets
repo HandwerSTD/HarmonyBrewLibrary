@@ -29,6 +29,15 @@ export class AiSettingProviderEvent implements BaseVMEvent {
   }
 }
 
+/** 切「自动生成 AI 讲解」开关（即时落盘；与表单保存按钮解耦——开关语义独立）。 */
+export class AiSettingAutoExplainEvent implements BaseVMEvent {
+  public enabled: boolean;
+
+  public constructor(enabled: boolean) {
+    this.enabled = enabled;
+  }
+}
+
 export class AiSettingSaveEvent implements BaseVMEvent {
 }
 
@@ -73,6 +82,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       this.init();
     } else if (event instanceof AiSettingProviderEvent) {
       this.switchProvider(event.provider);
+    } else if (event instanceof AiSettingAutoExplainEvent) {
+      this.setAutoExplain(event.enabled);
     } else if (event instanceof AiSettingSaveEvent) {
       this.saveConfig();
     } else if (event instanceof AiSettingKeySaveEvent) {
@@ -113,6 +124,7 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       state.snapshot.config.model : AI_DEEPSEEK_DEFAULT_MODEL;
     state.editingKey = '';
     state.errorText = '';
+    state.editingAutoExplain = AiSettingsStore.autoExplain();
     state.testOkModel = '';
     state.testOkLatencyMs = -1;
     state.testErrorKind = '';
@@ -132,6 +144,16 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       }
     }
     Logger.info(TAG, `provider switched to=${provider}`);
+  }
+
+  /** 自动生成开关：即时落盘（不走表单保存），成功后同步快照。 */
+  private setAutoExplain(enabled: boolean): void {
+    const state: AiSettingState = this.getState();
+    const ok: boolean = AiSettingsStore.saveAutoExplain(enabled);
+    if (ok) {
+      state.editingAutoExplain = enabled;
+      state.snapshot = AiSettingsStore.snapshot();
+    }
   }
 
   private saveConfig(): boolean {

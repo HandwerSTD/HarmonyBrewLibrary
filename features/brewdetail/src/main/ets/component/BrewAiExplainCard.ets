@@ -2,7 +2,7 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
-import { PasteboardUtil } from '@ohos/common';
+import { Logger, PasteboardUtil } from '@ohos/common';
 import {
   AiError,
   AiErrorKind,
@@ -35,6 +35,13 @@ import {
 export struct BrewAiExplainCard {
   /** 详情页归一化数据的 grounding 输入（token / kind / desc / caveats / dependencies）。 */
   @Prop @Require input: AiExplainInput;
+  /**
+   * 自动生成（spec §4）：true = 装配时替用户点一次按钮（ai_settings_auto_explain 开
+   * 且有 Key，判据在装配层查 AiSettingsStore.autoExplain()——快照值无 Key 恒 false）。
+   * 自动模式**失败静默**：不显示错误，入口按钮回到原位可手动重试（用户没主动要求，
+   * 失败不该打扰）。手动点击的失败照常显示分级错误。
+   */
+  @Prop autoStart: boolean = false;
   /** 点「配置 AI Key」引导时由页面处理（跳 AI 设置页）。 */
   onConfigureKey: () => void = () => {
   };
@@ -47,8 +54,27 @@ export struct BrewAiExplainCard {
   @State private errorDetail: string = '';
   /** E4/E2/E3 重试入口的显隐由 errorKind 决定；这里只是触发重渲染的计数器 */
   @State private attempt: number = 0;
+  /** 本次挂载是否以自动模式发起（失败静默的判据；手动重试后转普通模式）。 */
+  @State private autoAttempt: boolean = false;
+
+  aboutToAppear(): void {
+    if (this.autoStart) {
+      // 自动生成 = 替用户点一次按钮。失败静默由 autoAttempt 标记在 catch 分支兑现。
+      this.autoAttempt = true;
+      this.requestExplain();
+    }
+  }
 
   private startLoad(): void {
+    if (this.loading) {
+      return;
+    }
+    // 手动触发（含按钮重试）：错误正常展示
+    this.autoAttempt = false;
+    this.requestExplain();
+  }
+
+  private requestExplain(): void {
     if (this.loading) {
       return;
     }
@@ -65,9 +91,17 @@ export struct BrewAiExplainCard {
       .then((card: AiExplainCard) => {
         this.card = card;
         this.loading = false;
+        this.autoAttempt = false;
       })
       .catch((error: AiError) => {
         this.loading = false;
+        if (this.autoAttempt) {
+          // 自动模式失败静默：不置 errorKind，入口按钮保持原位（可手动重试）
+          this.autoAttempt = false;
+          Logger.info(TAG,
+            `d1 auto start fail kind=${error instanceof AiError ? error.kind : 'e2'}`);
+          return;
+        }
         this.errorKind = error instanceof AiError ? error.kind : AiErrorKind.E2_NETWORK;
         this.errorDetail = error instanceof AiError ? AiErrorDetail.of(error) : '';
       });
@@ -234,3 +268,6 @@ export struct BrewAiExplainCard {
       .padding({ left: 10 })
   }
 }
+
+/** 自动生成的静默失败打点（与 AiTasks 同 tag 口径）。 */
+const TAG: string = '[ai]';

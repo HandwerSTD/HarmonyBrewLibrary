@@ -70,6 +70,11 @@ export class AiSettingsSnapshot {
   public hasKey: boolean = false;
   /** Key 是否只存在会话内存里（Asset 不可用时的兜底，重启后需重填）。 */
   public keyMemoryOnly: boolean = false;
+  /**
+   * 「自动生成 AI 讲解」开关（默认开）。**无 Key 时 AiSettingsStore.autoExplain()
+   * 恒回 false**——快照里的值即详情页装配的最终判据，装配层不用再查 Key。
+   */
+  public autoExplain: boolean = false;
 }
 
 /** D1 讲解卡。字段名对齐 spec §4 的四段结构。 */

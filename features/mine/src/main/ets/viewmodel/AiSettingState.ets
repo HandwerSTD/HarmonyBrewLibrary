@@ -22,6 +22,8 @@ export class AiSettingState extends BaseState {
   public errorText: string = '';
   /** Key 是否只存在会话内存（Asset 不可用时的兜底标记，来自 AiSettingsStore）。 */
   public keyMemoryOnly: boolean = false;
+  /** 「自动生成 AI 讲解」开关（表单副本；保存时落 AiSettingsStore）。 */
+  public editingAutoExplain: boolean = false;
   /** 「测试连接」进行中。 */
   public testing: boolean = false;
   /**
