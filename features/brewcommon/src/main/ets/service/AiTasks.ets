@@ -297,36 +297,87 @@ export class AiTasks {
   }
 
   private static parseCandidates(text: string, outcome?: ParseOutcome): AiToolCandidate[] | null {
+    // 裸数组形态（结构性差异修复 ①）：部分模型对 D2 会输出 `[{token,why},...]`（不带
+    // candidates 包裹）——先探测，命中直接当候选数组解析，不走对象壳。
+    const bare: AiToolCandidate[] | null = AiTasks.parseCandidatesBareArray(text, outcome);
+    if (bare !== null) {
+      return bare;
+    }
     return parseJsonSafe(text, (obj: Record<string, Object>): AiToolCandidate[] | null => {
       const listObj: Object | undefined = obj['candidates'];
       if (!Array.isArray(listObj)) {
         return null;
       }
-      const list: Array<Object> = listObj as Array<Object>;
-      if (list.length === 0 || list.length > AI_D2_MAX_CANDIDATES) {
-        return null;
-      }
-      const out: AiToolCandidate[] = [];
-      for (let i: number = 0; i < list.length; i++) {
-        const rec: Record<string, Object> = list[i] as Record<string, Object>;
-        const token: string = typeof rec['token'] === 'string' ? rec['token'] as string : '';
-        const why: string = typeof rec['why'] === 'string' ? rec['why'] as string : '';
-        if (token.trim().length === 0) {
-          return null;
-        }
-        const cand: AiToolCandidate = new AiToolCandidate();
-        cand.token = token;
-        cand.why = why;
-        out.push(cand);
-      }
-      return out;
+      return AiTasks.castCandidateList(listObj);
     });
   }
 
+  /**
+   * 裸数组形态探测（D2 专属）：顶层就是数组且元素是候选对象（带非空 token）。
+   * 与 parseJsonSafe 尝试 3 的「数组包裹取首元素」互补——那条路把数组当包裹，
+   * 这条路把数组当**数据本身**。非候选对象数组（如 D1/D3 的包裹形态）返回 null
+   * 交回通用壳处理。
+   */
+  private static parseCandidatesBareArray(text: string, outcome?: ParseOutcome):
+    AiToolCandidate[] | null {
+    let parsed: Object | null = tryParseObject(text);
+    if (parsed !== null) {
+      // 原文直接就是 JSON 对象：不是裸数组形态，交回对象壳
+      return null;
+    }
+    // 直接 parse 失败（栅栏/前后缀包裹）才走剥离路径（与 parseJsonSafe 同口径）
+    const body: string = stripJsonWrapping(text);
+    parsed = tryParseArray(body);
+    if (parsed === null) {
+      return null;
+    }
+    const out: AiToolCandidate[] | null = AiTasks.castCandidateList(parsed);
+    if (out !== null && outcome !== undefined) {
+      outcome.reason = E4_REASON_OK;
+    }
+    return out;
+  }
+
+  /**
+   * 候选数组逐条 cast（对象壳与裸数组壳共用）：
+   * - 空数组 = **合法空态**（结构性差异修复 ②）：意图太泛时模型输出 `{"candidates":[]}`
+   *   是「不确定的宁可不推荐」的正确行为，返回空列表走空态 UI，不再判 E4；
+   * - 单条缺 token **跳过该条**（与 filterAndRank 的单条 drop 精神一致），不再整页拒绝；
+   * - 超上限才是格式不符（返回 null → E4）。
+   */
+  private static castCandidateList(listObj: Object): AiToolCandidate[] | null {
+    if (!Array.isArray(listObj)) {
+      return null;
+    }
+    const list: Array<Object> = listObj as Array<Object>;
+    if (list.length > AI_D2_MAX_CANDIDATES) {
+      return null;
+    }
+    const out: AiToolCandidate[] = [];
+    for (let i: number = 0; i < list.length; i++) {
+      const rec: Object | undefined = list[i];
+      if (rec === undefined || rec === null) {
+        continue;
+      }
+      const recObj: Record<string, Object> = rec as Record<string, Object>;
+      const token: string = typeof recObj['token'] === 'string' ? recObj['token'] as string : '';
+      const why: string = typeof recObj['why'] === 'string' ? recObj['why'] as string : '';
+      if (token.trim().length === 0) {
+        continue;
+      }
+      const cand: AiToolCandidate = new AiToolCandidate();
+      cand.token = token;
+      cand.why = why;
+      out.push(cand);
+    }
+    return out;
+  }
+
   private static readonly D2_SYSTEM: string = '你是 Homebrew 工具推荐助手。根据用户的中文意图，' +
-    '推荐最多 5 个真实存在的通用命令行工具（Homebrew 包名）。只输出 JSON：' +
-    '{"candidates":[{"token":"包名（英文小写）","why":"一句话中文理由"}]}。' +
-    '不得编造包名；不确定的宁可不推荐。';
+    '推荐最多 5 个真实存在的通用命令行工具（Homebrew 包名）。' +
+    '输出 JSON：{"candidates":[{"token":"包名（英文小写）","why":"一句话中文理由"}]}，' +
+    '**candidates 必须是对象里的数组键，不要输出裸数组**；' +
+    '没有合适的推荐就输出 {"candidates":[]}，这是合法结果，不要编造包名。';
 
   // ------------------------------------------------------------ D3 · 报错解读
 
@@ -576,6 +627,19 @@ function tryParseObject(text: string): Object | null {
   try {
     const parsed: Object = JSON.parse(text) as Object;
     if (parsed === null || parsed === undefined || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch (err) {
+    return null;
+  }
+}
+
+/** tryParseArray：JSON.parse 且结果必须是数组时返回，否则 null（裸数组形态探测用）。 */
+function tryParseArray(text: string): Object | null {
+  try {
+    const parsed: Object = JSON.parse(text) as Object;
+    if (parsed === null || parsed === undefined || !Array.isArray(parsed)) {
       return null;
     }
     return parsed;

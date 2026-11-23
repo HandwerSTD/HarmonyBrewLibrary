@@ -41,10 +41,12 @@ export const AI_PROBE_MAX_TOKENS: number = 8;
 
 /**
  * 输出护栏（spec §9 成本护栏）：
- * D1 讲解卡四段合计约 300 token 足够；D2 只回 5 个 `{"token","why"}`；D3 三段各一句话。
+ * D1 讲解卡四段合计约 300 token 足够；D2 只回 5 个 `{"token","why"}`——
+ * 中英混排 5 条候选实测贴近 400，maxTokens 给到 600 留余量（截断即 E4-truncated）；
+ * D3 三段各一句话。
  */
 export const AI_MAX_TOKENS_D1: number = 800;
-export const AI_MAX_TOKENS_D2: number = 400;
+export const AI_MAX_TOKENS_D2: number = 600;
 export const AI_MAX_TOKENS_D3: number = 500;
 
 /**
