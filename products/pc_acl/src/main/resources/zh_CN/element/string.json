@@ -11,6 +11,50 @@
     {
       "name": "custom_sandbox_reason",
       "value": "访问应用沙箱之外的 Homebrew 目录"
+    },
+    {
+      "name": "sentinel_form_name",
+      "value": "更新哨兵"
+    },
+    {
+      "name": "sentinel_form_desc",
+      "value": "Homebrew 软件包更新跟踪"
+    },
+    {
+      "name": "sentinel_card_count",
+      "value": "%d 个软件包可升级"
+    },
+    {
+      "name": "sentinel_card_more",
+      "value": "等 %d 个"
+    },
+    {
+      "name": "sentinel_card_asof",
+      "value": "截至 %s"
+    },
+    {
+      "name": "sentinel_card_empty",
+      "value": "添加后自动跟踪软件包更新"
+    },
+    {
+      "name": "sentinel_card_stale",
+      "value": "打开应用刷新"
+    },
+    {
+      "name": "sentinel_notify_title",
+      "value": "%d 个软件包有新版本"
+    },
+    {
+      "name": "sentinel_notify_body",
+      "value": "%s 等 %d 个包待升级，点按查看升级队列"
+    },
+    {
+      "name": "sentinel_notify_action_upgrade",
+      "value": "全部升级"
+    },
+    {
+      "name": "sentinel_notify_action_later",
+      "value": "稍后"
     }
   ]
 }

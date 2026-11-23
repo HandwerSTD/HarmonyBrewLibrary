@@ -36,6 +36,28 @@
         ]
       }
     ],
+    "extensionAbilities": [
+      {
+        "name": "BrewFormAbility",
+        "srcEntry": "./ets/sentinel/BrewFormAbility.ets",
+        "label": "$string:sentinel_form_name",
+        "description": "$string:sentinel_form_desc",
+        "type": "form",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
+          }
+        ]
+      },
+      {
+        "name": "BrewWorkSchedulerExtension",
+        "srcEntry": "./ets/sentinel/BrewWorkSchedulerExtension.ets",
+        "label": "$string:sentinel_form_name",
+        "description": "$string:sentinel_form_desc",
+        "type": "workScheduler"
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET",

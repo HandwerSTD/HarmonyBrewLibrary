@@ -26,11 +26,13 @@ import {
   Toast,
   ColumnEnum,
 } from '@ohos/common';
+import { TabBarType } from '@ohos/commonbusiness';
 import {
   BrewCommandRunner,
   BrewCommandSheet,
   BrewCommandState,
   BrewCommandStatus,
+  BrewSentinelService,
   brewCommandStatusText,
   isBrewCommandEnded,
 } from '@ohos/brewcommon';
@@ -65,15 +67,67 @@ export struct PcMainPage {
   private commandListener: () => void = () => {
     this.onCommandEnded();
   };
+  /**
+   * 更新哨兵的待处理路由（卡片点击 / 通知「全部升级」进来的）。本组件负责**切到「我的」页签**，
+   * 真正的 pushPath 由「我的」导航栈宿主 MineHomeView 做（路由参数由 PcAbility 从 want 落进来，
+   * 消费后在 MineHomeView 清空）。pc_normal 不会有任何人写这个键，消费逻辑天然不触发。
+   */
+  @StorageProp(StorageKey.SENTINEL_PENDING_ROUTE) @Watch('onSentinelRoutePending') sentinelPendingRoute: string = '';
+  /**
+   * 更新哨兵「稍后」按钮的待处理标记。消费 = 撤通知 + 把当次集合记为已提醒（spec §3.4）。
+   * 纯进程内逻辑，不依赖导航栈就绪。
+   */
+  @StorageProp(StorageKey.SENTINEL_PENDING_DISMISS) @Watch('onSentinelDismissPending') sentinelPendingDismiss: boolean = false;
 
   aboutToAppear(): void {
     // 结束提示由这个顶层宿主负责：它从应用启动到退出一直挂在树上，
     // 页面按钮与侧边栏入口只改 `sheetShown`，不各自弹提示。
     BrewCommandRunner.getInstance().subscribe(this.commandListener);
+    // 冷启动：PcAbility.onCreate 先于 UI 构建，watch 不会触发，这里补一次初始消费
+    this.consumeSentinelRoute();
+    this.consumeSentinelDismiss();
   }
 
   aboutToDisappear(): void {
     BrewCommandRunner.getInstance().unsubscribe(this.commandListener);
+  }
+
+  /** 热路径：应用存活期间点通知/卡片，PcAbility.onNewWant 落键后 watch 直接触发 */
+  private onSentinelRoutePending(): void {
+    this.consumeSentinelRoute();
+  }
+
+  private onSentinelDismissPending(): void {
+    this.consumeSentinelDismiss();
+  }
+
+  /**
+   * 待处理路由 → 切到「我的」页签。
+   *
+   * 只切页签不 push：pushPath 必须发生在 MineHomeView 的 replacePage（MineView 铺底）**之后**，
+   * 否则先 push 的目标页会被 replacePath 顶掉。页签由本组件的 currentIndex 承载，
+   * push 交给「我的」导航栈的宿主——两步的先后顺序由组件生命周期天然保证
+   * （本组件 aboutToAppear 先于子组件 MineHomeView.aboutToAppear）。
+   */
+  private consumeSentinelRoute(): void {
+    if (this.sentinelPendingRoute.length === 0) {
+      return;
+    }
+    this.currentIndex = TabBarType.MINE;
+  }
+
+  /**
+   * 待处理「稍后」→ 撤通知 + 把当次集合记为已提醒（两件事都在服务的 dismissCurrent 里）。
+   * 清键在本组件：消费一次即完成，不等其它组件（MineHomeView 只消费路由键）。
+   */
+  private consumeSentinelDismiss(): void {
+    if (!this.sentinelPendingDismiss) {
+      return;
+    }
+    AppStorage.setOrCreate<boolean>(StorageKey.SENTINEL_PENDING_DISMISS, false);
+    const hostContext: common.UIAbilityContext =
+      this.getUIContext().getHostContext() as common.UIAbilityContext;
+    BrewSentinelService.getInstance().dismissCurrent(hostContext);
   }
 
   /** 命令结束时补一条提示。Sheet 关着才弹 —— Sheet 里已经有状态行了 */

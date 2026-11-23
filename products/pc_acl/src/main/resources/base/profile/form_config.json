@@ -1,0 +1,26 @@
+{
+  "forms": [
+    {
+      "name": "BrewSentinelCard",
+      "displayName": "$string:sentinel_form_name",
+      "description": "$string:sentinel_form_desc",
+      "src": "./ets/sentinel/pages/BrewSentinelCard.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDynamic": true,
+      "isDefault": true,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "09:00",
+      "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "resizable": true,
+      "supportDimensions": [
+        "2*2"
+      ]
+    }
+  ]
+}

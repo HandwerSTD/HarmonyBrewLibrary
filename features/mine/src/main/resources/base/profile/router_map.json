@@ -26,6 +26,11 @@
       "buildFunction": "MinePackagesViewBuilder"
     },
     {
+      "name": "SentinelSettingView",
+      "pageSourceFile": "src/main/ets/view/SentinelSettingView.ets",
+      "buildFunction": "SentinelSettingBuilder"
+    },
+    {
       "name": "BrewSourceSettingView",
       "pageSourceFile": "src/main/ets/view/BrewSourceSettingView.ets",
       "buildFunction": "BrewSourceSettingBuilder"

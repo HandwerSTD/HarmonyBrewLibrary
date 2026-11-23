@@ -11,6 +11,50 @@
     {
       "name": "custom_sandbox_reason",
       "value": "Access the Homebrew prefix outside the app sandbox"
+    },
+    {
+      "name": "sentinel_form_name",
+      "value": "Update Sentinel"
+    },
+    {
+      "name": "sentinel_form_desc",
+      "value": "Homebrew package update tracker"
+    },
+    {
+      "name": "sentinel_card_count",
+      "value": "%d packages can be upgraded"
+    },
+    {
+      "name": "sentinel_card_more",
+      "value": "+%d more"
+    },
+    {
+      "name": "sentinel_card_asof",
+      "value": "As of %s"
+    },
+    {
+      "name": "sentinel_card_empty",
+      "value": "Add to track package updates automatically"
+    },
+    {
+      "name": "sentinel_card_stale",
+      "value": "Open the app to refresh"
+    },
+    {
+      "name": "sentinel_notify_title",
+      "value": "%d packages have new versions"
+    },
+    {
+      "name": "sentinel_notify_body",
+      "value": "%s and %d more pending. Tap to view the upgrade queue"
+    },
+    {
+      "name": "sentinel_notify_action_upgrade",
+      "value": "Upgrade all"
+    },
+    {
+      "name": "sentinel_notify_action_later",
+      "value": "Later"
     }
   ]
 }

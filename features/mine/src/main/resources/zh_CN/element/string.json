@@ -375,6 +375,38 @@
     {
       "name": "statement_content",
       "value": "本应用为独立的第三方客户端，与 Homebrew、Harmonybrew、AtomGit 均无隶属、授权或官方合作关系，相关名称及商标权利归其各自所有者所有。应用内展示的软件包信息来自公开的社区仓库，仅供参考；如有侵权，请与我们联系，我们将及时处理。"
+    },
+    {
+      "name": "sentinel_setting_row",
+      "value": "更新哨兵"
+    },
+    {
+      "name": "sentinel_setting_frequency",
+      "value": "提醒频率"
+    },
+    {
+      "name": "sentinel_freq_off",
+      "value": "关"
+    },
+    {
+      "name": "sentinel_freq_daily",
+      "value": "每天"
+    },
+    {
+      "name": "sentinel_freq_weekly",
+      "value": "每周"
+    },
+    {
+      "name": "sentinel_setting_auth",
+      "value": "桌面通知"
+    },
+    {
+      "name": "sentinel_setting_auth_on",
+      "value": "已开启"
+    },
+    {
+      "name": "sentinel_setting_auth_go",
+      "value": "去开启"
     }
   ]
 }
