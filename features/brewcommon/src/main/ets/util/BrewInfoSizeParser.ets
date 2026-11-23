@@ -34,12 +34,14 @@ export class BrewInfoSizeParser {
   /** 终端着色由 BrewCli 的 HOMEBREW_COLOR 环境位决定，进来先剥一遍 ANSI */
   private static readonly ANSI_RE: RegExp = /\x1b\[[0-9;]*[A-Za-z]/g;
   /**
-   * 版本占用行：`acl 2.4.0 (67 files, 548.2KB) [Linked]`。
-   * 行首 token + 版本 + (N files, 体积)。`[Linked]` 等后缀不进捕获。
+   * 版本占用行：`acl 2.4.0 (67 files, 548.2KB) [Linked]`；
+   * outdated 包是**箭头形态**（设备实测 git-lfs）：
+   * `git-lfs 3.8.0_1 → 3.8.1 (82 files, 14.6MB) [Linked]`——已装版本与最新版都在行内，
+   * 体积归属已装版本，version 捕获已装版本、箭头段跳过。`[Linked]` 等后缀不进捕获。
    * 只匹配这种行：未安装的包不产生它，天然表达「无数据」。
    */
   private static readonly SIZE_LINE_RE: RegExp =
-    /^([A-Za-z0-9][A-Za-z0-9@+._/-]*)\s+(\S+)\s+\((\d+)\s+files?,\s+([^)]+)\)/;
+    /^([A-Za-z0-9][A-Za-z0-9@+._/-]*)\s+(\S+)(?:\s+(?:→|->)\s+\S+)?\s+\((\d+)\s+files?,\s+([^)]+)\)/;
 
   public static parse(stdout: string): BrewInfoSizeResult {
     const result: BrewInfoSizeResult = new BrewInfoSizeResult();

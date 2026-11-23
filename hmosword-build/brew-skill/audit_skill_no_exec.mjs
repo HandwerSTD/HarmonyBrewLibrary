@@ -301,5 +301,21 @@ assert.strictEqual(infoSizes.sizes[1].sizeText, '1.9MB');
 const infoNoSize = BrewInfoSizeParser.parse('wget: stable 1.26.0 (bottled)\nInternet file retriever\n');
 assert.strictEqual(infoNoSize.sizes.length, 0);
 
+// outdated 包的箭头形态（设备实测 git-lfs，2026-11-23）：version 捕获已装版本、箭头段跳过
+const infoArrow = BrewInfoSizeParser.parse(
+  '==> git-lfs: 3.8.0_1 → stable 3.8.1 (bottled)\n' +
+  'Git extension for versioning large files\n' +
+  'git-lfs 3.8.0_1 → 3.8.1 (82 files, 14.6MB) [Linked]\n');
+assert.strictEqual(infoArrow.sizes.length, 1);
+assert.strictEqual(infoArrow.sizes[0].name, 'git-lfs');
+assert.strictEqual(infoArrow.sizes[0].version, '3.8.0_1');
+assert.strictEqual(infoArrow.sizes[0].files, 82);
+assert.strictEqual(infoArrow.sizes[0].sizeText, '14.6MB');
+
+// ASCII 箭头形态同样收
+const infoAsciiArrow = BrewInfoSizeParser.parse('git-lfs 3.8.0_1 -> 3.8.1 (82 files, 14.6MB) [Linked]\n');
+assert.strictEqual(infoAsciiArrow.sizes.length, 1);
+assert.strictEqual(infoAsciiArrow.sizes[0].version, '3.8.0_1');
+
 console.log('audit_skill_no_exec: all green (2 touchpoints, '
-  + (16 + 4 + 3 + 2 + 3) + ' parser cases)');
+  + (16 + 4 + 3 + 2 + 5) + ' parser cases)');
