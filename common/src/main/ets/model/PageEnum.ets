@@ -25,6 +25,8 @@ export enum PageEnum {
   MINE_SETTING_VIEW = 'MineSettingsView',
   /** 「我的 - 设置 - 更新哨兵」子页（features/mine 的 SentinelSettingView） */
   SENTINEL_SETTING_VIEW = 'SentinelSettingView',
+  /** AI 设置页（spec：AI Companion 底座，「我的 - 设置」与详情页 E1 引导共用） */
+  MINE_AI_SETTINGS_VIEW = 'MineAiSettingsView',
   MINE_PACKAGES_VIEW = 'MinePackagesView',
   BREW_SOURCE_SETTING_VIEW = 'BrewSourceSettingView',
   BREW_SOURCE_EDIT_VIEW = 'BrewSourceEditView',

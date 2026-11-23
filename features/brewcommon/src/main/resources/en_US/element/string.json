@@ -613,8 +613,224 @@
       "value": "Run example: %s"
     },
     {
-      "name": "brew_tldr_command_hint",
-      "value": "%s provides the command %s"
+      "name": "ai_settings_title",
+      "value": "AI Settings"
+    },
+    {
+      "name": "ai_settings_provider",
+      "value": "Provider"
+    },
+    {
+      "name": "ai_settings_baseurl",
+      "value": "Base URL"
+    },
+    {
+      "name": "ai_settings_model",
+      "value": "Model"
+    },
+    {
+      "name": "ai_settings_key",
+      "value": "API Key"
+    },
+    {
+      "name": "ai_settings_key_hint",
+      "value": "Stored encrypted on this device only; never logged or cached"
+    },
+    {
+      "name": "ai_settings_key_saved",
+      "value": "Key saved"
+    },
+    {
+      "name": "ai_settings_key_memory_only",
+      "value": "Secure storage unavailable; key lasts for this session only"
+    },
+    {
+      "name": "ai_settings_key_clear",
+      "value": "Clear Key"
+    },
+    {
+      "name": "ai_settings_test",
+      "value": "Test Connection"
+    },
+    {
+      "name": "ai_settings_testing",
+      "value": "Testing…"
+    },
+    {
+      "name": "ai_settings_test_ok",
+      "value": "Connected"
+    },
+    {
+      "name": "ai_settings_test_ok_detail",
+      "value": "Connected · %s · %d ms"
+    },
+    {
+      "name": "ai_settings_save",
+      "value": "Save"
+    },
+    {
+      "name": "ai_settings_saved",
+      "value": "Saved"
+    },
+    {
+      "name": "ai_settings_invalid",
+      "value": "Fill in the base URL and model first"
+    },
+    {
+      "name": "ai_d1_button",
+      "value": "AI Explainer"
+    },
+    {
+      "name": "ai_d1_loading",
+      "value": "Generating AI explainer…"
+    },
+    {
+      "name": "ai_d1_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "ai_d1_regen",
+      "value": "Regenerate"
+    },
+    {
+      "name": "ai_d1_badge",
+      "value": "AI generated · for reference only"
+    },
+    {
+      "name": "ai_d1_section_scenarios",
+      "value": "Use cases"
+    },
+    {
+      "name": "ai_d1_section_caveats",
+      "value": "Caveats"
+    },
+    {
+      "name": "ai_d1_section_steps",
+      "value": "Three steps to start"
+    },
+    {
+      "name": "ai_d2_entry",
+      "value": "AI Tool Finder"
+    },
+    {
+      "name": "ai_d2_hint",
+      "value": "Describe your task, e.g. batch-compress images"
+    },
+    {
+      "name": "ai_d2_search",
+      "value": "Find tools"
+    },
+    {
+      "name": "ai_d2_fallback_notice",
+      "value": "AI not configured; switched to offline word list"
+    },
+    {
+      "name": "ai_d2_empty",
+      "value": "No matching tools found"
+    },
+    {
+      "name": "ai_d2_empty_hint",
+      "value": "Try rephrasing, e.g. \"batch-compress images\""
+    },
+    {
+      "name": "ai_d2_badge",
+      "value": "AI nominated · ranked locally"
+    },
+    {
+      "name": "ai_d3_button",
+      "value": "AI Explain Failure"
+    },
+    {
+      "name": "ai_d3_loading",
+      "value": "Generating AI explanation…"
+    },
+    {
+      "name": "ai_d3_badge",
+      "value": "AI explanation, for reference only"
+    },
+    {
+      "name": "ai_d3_section_what",
+      "value": "What happened"
+    },
+    {
+      "name": "ai_d3_section_causes",
+      "value": "Possible causes"
+    },
+    {
+      "name": "ai_d3_section_next",
+      "value": "Next steps"
+    },
+    {
+      "name": "ai_error_e1",
+      "value": "AI key not configured"
+    },
+    {
+      "name": "ai_error_e1_action",
+      "value": "Set up"
+    },
+    {
+      "name": "ai_error_e2",
+      "value": "Network unavailable, try again later"
+    },
+    {
+      "name": "ai_error_e3",
+      "value": "Request timed out, try again later"
+    },
+    {
+      "name": "ai_error_e4",
+      "value": "Unexpected response format, try again"
+    },
+    {
+      "name": "ai_error_e5",
+      "value": "This content cannot be explained"
+    },
+    {
+      "name": "ai_provider_deepseek",
+      "value": "DeepSeek"
+    },
+    {
+      "name": "ai_provider_custom",
+      "value": "Custom endpoint"
+    },
+    {
+      "name": "ai_error_e4_truncated",
+      "value": "Output was truncated, please retry"
+    },
+    {
+      "name": "ai_error_e4_detail_fence",
+      "value": "Unexpected response format (output is not valid JSON)"
+    },
+    {
+      "name": "ai_error_e4_detail_truncated",
+      "value": "Unexpected response format (output was truncated, please retry)"
+    },
+    {
+      "name": "ai_error_e4_detail_schema",
+      "value": "Unexpected response format (field validation failed)"
+    },
+    {
+      "name": "ai_error_e4_detail_nonjson",
+      "value": "Unexpected response format (endpoint returned non-JSON content; check the endpoint URL and API key)"
+    },
+    {
+      "name": "ai_error_e5_detail",
+      "value": "Request rejected (%s)"
+    },
+    {
+      "name": "ai_settings_auto_explain",
+      "value": "Auto-generate AI explanation"
+    },
+    {
+      "name": "ai_settings_auto_explain_hint",
+      "value": "Generate explanation automatically on detail page open; turn off to require tapping \"AI explain\""
+    },
+    {
+      "name": "ai_d2_related",
+      "value": "In catalog"
+    },
+    {
+      "name": "brew_cat_formula_lib",
+      "value": "Libraries & Frameworks"
     }
   ]
 }

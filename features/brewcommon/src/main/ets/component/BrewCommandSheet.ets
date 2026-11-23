@@ -10,6 +10,8 @@ import {
   BrewCommandStatus,
   brewCommandStatusText,
 } from '../model/BrewCommandModels';
+import { BrewAiFailureCard } from './BrewAiFailureCard';
+import { BrewCli } from '../service/BrewCli';
 import { BrewTextSegment, TERM_TEXT_COLOR } from '../util/BrewAnsi';
 
 /** 日志字体。设备自带的等宽字体；取不到时系统回退到默认字体 */
@@ -193,10 +195,66 @@ export struct BrewCommandSheet {
     .padding($r('sys.float.padding_level6'))
   }
 
+  /** D3 入口的显隐（G8：未配 Key 不出现；pc_normal 无执行通道也不出现——随 BREW_CLI_ENABLED）。 */
+  private aiCardVisible(): boolean {
+    // pc_normal 没有 brew 执行通道，这个 Sheet 理论上不会被打开；但侧边栏「执行记录」等
+    // 路径仍可能触发，这里再守一道：能力开关关闭时 D3 一并隐藏（G12/G13 的防线）。
+    if (!BrewCli.isEnabled()) {
+      return false;
+    }
+    return BrewAiFailureCard.buttonVisible();
+  }
+
+  /** 失败输出尾部的收集：行缓冲按 stderr/stdout 分开取尾部（spec §6 的截断在任务层）。 */
+  private tailOf(isStderr: boolean): string {
+    let text: string = '';
+    this.state.lines.forEach((line: BrewCommandLine) => {
+      if (line.stderr === isStderr) {
+        text += line.text + '\n';
+      }
+    });
+    return text;
+  }
+
+  /** 从命令参数提取 token（最后一个非选项词）。取不到为空串（全量升级等命令无 token）。 */
+  private tokenOf(): string {
+    const words: string[] = this.state.args.split(' ');
+    for (let i: number = words.length - 1; i >= 0; i--) {
+      const word: string = words[i];
+      if (word.length > 0 && word !== '--cask' && word !== '--formula') {
+        return word;
+      }
+    }
+    return '';
+  }
+
   build() {
     Navigation() {
       Scroll(this.scroller) {
-        this.LogText()
+        Column() {
+          this.LogText()
+
+          // D3 · AI 解读失败原因（spec §6）：只在失败终态（非零退出 / 超时 / 启动失败）出现；
+          // 中断（用户自己结束）不算「用户可读失败」，不出入口。
+          if (this.state.status === BrewCommandStatus.FAILED ||
+            this.state.status === BrewCommandStatus.TIMEOUT) {
+            if (this.aiCardVisible()) {
+              Column() {
+                BrewAiFailureCard({
+                  command: this.state.command,
+                  stderrTail: this.tailOf(true),
+                  stdoutTail: this.tailOf(false),
+                  failureKind: this.state.status === BrewCommandStatus.TIMEOUT ? 'timeout' : 'failed',
+                  token: this.tokenOf(),
+                })
+              }
+              .width(CommonConstants.FULL_PERCENT)
+              .padding($r('sys.float.padding_level6'))
+            }
+          }
+        }
+        .width(CommonConstants.FULL_PERCENT)
+        .alignItems(HorizontalAlign.Start)
       }
       .width(CommonConstants.FULL_PERCENT)
       .height(CommonConstants.FULL_PERCENT)

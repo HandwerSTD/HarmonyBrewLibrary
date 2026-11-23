@@ -1,0 +1,1 @@
+# @hmkit/ai does not require additional consumer obfuscation rules.

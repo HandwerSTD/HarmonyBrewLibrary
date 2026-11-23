@@ -1,0 +1,33 @@
+{
+  "_note": "AI 帮我找工具 · 中文任务词表（离线降级，spec §5）。28 条高频中文任务 → 目录内候选 token。结构由 hmosword-build/brew-ai/check_taskwords.py 校验（token 存在性 + 规模 ≥20）。匹配口径：意图归一化后与 task 相等或以 task 为前缀。",
+  "words": [
+    { "task": "压缩图片", "tokens": ["imagemagick", "ffmpeg"], "note": "批量压缩/转换图片格式" },
+    { "task": "图片格式转换", "tokens": ["imagemagick", "ffmpeg"], "note": "png/jpg/webp 互转" },
+    { "task": "录屏", "tokens": ["ffmpeg"], "note": "命令行屏幕录制" },
+    { "task": "查看端口占用", "tokens": ["lsof", "netcat", "nmap"], "note": "lsof -i :PORT 查监听进程" },
+    { "task": "下载视频", "tokens": ["yt-dlp", "ffmpeg"], "note": "从视频网站拉取" },
+    { "task": "视频转码", "tokens": ["ffmpeg"], "note": "格式/分辨率/码率转换" },
+    { "task": "批量重命名", "tokens": ["mmv", "rename"], "note": "按规则批量改名" },
+    { "task": "查找文件", "tokens": ["fd", "ripgrep", "findutils"], "note": "fd 按名找，rg 按内容找" },
+    { "task": "搜索文件内容", "tokens": ["ripgrep", "the_silver_searcher"], "note": "极速全文搜索" },
+    { "task": "查看目录大小", "tokens": ["dust", "ncdu", "dua-cli"], "note": "交互式磁盘占用分析" },
+    { "task": "压缩解压", "tokens": ["zstd", "p7zip", "xz"], "note": "高压缩比 / 通用压缩包" },
+    { "task": "查看进程", "tokens": ["htop", "btop", "procs"], "note": "交互式进程监视" },
+    { "task": "监控网速", "tokens": ["iftop", "bandwhich", "vnstat"], "note": "按进程/连接看流量" },
+    { "task": "文本处理", "tokens": ["jq", "gnu-sed", "gawk"], "note": "json 解析 / 流编辑 / 列处理" },
+    { "task": "格式化json", "tokens": ["jq"], "note": "查询、格式化与校验 JSON" },
+    { "task": "git操作", "tokens": ["git", "gh", "git-delta"], "note": "版本控制与 GitHub CLI" },
+    { "task": "代码搜索", "tokens": ["ripgrep"], "note": "面向代码库的全文搜索" },
+    { "task": "下载文件", "tokens": ["wget", "curl", "aria2"], "note": "断点续传 / 多线程下载" },
+    { "task": "测试网速", "tokens": ["speedtest-cli"], "note": "命令行测速" },
+    { "task": "管理python版本", "tokens": ["pyenv", "python@3.12", "uv"], "note": "多版本共存与切换" },
+    { "task": "管理node版本", "tokens": ["node", "fnm", "pnpm"], "note": "Node 多版本与包管理" },
+    { "task": "容器管理", "tokens": ["docker", "docker-compose", "lima"], "note": "本机容器与虚拟机" },
+    { "task": "数据库", "tokens": ["postgresql@16", "redis", "sqlite"], "note": "常用本地数据库" },
+    { "task": "终端美化", "tokens": ["starship", "zsh-autosuggestions", "zsh-syntax-highlighting"], "note": "提示符与补全增强" },
+    { "task": "文件同步", "tokens": ["rsync", "rclone"], "note": "本地/远端同步与备份" },
+    { "task": "加密文件", "tokens": ["gnupg", "openssl@3", "age"], "note": "签名、加密与密钥管理" },
+    { "task": "查看系统信息", "tokens": ["fastfetch", "bottom"], "note": "硬件与系统概览" },
+    { "task": "写文档", "tokens": ["pandoc", "glow"], "note": "markdown 转换与终端阅读" }
+  ]
+}

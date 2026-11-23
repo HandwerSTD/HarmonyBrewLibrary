@@ -73,7 +73,9 @@ export {
   BREW_SEARCH_SCORE_WORD,
 } from './src/main/ets/model/BrewSearchEngine';
 
-export type { BrewSearchEntry, BrewSearchHit } from './src/main/ets/model/BrewSearchEngine';
+export type { BrewSearchHit } from './src/main/ets/model/BrewSearchEngine';
+// BrewSearchEntry 是值导出（AI 找工具的目录索引要 new 它），与 BrewSearchHit 分开。
+export { BrewSearchEntry } from './src/main/ets/model/BrewSearchEngine';
 
 // ---------------------------------------------------------------- 常量
 
@@ -114,6 +116,10 @@ export type { DescShardOutcome } from './src/main/ets/service/BrewMetaSync';
 
 export { BrewCommandGenerator } from './src/main/ets/util/BrewCommandGenerator';
 
+// tokenId（token → 稳定 id 的决定性哈希）是路由与缓存键的公共口径，
+// AI 找工具的结果行也要走同一套 id，所以从 brewcommon 导出。
+export { BrewBrowseBuilder } from './src/main/ets/service/BrewBrowseBuilder';
+
 // 设备上的 brew 调用口径：路径发现、环境前缀、命令行拼装。读取与执行共用同一份。
 export { BrewCli } from './src/main/ets/service/BrewCli';
 
@@ -136,6 +142,9 @@ export { BrewAnsiParser, BrewTextSegment } from './src/main/ets/util/BrewAnsi';
 
 // 执行 Sheet 的内容组件，两个页面共用一份。
 export { BrewCommandSheet } from './src/main/ets/component/BrewCommandSheet';
+
+// D3 · AI 报错解读卡（执行 Sheet 失败终态的附加卡；G13：下一步只有复制、没有执行入口）。
+export { BrewAiFailureCard } from './src/main/ets/component/BrewAiFailureCard';
 
 // 标题栏模糊：brew 所有页共用一份实现（区间位置/长度只在 BrewTitleBar.ets 里定义）。
 // 改模糊表现只改这里 —— 各页原先各写一份，结果出现「有的页没有渐变、有的页先空行程再猛增」。
@@ -290,6 +299,49 @@ export {
   SENTINEL_WORK_INTERVAL_MS,
   SENTINEL_WORK_SCHEDULER_ENABLED,
 } from './src/main/ets/constant/SentinelConstants';
+// ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3）
+
+export { AiClient } from './src/main/ets/service/AiClient';
+export { AiErrorDetail } from './src/main/ets/util/AiErrorDetail';
+export { AiSettingsStore } from './src/main/ets/service/AiSettingsStore';
+export { AiCache, AiCacheRead, AiCacheReadResult, AiCacheEnvelope } from './src/main/ets/service/AiCache';
+export { AiTasks } from './src/main/ets/service/AiTasks';
+export {
+  AiError,
+  AiErrorKind,
+  AiProviderConfig,
+  AiSettingsSnapshot,
+  AiExplainCard,
+  AiToolCandidate,
+  AiToolResult,
+  AiFailureCard,
+  AiExplainInput,
+  AiFailureInput,
+  AiIntentInput,
+  isKnownAiProvider,
+  d2CandidateCap,
+} from './src/main/ets/model/AiTypes';
+export {
+  AI_PROMPT_VERSION_D1,
+  AI_PROMPT_VERSION_D2,
+  AI_CACHE_TTL_D1_MS,
+  AI_CACHE_TTL_D2_MS,
+  AI_PROMPT_MAX_CHARS,
+  AI_D3_STDERR_TAIL_CHARS,
+  AI_D3_STDOUT_TAIL_CHARS,
+  AI_TASKWORDS_RAWFILE,
+  AI_TASKWORDS_MIN_COUNT,
+  AI_D2_MAX_CANDIDATES,
+  AI_D2_RESULT_LIMIT,
+  AI_TIMEOUT_MS,
+  AI_PROVIDER_DEEPSEEK,
+  AI_PROVIDER_CUSTOM,
+  AI_DEEPSEEK_BASE_URL,
+  AI_DEEPSEEK_DEFAULT_MODEL,
+  AI_ASSET_ALIAS_API_KEY,
+  AI_PREFS_KEY_AUTO_EXPLAIN,
+} from './src/main/ets/constant/AiConstants';
+export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
 
 // ------------------------------------------------------------------ 本机包（设备上的 brew 安装记录）
 

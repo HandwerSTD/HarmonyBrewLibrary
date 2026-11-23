@@ -62,7 +62,23 @@
 
 ### 3.2 AiClient（`features/brewcommon/service/AiClient.ets`）
 
-- **AI infra 依赖（需求方指定）**：模型调用基础设施使用 `ohpm install @hmkit/ai`（ohpm 三方库，经 `oh-package.json5` 声明依赖）；AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按 §3.1 设置与存储；`@hmkit/ai` 的初始化参数与能力边界（response_format 支持、流式、错误结构）编码第一天以最小样例核对，结论写回本节。
+- **AI infra 依赖（需求方指定；2026-11-22 起改为 vendor 源码引入）**：模型调用基础设施使用
+  `@hmkit/ai`（upstream `https://github.com/lxshwyan/hmkit-ai`，MIT）。原以 ohpm 包依赖引入；
+  真机接自建 OpenAI 兼容端点（one-api 类网关）时暴露其流式解析缺陷（见下），需求方指示改为
+  **vendor 源码引入**：`features/hmkit-ai/`（module 名 `ai`，HAR），主工程以
+  `file:./features/hmkit-ai` 路径依赖，来源与全部本地改动登记在 `features/hmkit-ai/NOTICE.md`。
+  AiClient 封装该库，不手写 HTTP 调用 OpenAI 兼容端点。BYOK 的 baseURL / Key / model 仍按
+  §3.1 设置与存储。
+- **vendor 缺陷修复（2026-11-22，真机日志定位）**：upstream 2.0.0 的
+  `OpenAIStreamDecoder.consumeEvent` 只拦 `chunk.usage !== undefined`，拦不住 JSON null——
+  OpenAI 流式协议允许 chunk 不带 usage（`stream_options.include_usage` 只保证最后一个 chunk
+  带），one-api 类网关转发时全链路 `"usage": null`，`consumeUsage(null)` 读
+  `null.prompt_tokens` 崩出 PROTOCOL → 上层误报 E4「响应格式异常」。vendor 源码修复：
+  `chunk.model / chunk.usage / chunk.choices` 判空补 `!== null`，`consumeUsage` 入口
+  `undefined || null` 兜底，`choices` / `tool_calls` 元素判空跳过；`ResponsesDecoder` 同款
+  陷阱预防（`event.item / event.response / response.usage` 补 null）。曾实现过「兼容模式
+  （非流式 POST）」绕行层，根因修复后按决策整体移除（设置页 Toggle、`AiProviderConfig`
+  开关、偏好键、`AiClient` 非流式路径），不留死代码。
 - **兼容性修复（2026-11-22，自建 chat completions 端点实测）**：① `AiTasks.parseJsonSafe` 解析前先剥离 markdown 代码栅栏（```json … ```）与首尾非 JSON 字符（取首个 `{` 到最后一个 `}`），自建网关 / 忽略 response_format 的端点常输出包裹文本；② `finish_reason === 'length'`（max_tokens 截断导致 JSON 不完整）显式归 E4，错误文案「输出被截断，请重试」——此前 finishReason 被忽略、截断输出只会以「schema mismatch」面目出现；③ D1 `steps` 放宽为 2–3 条（`isValid` 同步放宽），部分模型习惯输出两条步骤。
 - 非流式 chat completion；超时 15s；**不自动重试**（全部显式触发场景，用户自己重试）。
 - 输入截断：prompt 总长上限 8KB（超出按 §4/§6 各自的截断规则）。
@@ -81,12 +97,25 @@
 
 ## 4. D1 · AI 讲解卡（详情页）
 
-- **入口**：详情页「AI 讲解」按钮（描述分区之后、用法示例之前；显式触发，不自动消耗）。
+- **入口**：详情页「AI 讲解」按钮（**元信息条之后、各分区（首个为「提供的命令」）之前**——
+  2026-11-23 定稿口径：页面顺序 Hero → 生命周期 → 安装命令卡 → 元信息条 → AI 讲解卡 →
+  sections → caveats → 同分类；命令卡是刚性的、讲解是增强的。触发分显式与自动生成，见下）。
 - **输入（grounding 严格限定）**：`token`、`desc`、`caveats`、`dependencies`（全部来自既有详情数据）；可选注入 tldr 说明段。总长超限先截 caveats。
 - **输出 JSON**：`{定位一句话, 适用场景[≤3], 注意与坑[≤3]（caveats 中文化 + 风险点）, 上手三步[3]}`。
 - **prompt 约束**：system 声明——中文、仅基于提供的字段、不得虚构版本号 / 命令 / 功能、无法判断就直说。
 - **渲染**：结构化卡（标题 + 四段），底部「AI 生成 · 仅供参考」角标 + 重新生成按钮；缓存命中直接渲染（G3）。
+  - **空字段不显示原则**：某数组为空则对应分区整体不渲染，**不渲染任何「暂无 / 未提供」占位**（prompt 侧同步要求模型输出 []，宁缺勿凑）；
+  - **渲染基调**：像一段讲解、不是一张表——分区标题是弱化引导词（Normal 字重 + tertiary 色），要点行无符号、靠缩进表达从属；
+  - 校验配套：`AiExplainCard.isValid()` 中 summary 必填，scenarios 放宽为 0–3（空字段原则下模型可输出 []），caveats ≤3、steps 2–3 不变。
 - **失败**：E1 → 引导进 AI 设置；E2/E3/E4 → 卡内重试按钮；任何失败不阻塞详情页其它分区。
+- **自动生成（2026-11-23，默认开）**：AI 设置页「自动生成 AI 讲解」开关
+  （`ai_settings_auto_explain`，偏好键 `AI_PREFS_KEY_AUTO_EXPLAIN`，布尔单独存不进 config
+  JSON；仅已配 Key 时显示该开关）。开 = 详情页装配时替用户点一次按钮——缓存命中秒开
+  （G3）、stale-while-revalidate 原样复用（G10），重复进入同一包不重复调用（TTL 内走缓存）；
+  **无 Key 时恒不自动请求也不显示引导**（避免每个详情页推销 AI，判据
+  `AiSettingsStore.autoExplain()` 恒回 false）。**失败静默**：自动模式的请求失败不显示
+  错误卡（用户没主动要求），入口按钮保持原位可手动重试；手动点击的失败照常分级展示。
+  关 = 现状的显式按钮触发。
 
 ---
 
@@ -97,7 +126,13 @@
   1. 意图 → AiClient：system 要求输出 `[{token, why}]`（≤5 个、真实存在的通用 CLI 名）；
   2. **目录成员过滤**：候选 token 逐一对照本地目录索引，目录外一律丢弃（防 slopsquatting；丢弃计数进日志，G5）；
   3. **引擎排序**：存活候选交给 `BrewSearchEngine` 按相关性重排——**AI 只提名，引擎排序**；
-  4. 渲染结果列表（token + why + 查看）；点进详情页后主线二的其它能力（讲解 / 示例）自然衔接。
+  4. **目录补充召回（2026-11-23，两召回源互补）**：过滤排序后结果不足 8 行时，用意图原文再跑一次
+     `BrewSearchEngine.rank`，取未被 AI 候选覆盖的条目补足到 8 行封顶——LLM 的知识里没有
+     Harmonybrew 特有包（如 deepseekharness 这类鸿蒙生态 token，训练语料里没有），提名阶段就
+     不会出现，但本地目录索引有。补充行的 why 为空、渲染层打「目录相关」标记
+     （`ai_d2_related`）与 AI 提名行区分；这些行**来自目录本身**，G5 无幻觉风险。
+     空态同样受益：AI 候选全空时仍可能有目录相关结果；
+  5. 渲染结果列表（token + why + 查看）；点进详情页后主线二的其它能力（讲解 / 示例）自然衔接。
 - **空态**：过滤后为空 → 「没有找到匹配的工具」+ 改述建议；**目录外的名字零展示**。
 - **28 中文任务词直查（离线降级）**：无 Key / 断网时自动切换：`rawfile/ai/taskwords.json` 策展表（「压缩图片 → [imagemagick, ffmpeg]」……）精确 / 前缀匹配意图 → 引擎排序。策展清单进 `generate.py` 校验（结构与 token 存在性）。
 
@@ -137,6 +172,26 @@
 > 导致 JSON 不完整——代码未读 finishReason。④Schema 校验过严（如 D1 `steps` 必须恰好 3 条）。
 > 修复项（已实施，见 §3.2）：解析前剥离代码栅栏与首尾非 JSON 文本；`finish_reason=length` 归 E4 并
 > 提示「输出被截断，请重试（模型输出过长）」；`steps` 放宽为 2–3 条。
+>
+> **排查记录三（2026-11-23，真机日志 Key 保存退内存）**：`asset remove before add failed,
+> code=401` → `asset add failed, code=24000003 (DUPLICATED)` → `store=memory`。因果链：
+> 保存逻辑「先 removeSync 删旧值再 addSync」意图正确，但 **removeSync 复用了 add 的
+> AssetMap 当查询条件，map 里装着 SECRET**——remove 的入参是查询条件，带无关属性返回
+> 401（INVALID_ARGUMENT），不是 NOT_FOUND 所以没被静默跳过 → 旧值没删掉 → add 撞
+> 24000003 → 外层 catch 误判「Asset 不可用」退内存。**Asset 服务本身没有任何问题。**
+> 修复：remove 与 add 的 AssetMap 分开构造（remove 只带 ALIAS）；24000003 当场自愈
+> （remove 后重试一次 add，成功走 `store=asset (after conflict retry)`）；removeApiKey
+> 同款一并修。教训：AssetMap 是「查询条件」语义，复用 add 的 map 做查询会把数据属性
+> 带进条件；401 ≠ NOT_FOUND，两者都不该触发「服务不可用」的降级。
+>
+> **排查记录二（2026-11-22 续，真机日志 `complete fail code=protocol msg=无法解析模型流式响应：
+> Cannot read property prompt_tokens of null`）**：真因在 `@hmkit/ai` 2.0.0 自身——流式 chunk 的
+> `"usage": null`（OpenAI 协议允许；one-api 类网关全链路如此）穿过 `!== undefined` 栅栏，
+> `consumeUsage(null)` 读 `null.prompt_tokens` 崩 PROTOCOL 被误报为 E4。处置：`@hmkit/ai` 改
+> **vendor 源码引入**（`features/hmkit-ai/`，NOTICE.md 登记改动），decoder 判空补 `!== null`
+> 直接修根因；曾加的「兼容模式（非流式）」绕行层（设置页 Toggle + 非流式 POST 路径）随之整体
+> 移除。伴随的观测增强（E4 reason 四分 fence/truncated/schema/nonjson、E5 body 前 120 字节
+> 脱敏直达 UI、`complete head=` 打点）保留——本次报障能 10 分钟定位到根因，靠的就是它们。
 | E5 | Provider 内容安全拒绝 | 显示「该包内容无法生成讲解」 | 显示「该意图无法处理」 | 显示「无法解读」 |
 | E6 | 用户取消 | 骨架消失，无痕 | 输入保留 | 卡片收起 |
 
@@ -162,6 +217,9 @@
 | `ai_settings_provider` | 服务商 |
 | `ai_settings_key` | API Key |
 | `ai_settings_test` | 测试连接 |
+| `ai_settings_test_ok_detail` | 连接成功 · %s · %d ms（带参资源；**禁止模板字符串内插 `$r()`**——Resource 对象会 toString 成 `[object Object]`） |
+| `ai_settings_auto_explain` | 自动生成 AI 讲解 |
+| `ai_settings_auto_explain_hint` | 进入详情页时自动生成讲解；关闭后需手动点击「AI 讲解」按钮 |
 | `ai_d1_button` | AI 讲解 |
 | `ai_d1_badge` | AI 生成 · 仅供参考 |
 | `ai_d2_entry` | AI 帮我找工具 |
@@ -181,7 +239,7 @@
 | 模块 | 改动 |
 |---|---|
 | `features/brewcommon` | 新增 `service/AiClient.ets`、`service/AiSettingsStore.ets`（Asset Store 封装）、`model/AiTypes.ets`（D1/D2/D3 的请求 / 响应 / 错误类型）、`constant/AiConstants.ets`（promptVersion / TTL / 截断常量）、`util/AiTaskWords.ets`（28 词表加载与匹配） |
-| `features/brewdetail` | AI 讲解卡组件 + 装配（描述分区之后、tldr 之前） |
+| `features/brewdetail` | AI 讲解卡组件 + 装配（安装命令卡之前） |
 | `features/brewsearch` | 「AI 帮我找工具」入口 + 结果列表 + 词表降级 |
 | `features/mine` | AI 设置页（provider / baseURL / Key / model / 测试连接） |
 | 执行 Sheet | 失败终态新增 D3 入口与结果卡（不动执行链路） |

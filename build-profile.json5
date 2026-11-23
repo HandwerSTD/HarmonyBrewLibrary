@@ -157,6 +157,10 @@
     {
       "name": "pcnative",
       "srcPath": "./features/pcnative"
+    },
+    {
+      "name": "ai",
+      "srcPath": "./features/hmkit-ai"
     }
   ]
 }

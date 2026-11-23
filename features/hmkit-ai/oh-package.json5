@@ -1,0 +1,27 @@
+{
+  "name": "@hmkit/ai",
+  "version": "2.0.0",
+  "description": "HarmonyOS NEXT 多供应商、多模态、Agent、RAG、语音与 ArkUI AI 组件（vendor 源码引入）",
+  "main": "Index.ets",
+  "oh-exports": ["Index.ets"],
+  "author": {
+    "name": "hmkit",
+    "url": "https://github.com/lxshwyan"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/lxshwyan/hmkit-ai",
+  "repository": "https://github.com/lxshwyan/hmkit-ai.git",
+  "keywords": [
+    "ai",
+    "llm",
+    "chat",
+    "openai-compatible",
+    "responses-api",
+    "multimodal",
+    "agent",
+    "rag",
+    "harmonyos",
+    "arkui"
+  ],
+  "dependencies": {}
+}

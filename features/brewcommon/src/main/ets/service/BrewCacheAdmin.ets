@@ -10,6 +10,7 @@ import { TLDR_CACHE_ROOT } from '../constant/TldrConstants';
 import { BrewSource, BrewSourceCacheStats } from '../model/BrewSourceModels';
 import { objKeys } from '../util/objkeys';
 import { TldrService } from './TldrService';
+import { AiCache } from './AiCache';
 import { BrewCacheEpoch } from './BrewCacheEpoch';
 import { BrewCatalogFile } from './BrewCatalogFile';
 import { BrewService } from './BrewService';
@@ -111,6 +112,9 @@ export class BrewCacheAdmin {
       // 必须先删目录正文与源目录，再清 store。`BrewCatalogFile.readRange` 在偏移表
       // 缺失时会从正文重建索引继续供数，正文留着就清不干净。
       BrewCatalogFile.delete(sourceId);
+      // AI 缓存与源无关，但「清空缓存」的用户语义是「把下载/生成的东西都清掉」，
+      // 所以每一次 clear 都顺手清 `brew_live/ai`（幂等：目录不存在时是空操作）。
+      AiCache.clearAll();
       const store: preferences.Preferences | null = BrewSourcePrefs.openFor(sourceId);
       if (store !== null) {
         try {

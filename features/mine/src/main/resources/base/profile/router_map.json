@@ -39,6 +39,11 @@
       "name": "BrewSourceEditView",
       "pageSourceFile": "src/main/ets/view/BrewSourceEditView.ets",
       "buildFunction": "BrewSourceEditBuilder"
+    },
+    {
+      "name": "MineAiSettingsView",
+      "pageSourceFile": "src/main/ets/view/AiSettingView.ets",
+      "buildFunction": "AiSettingViewBuilder"
     }
   ]
 }

@@ -1,0 +1,2 @@
+# Keep exported public API names stable for consumers.
+-keep-global-name

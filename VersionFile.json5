@@ -3,6 +3,5 @@
   "dependencies": {
     "hypium-version": "1.0.19",
     "hamock-version": "1.0.0",
-    "imageknife-version": "3.2.8",
   }
 }
