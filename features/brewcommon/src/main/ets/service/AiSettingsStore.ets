@@ -52,22 +52,26 @@ export class AiSettingsStore {
       return AiSettingsStore.removeApiKey();
     }
     try {
-      const attrs: asset.AssetMap = new Map<asset.Tag, asset.Value>();
-      attrs.set(asset.Tag.SECRET, AiSettingsStore.toBytes(trimmed));
-      attrs.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
-      // ACCESSIBILITY 用默认值（省略该属性 = DEVICE_FIRST_UNLOCKED，首次解锁后可访问，
-      // 未设锁屏密码时等同开机可访问——对 PC/2in1 无锁屏密码场景最宽容）。
-      // 此前的 DEVICE_POWERED_ON 是高嫌疑错误源：部分设备/ROM 上该枚举与锁屏
-      // 状态校验的交互有差异（24000005 锁屏状态不匹配 / 24000004 访问被拒绝）。
+      // add 与 remove 的 AssetMap **必须分开构造**（排查记录三的根因）：
+      // remove 的入参是查询条件，带 SECRET 等无关属性会返回 401（INVALID_ARGUMENT，
+      // 参数不合法）——旧值删不掉，addSync 撞 24000003（DUPLICATED），连锁误判
+      // 「Asset 不可用」退内存。remove 只带 ALIAS。
+      const removeMap: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+      removeMap.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
       try {
-        // 先删旧值：asset 对同 alias 的重复 add 抛 24000003。remove 的 NOT_FOUND 不是错误。
-        asset.removeSync(attrs);
+        // remove 的 NOT_FOUND（24000002）= 本来就没有旧值，不是错误。
+        asset.removeSync(removeMap);
       } catch (removeErr) {
         const rmErr: BusinessError = removeErr as BusinessError;
         if (rmErr.code !== asset.ErrorCode.NOT_FOUND) {
           Logger.warn(TAG, `asset remove before add failed, code=${rmErr.code}`);
         }
       }
+      const attrs: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+      attrs.set(asset.Tag.SECRET, AiSettingsStore.toBytes(trimmed));
+      attrs.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
+      // ACCESSIBILITY 省略 = 用默认值 DEVICE_FIRST_UNLOCKED（首次解锁后可访问，
+      // 未设锁屏密码时等同开机可访问，对 PC/2in1 无锁屏密码场景最宽容，官方推荐形态）。
       asset.addSync(attrs);
       AiSettingsStore.memoryKey = '';
       AiSettingsStore.keyAvailable = true;
@@ -75,10 +79,31 @@ export class AiSettingsStore {
       return '';
     } catch (err) {
       const e: BusinessError = err as BusinessError;
-      // 错误码打全供真机日志诊断（24000001 服务不可用 / 24000005 锁屏不匹配 /
-      // 24000018 参数校验失败 / 24000004 访问被拒绝——含义见 asset 错误码表）。
+      // 24000003（DUPLICATED）= 可自愈的冲突（旧值在 remove 之前的窗口里出现了，
+      // 极端时序）：remove 后重试一次 add，成功即走正常持久路径——**这不是
+      // 「Asset 不可用」**，不该退内存。
+      if (e.code === asset.ErrorCode.DUPLICATED) {
+        try {
+          const removeMap: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+          removeMap.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
+          asset.removeSync(removeMap);
+          const retry: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+          retry.set(asset.Tag.SECRET, AiSettingsStore.toBytes(trimmed));
+          retry.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
+          asset.addSync(retry);
+          AiSettingsStore.memoryKey = '';
+          AiSettingsStore.keyAvailable = true;
+          Logger.info(TAG, `key saved ok=true store=asset (after conflict retry)`);
+          return '';
+        } catch (retryErr) {
+          const rErr: BusinessError = retryErr as BusinessError;
+          Logger.error(TAG, `asset conflict retry failed, code=${rErr.code}, msg=${rErr.message}`);
+        }
+      }
+      // 错误码打全供真机日志诊断（含义见 asset 错误码表：24000001 服务不可用 /
+      // 24000004 拒绝 / 24000005 锁屏不匹配 / 401 参数不合法）。
       Logger.error(TAG, `asset add failed, code=${e.code}, msg=${e.message}`);
-      // Asset 不可用：退进程内存（spec §13 方案 B 的保守形态——不落盘版本）。
+      // Asset 真不可用：退进程内存（spec §13 方案 B 的保守形态——不落盘版本）。
       AiSettingsStore.memoryKey = trimmed;
       AiSettingsStore.keyAvailable = true;
       Logger.warn(TAG, `key saved ok=true store=memory (asset unavailable, code=${e.code})`);
@@ -114,14 +139,14 @@ export class AiSettingsStore {
     }
   }
 
-  /** 删除 Key（Asset + 内存兜底一起清）。 */
+  /** 删除 Key（Asset + 内存兜底一起清）。remove 只带 ALIAS（查询条件不带 SECRET）。 */
   public static async removeApiKey(): Promise<string> {
     AiSettingsStore.memoryKey = '';
     try {
-      const attrs: asset.AssetMap = new Map<asset.Tag, asset.Value>();
-      attrs.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
+      const removeMap: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+      removeMap.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
       try {
-        asset.removeSync(attrs);
+        asset.removeSync(removeMap);
       } catch (removeErr) {
         const rmErr: BusinessError = removeErr as BusinessError;
         if (rmErr.code !== asset.ErrorCode.NOT_FOUND) {

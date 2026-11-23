@@ -173,6 +173,17 @@
 > 修复项（已实施，见 §3.2）：解析前剥离代码栅栏与首尾非 JSON 文本；`finish_reason=length` 归 E4 并
 > 提示「输出被截断，请重试（模型输出过长）」；`steps` 放宽为 2–3 条。
 >
+> **排查记录三（2026-11-23，真机日志 Key 保存退内存）**：`asset remove before add failed,
+> code=401` → `asset add failed, code=24000003 (DUPLICATED)` → `store=memory`。因果链：
+> 保存逻辑「先 removeSync 删旧值再 addSync」意图正确，但 **removeSync 复用了 add 的
+> AssetMap 当查询条件，map 里装着 SECRET**——remove 的入参是查询条件，带无关属性返回
+> 401（INVALID_ARGUMENT），不是 NOT_FOUND 所以没被静默跳过 → 旧值没删掉 → add 撞
+> 24000003 → 外层 catch 误判「Asset 不可用」退内存。**Asset 服务本身没有任何问题。**
+> 修复：remove 与 add 的 AssetMap 分开构造（remove 只带 ALIAS）；24000003 当场自愈
+> （remove 后重试一次 add，成功走 `store=asset (after conflict retry)`）；removeApiKey
+> 同款一并修。教训：AssetMap 是「查询条件」语义，复用 add 的 map 做查询会把数据属性
+> 带进条件；401 ≠ NOT_FOUND，两者都不该触发「服务不可用」的降级。
+>
 > **排查记录二（2026-11-22 续，真机日志 `complete fail code=protocol msg=无法解析模型流式响应：
 > Cannot read property prompt_tokens of null`）**：真因在 `@hmkit/ai` 2.0.0 自身——流式 chunk 的
 > `"usage": null`（OpenAI 协议允许；one-api 类网关全链路如此）穿过 `!== undefined` 栅栏，
