@@ -63,6 +63,7 @@ assert(md.includes('not_installed'), 'SKILL.md 缺 not_installed 预演语义');
 assert(md.includes('不自动重放'), 'SKILL.md 缺「预演不自动重放」纪律');
 assert(md.includes('"sizes"'), 'SKILL.md 缺 sizes 字段（当前已装占用补测）');
 assert(md.includes('当前已装占用'), 'SKILL.md 缺 sizes 的「当前已装占用」语义说明');
+assert(md.includes('"note"'), 'SKILL.md 缺 nothing_to_upgrade 的 note 字段（brew 判定原文）');
 
 // ---- 2. module.json5 注册 ----
 assert(/"skillProfiles"[\s\S]*"name":\s*"handwer-brew-library"/.test(moduleJson5),

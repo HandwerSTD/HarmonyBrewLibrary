@@ -222,6 +222,33 @@ assert.strictEqual(notFoundDevice.ok, false);
 assert.strictEqual(notFoundDevice.notFound, true);
 assert(notFoundDevice.failureMessage.includes('No formulae found'));
 
+// ---- 3.1.2 设备实测第二轮（2026-11-23）：requested 修饰词 / dependents 段 / 无冒号批量 ----
+// 验收反馈：单包 upgrade 漏判 nothing_to_upgrade——表头是 `1 requested outdated package`
+// （无冒号 + requested 修饰词），v3 的 kinds 组配不上
+const requestedSplit = BrewDryRunParser.parse('==> Would upgrade 1 requested outdated package\ngit-lfs 3.8.0_1 -> 3.8.1\n');
+assert.strictEqual(requestedSplit.ok, true);
+assert.strictEqual(requestedSplit.wouldInstall.length, 1);
+assert.strictEqual(requestedSplit.wouldInstall[0].name, 'git-lfs');
+assert.strictEqual(requestedSplit.wouldInstall[0].fromVersion, '3.8.0_1');
+assert.strictEqual(requestedSplit.wouldInstall[0].version, '3.8.1');
+
+// cups 还带出 dependents 段（无冒号）+ 多空格分隔条目
+const dependentsSample = BrewDryRunParser.parse('==> Would upgrade 1 requested outdated package\ncups 2.4.19_1 -> 2.4.20\n==> Would upgrade 3 dependents\nmaven     3.9.16     -> 3.10.1\n');
+assert.strictEqual(dependentsSample.ok, true);
+assert.strictEqual(dependentsSample.wouldInstall.length, 2);
+assert.strictEqual(dependentsSample.wouldInstall[0].name, 'cups');
+assert.strictEqual(dependentsSample.wouldInstall[0].fromVersion, '2.4.19_1');
+assert.strictEqual(dependentsSample.wouldInstall[0].version, '2.4.20');
+assert.strictEqual(dependentsSample.wouldInstall[1].name, 'maven');
+assert.strictEqual(dependentsSample.wouldInstall[1].fromVersion, '3.9.16');
+assert.strictEqual(dependentsSample.wouldInstall[1].version, '3.10.1');
+
+// 批量形态无冒号（v3 已兼容，回归保护）
+const allNoColon = BrewDryRunParser.parse('==> Would upgrade 34 outdated packages\nwget 1.25.0_2 -> 1.26.0\n');
+assert.strictEqual(allNoColon.ok, true);
+assert.strictEqual(allNoColon.wouldInstall.length, 1);
+assert.strictEqual(allNoColon.wouldInstall[0].name, 'wget');
+
 // ---- 3.2 brew uses 解析（v2 卸载预演）----
 const usesNames = BrewUsesParser.parse('wget\ncurl\njq\n');
 assert.strictEqual(usesNames.ok, true);
@@ -275,4 +302,4 @@ const infoNoSize = BrewInfoSizeParser.parse('wget: stable 1.26.0 (bottled)\nInte
 assert.strictEqual(infoNoSize.sizes.length, 0);
 
 console.log('audit_skill_no_exec: all green (2 touchpoints, '
-  + (16 + 4 + 3 + 2) + ' parser cases)');
+  + (16 + 4 + 3 + 2 + 3) + ' parser cases)');

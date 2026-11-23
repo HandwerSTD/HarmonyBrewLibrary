@@ -281,6 +281,7 @@ export default class BrewSkill {
           'token': token,
           'status': 'nothing_to_upgrade',
           'cmdline': r.cmdline,
+          'note': r.failureMessage,
         };
         await this.reply(info, 0, BrewSkill.successPayload(data, SUGGEST_NOTHING_TO_UPGRADE));
         return;
@@ -324,6 +325,7 @@ export default class BrewSkill {
           'scope': effectiveScope,
           'status': 'nothing_to_upgrade',
           'cmdline': r.cmdline,
+          'note': r.failureMessage,
         };
         await this.reply(info, 0, BrewSkill.successPayload(data, SUGGEST_NOTHING_TO_UPGRADE_ALL));
         return;

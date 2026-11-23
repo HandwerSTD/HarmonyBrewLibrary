@@ -60,13 +60,20 @@ export class BrewDryRunParser {
   /** install 表头：`==> Would install 1 formula: wget 1.25.0_2`（内联）或 `==> Would install 1 formula:`（分行） */
   private static readonly WOULD_INSTALL_RE: RegExp =
     /Would install\s+(\d+)\s+(formulae|formulas|formula|casks|cask)\s*:?\s*(.*)/i;
-  /** 升级表头：`==> Would upgrade 2 outdated packages: wget 1.25.0_2 -> 1.26.0`（内联/分行都收） */
+  /** 升级表头：`==> Would upgrade 2 outdated packages: wget 1.25.0_2 -> 1.26.0`（内联/分行都收）。
+   *  brew 7 设备实测修饰词有两种且**顺序不定**：`1 requested outdated package`（git-lfs，
+   *  无冒号、条目分行）与 `34 outdated packages`（批量）——修饰组用无序 {0,2}，kinds/tail
+   *  组索引不变（kinds=3、tail=4）。 */
   private static readonly WOULD_UPGRADE_RE: RegExp =
-    /Would upgrade\s+(\d+)\s+(outdated\s+)?(formulae|formulas|formula|casks|cask|packages|package)\s*:?\s*(.*)/i;
+    /Would upgrade\s+(\d+)\s+((?:(?:outdated|requested)\s+){0,2})(formulae|formulas|formula|casks|cask|packages|package)\s*:?\s*(.*)/i;
   /** 连带依赖升级段（brew 7 设备实测）：`==> Would upgrade 1 dependency for <parent>:`，kind 未知留空。
    *  注意 `dependenc(?:y|ies)`：`dependencies?` 的 `?` 只作用于 s，配不上单数 dependency */
   private static readonly WOULD_UPGRADE_DEP_RE: RegExp =
     /Would upgrade\s+(\d+)\s+dependenc(?:y|ies)\s+for\s+\S+\s*:?\s*(.*)/i;
+  /** 受影响依赖者段（brew 7 设备实测）：`==> Would upgrade 3 dependents`（无冒号、条目分行），
+   *  条目多空格分隔（`maven     3.9.16     -> 3.10.1`），kind 未知留空由调用方补齐 */
+  private static readonly WOULD_UPGRADE_DEPENDENTS_RE: RegExp =
+    /Would upgrade\s+(\d+)\s+dependents?\s*:?\s*(.*)/i;
   private static readonly ERROR_RE: RegExp = /Error:\s*(.*)/i;
   private static readonly NOT_FOUND_RE: RegExp =
     /(No available formula|No available cask|No formulae found|No similarly named|was not found|nonexistent)/i;
@@ -119,6 +126,22 @@ export class BrewDryRunParser {
           result.declaredCount = result.declaredCount + count;
         }
         const list: string = depMatch[2].trim();
+        if (list.length > 0) {
+          BrewDryRunParser.pushInline(result, list, '', true);
+        }
+        collectState = COLLECT_UPGRADE;
+        collectKind = '';
+        continue;
+      }
+      // 必须在 DEP_RE 之后：dependents? 也能配上 'dependency for...' 的前缀
+      const dependentsMatch: RegExpMatchArray | null =
+        line.match(BrewDryRunParser.WOULD_UPGRADE_DEPENDENTS_RE);
+      if (dependentsMatch !== null) {
+        const count: number = parseInt(dependentsMatch[1], 10);
+        if (!isNaN(count)) {
+          result.declaredCount = result.declaredCount + count;
+        }
+        const list: string = dependentsMatch[2].trim();
         if (list.length > 0) {
           BrewDryRunParser.pushInline(result, list, '', true);
         }

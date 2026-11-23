@@ -493,9 +493,11 @@ export class BrewSkillBridge {
       Logger.info(TAG, 'upgrade token=' + token + ' ok items=' + result.items.length +
         ' ms=' + (Date.now() - started));
     } else if (shellResult.ok && parsed.failureMessage === 'no Would install line in output') {
-      // 命令成功退出但没有 Would 行 = 无可升级（已是最新）
+      // 命令成功退出但没有 Would 行 = 无可升级（已是最新）。note 带回 brew 原文尾部，
+      // 供小艺如实转述判定原因（版本语义 / tap 信任等），不再零信息
       result.ok = true;
       result.nothingToDo = true;
+      result.failureMessage = BrewSkillBridge.failureOf(parsed, shellResult);
       Logger.info(TAG, 'upgrade token=' + token + ' nothingToDo ms=' + (Date.now() - started));
     } else {
       result.notFound = parsed.notFound;
@@ -535,6 +537,7 @@ export class BrewSkillBridge {
     } else if (shellResult.ok && parsed.failureMessage === 'no Would install line in output') {
       result.ok = true;
       result.nothingToDo = true;
+      result.failureMessage = BrewSkillBridge.failureOf(parsed, shellResult);
       Logger.info(TAG, 'upgradeAll scope=' + scope + ' nothingToDo ms=' + (Date.now() - started));
     } else {
       result.failureMessage = BrewSkillBridge.failureOf(parsed, shellResult);

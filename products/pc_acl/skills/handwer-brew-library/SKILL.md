@@ -627,11 +627,16 @@ exec(
     "data": {
         "token": "git",
         "status": "nothing_to_upgrade",
-        "cmdline": "brew upgrade git --dry-run"
+        "cmdline": "brew upgrade git --dry-run",
+        "note": "Warning: git 2.51.0 already installed"
     },
     "suggestion": "它已经是最新版本，没有可升级的。"
 }
 ```
+
+`note` 是 brew 的判定原文，可能解释「为什么快照说待更新、brew 却说不用升」——两套口径的差异
+（如 `3.8.01` 与 `3.8.1` 同版本语义、tap 信任状态、实时元数据 vs 冻结快照）都要如实转述给用户，
+**不要**替 brew 改口或强行再试。
 
 失败分支（ERR_NOT_FOUND / ERR_INTERNAL / ERR_INVALID_PARAMS）与场景3一致。
 
@@ -641,7 +646,8 @@ exec(
 
 **成功后的动作**：转述 `data.wouldUpgrade` 清单（可能很长，`declaredCount` 是 brew 报的
 总数）与 `data.cmdline`；说明这是 dry-run 预演。`nothing_to_upgrade` 表示没有待升级的包。
-真正的批量升级在 Harmonybrew 的「我的 - 待更新」页。
+清单以 brew **实时解析**为准，条目数可能与本机快照的 outdated 数不一致（快照是「数据截至」
+冻结口径，如实说明即可）。真正的批量升级在 Harmonybrew 的「我的 - 待更新」页。
 
 执行参数：
 
