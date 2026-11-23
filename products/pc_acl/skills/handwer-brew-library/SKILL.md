@@ -97,8 +97,9 @@ argv[0] 是可解析的 JSON 对象字符串）。禁止把字段拆成多个位
 - `previewInstall` / `requestInstall` / `previewUpgrade` / `previewUpgradeAll` 走真实
   brew dry-run（只读、不动盘），需要网络，最长约两分钟；`previewUninstall` 不执行任何
   卸载命令，只做只读推导（安装事实 + 反向依赖）。
-- 预演回包的 `sizes` 是**当前已装占用**（`brew info` 实测，仅已安装的包有值）；下载体积
-  与新装包的落盘体积 brew 不提供，转述时不要编造数字——真实执行时应用内的执行 Sheet
+- 预演回包的 `sizes` 与 `wouldUpgrade` 条目**一一对应**（`brew info` 实测，仅已安装的
+  条目有值；别名公式如 python 的占用以 python@3.15 这样的 @ 变体行呈现）；下载体积与
+  新装包的落盘体积 brew 不提供，转述时不要编造数字——真实执行时应用内的执行 Sheet
   会实时显示下载进度与大小。
 - **安装、升级、卸载永远由用户在 Harmonybrew 应用内亲手完成**；本技能不执行任何写命令，
   也不要在用户口头确认后代为执行。
@@ -308,9 +309,10 @@ ERR_INVALID_PARAMS / ERR_NOT_FOUND / ERR_INTERNAL）。
 
 **成功后的动作**：转述 `data.wouldInstall` 清单与 `data.cmdline`；说明这是 dry-run 预演、
 还没有安装任何东西。**不要**把预演结果转述成「已安装」。清单可能包含两类条目：将新增的
-软件包与会被连带升级的依赖（brew 7 实测形态；依赖条目的 `kind` 可能为空）。`sizes` 是
-清单里**已安装部分**的当前占用（`brew info` 实测）；新装包没有该数据，下载体积 brew
-不提供——转述不要编造数字。
+软件包与会被连带升级的依赖（brew 7 实测形态；依赖条目的 `kind` 可能为空）。`sizes` 与
+`wouldUpgrade` 条目一一对应（仅**已安装**条目有值；别名公式如 python 的占用以
+python@3.15 这样的 @ 变体行呈现）；新装包没有该数据，下载体积 brew 不提供——转述不要
+编造数字。
 
 执行参数：
 

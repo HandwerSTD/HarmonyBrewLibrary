@@ -957,8 +957,11 @@ export class BrewSkillBridge {
 
   /**
    * 预演成功后的「当前已装占用」补测：`brew info <全部条目名>` 多包一次命令（runRead
-   * 白名单的 info 段），BrewInfoSizeParser 提取已装项的 `(N files, X)` 行。新装包与
-   * 查询失败都静默置空——sizes 是增强层，绝不影响预演本身的结果。
+   * 白名单的 info 段），BrewInfoSizeParser 提取已装项的 `(N files, X)` 行。
+   * **结果行与 wouldUpgrade 严格对应**：brew 的段落里会附带关联已装依赖的 keg 行
+   * （如 openssl@3 段内的 openssl@4 行），不在条目名单里的行一律过滤——别名公式
+   * （python → python@3.15）的占用以 `<查询名>@…` 变体行呈现，放行。
+   * 查询失败静默置空——sizes 是增强层，绝不影响预演本身的结果。
    */
   private static async collectSizes(items: SkillPreviewItem[]): Promise<SkillPreviewSize[]> {
     const rows: SkillPreviewSize[] = [];
@@ -981,13 +984,31 @@ export class BrewSkillBridge {
       const shellResult: ShellResult = await BrewSkillBridge.runRead('info ' + names.join(' '));
       const parsed: BrewInfoSizeResult =
         BrewInfoSizeParser.parse(shellResult.stdout + '\n' + shellResult.stderr);
+      let filtered: number = 0;
       for (const one of parsed.sizes) {
-        const row: SkillPreviewSize = new SkillPreviewSize();
-        row.name = one.name;
-        row.version = one.version;
-        row.sizeText = one.sizeText;
-        row.files = one.files;
-        rows.push(row);
+        let related: boolean = names.indexOf(one.name) >= 0;
+        if (!related) {
+          // 别名公式变体：python 的占用行叫 python@3.15
+          for (const q of names) {
+            if (one.name.startsWith(q + '@')) {
+              related = true;
+              break;
+            }
+          }
+        }
+        if (related) {
+          const row: SkillPreviewSize = new SkillPreviewSize();
+          row.name = one.name;
+          row.version = one.version;
+          row.sizeText = one.sizeText;
+          row.files = one.files;
+          rows.push(row);
+        } else {
+          filtered++;
+        }
+      }
+      if (filtered > 0) {
+        Logger.info(TAG, 'sizes filtered ' + filtered + ' non-item keg rows');
       }
     } catch (err) {
       const error = err as Error;
