@@ -140,6 +140,12 @@ export class ReleaseIntelSnapshot {
   /** AI 调过但失败（区别于「没配 Key 的静默」：UI 给重试入口） */
   public aiFailed: boolean = false;
   /**
+   * AI 摘要进行中（v1.3.8 两阶段装配）：结构化区 + notes 原文先落卡，AI 段后台补跑，
+   * 期间操作行的 AI 入口渲染 [spinner] AI 解析中。**瞬态字段**——只活在内存快照，
+   * 从不落盘（snapshotFromJson 强制 false，同 loading 的口径）。
+   */
+  public aiPending: boolean = false;
+  /**
    * notes 原文节选（≤700 字符，中英文原样）。AI 不可用（无 Key / 失败 / 调试期关 AI）
    * 时卡片用它渲染「原始发布说明」——上游原文直接展示，零编造（G5 缺口策略的补充：
    * 能给原文就不只给一句「AI 不可用」）。card 非 null 时 UI 不渲染该组。
@@ -187,6 +193,33 @@ export function releaseIntelArchiveEntryOf(
   entry.at = at;
   entry.cardJson = cardJson;
   return entry;
+}
+
+/**
+ * 快照浅拷贝（v1.3.8 两阶段装配用）：AI 段完成后要带 card 落卡，但 @Prop 靠
+ * **新对象引用**触发更新——原地改字段 UI 不刷新。diff/card 按引用共享是安全的：
+ * 两者只被整体替换、从不原地改写。
+ */
+export function releaseIntelSnapshotFork(src: ReleaseIntelSnapshot): ReleaseIntelSnapshot {
+  const out: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
+  out.token = src.token;
+  out.kind = src.kind;
+  out.fromVersion = src.fromVersion;
+  out.toVersion = src.toVersion;
+  out.verdict = src.verdict;
+  out.diff = src.diff;
+  out.gapCode = src.gapCode;
+  out.sourceUrl = src.sourceUrl;
+  out.notesTruncated = src.notesTruncated;
+  out.card = src.card;
+  out.aiFailed = src.aiFailed;
+  out.aiPending = src.aiPending;
+  out.notesPreview = src.notesPreview;
+  out.notesFull = src.notesFull;
+  out.loading = src.loading;
+  out.fetchedAt = src.fetchedAt;
+  out.stale = src.stale;
+  return out;
 }
 
 /** max_tokens 常量转发（AiTasks 侧 import 用，避免两条常量链互相牵扯）。 */

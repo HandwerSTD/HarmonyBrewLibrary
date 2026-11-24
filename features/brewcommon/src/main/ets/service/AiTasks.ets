@@ -192,7 +192,7 @@ export class AiTasks {
       card.summary = typeof obj['summary'] === 'string' ? obj['summary'] as string : '';
       card.scenarios = stringArrayOf(obj['scenarios'], 3);
       card.caveats = stringArrayOf(obj['caveats'], 3);
-      // steps 上限 3（isValid 收 2–3 条）；解析层 6 是给「超限即格式不符」判据留的余量口径不变
+      // steps 上限 3（isValid 收 2–3 条）；超限由 stringArrayOf 截断取前 3
       card.steps = stringArrayOf(obj['steps'], 3);
       if (!card.isValid()) {
         return null;
@@ -553,7 +553,11 @@ export class AiTasks {
       const staleCard: ReleaseIntelCard | null = AiTasks.parseIntel(cached.dataJson);
       if (staleCard !== null) {
         Logger.info(TAG, `ri stale-while-revalidate token=${input.token}`);
-        AiTasks.fetchIntel(input, providerKey, onRefreshed);
+        // 后台刷新失败只意味着继续用旧值，吞掉 rejection 防 unhandled
+        AiTasks.fetchIntel(input, providerKey, onRefreshed)
+          .catch((err: Error) => {
+            Logger.warn(TAG, `ri background refresh failed. reason=${err.message}`);
+          });
         return Promise.resolve(staleCard);
       }
     }
@@ -587,11 +591,19 @@ export class AiTasks {
       const outcome: ParseOutcome = new ParseOutcome();
       const card: ReleaseIntelCard | null = AiTasks.parseIntel(completion.content, outcome);
       if (card === null) {
+        // 诊断打点（真机归因用）：finish=length 即 max_tokens 截断；tail 能看出
+        // JSON 断在哪。head 由 AiClient 打点，这里补 tail 与总长。
+        Logger.warn(TAG, `ri parse fail finish=${completion.finishReason} ` +
+          `len=${completion.content.length} ` +
+          `tail=${AiClient.sanitize(completion.content.substring(Math.max(0,
+          completion.content.length - 80)))}`);
         throw new AiError(AiErrorKind.E4_BAD_FORMAT,
           `ri reason=${e4ReasonOf(completion, outcome.reason)}`);
       }
+      // 缓存存**模型原始输出**（snake_case），与读侧 parseIntel 同口径——此前存
+      // JSON.stringify(card)（驼峰），读侧按 snake_case 解析永远 miss，缓存形同虚设
       AiCache.write(RELEASE_INTEL_FEATURE, providerKey, cacheKey, AI_PROMPT_VERSION_RI,
-        completion.model, JSON.stringify(card));
+        completion.model, completion.content);
       Logger.info(TAG, `ri ok token=${input.token} latency=${completion.latencyMs}`);
       if (onRefreshed !== undefined) {
         onRefreshed(card);
@@ -618,6 +630,9 @@ export class AiTasks {
     '安全相关内容只逐条转述 notes 原文（security_claims），不得自行推断严重性或补充漏洞编号。' +
     'breaking_changes 每条给出 impact（对本机使用的影响）与 action（建议动作），' +
     '没有可靠依据时 action 输出空串。\n' +
+    '条数硬上限（发布说明里条目再多也只挑最重要的，绝不超出）：new_features≤3、' +
+    'fixes≤3、breaking_changes≤3、security_claims≤2、gaps≤3；每条控制在一句话。' +
+    '输出必须是一个**完整**的 JSON 对象，不得中途截断。\n' +
     '空字段原则：new_features/fixes/breaking_changes/security_claims/gaps 没有内容时输出 []，' +
     '禁止输出「无」「暂无」之类的填充句。\n' +
     '输出 JSON：{"one_liner":"这次更新最值得注意什么，一句话","new_features":["0–3条"],' +
@@ -904,24 +919,25 @@ function tryParseArray(text: string): Object | null {
   }
 }
 
-/** string[] 字段抽取：非数组 / 元素非字符串 / 超上限都判格式不符。 */
+/**
+ * string[] 字段抽取：非数组 → 空表；元素非串/空白串跳过；**超上限截断取前 max 条**
+ * （v1.3.8：此前超限整段丢弃返回 []——模型多写一条就整段白费，截断保住已有内容；
+ * isValid 的上限校验仍兜底）。
+ */
 function stringArrayOf(value: Object | undefined, max: number): string[] {
   if (value === undefined || !Array.isArray(value)) {
     return [];
   }
   const list: Array<Object> = value as Array<Object>;
-  if (list.length > max) {
-    return [];
-  }
   const out: string[] = [];
-  for (let i: number = 0; i < list.length; i++) {
+  for (let i: number = 0; i < list.length && out.length < max; i++) {
     const one: Object = list[i];
     if (typeof one !== 'string') {
-      return [];
+      continue;
     }
     const text: string = one as string;
     if (text.trim().length === 0) {
-      return [];
+      continue;
     }
     out.push(text);
   }

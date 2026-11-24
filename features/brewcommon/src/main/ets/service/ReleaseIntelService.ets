@@ -37,8 +37,6 @@ import { BrewNotesExtractor } from '../util/BrewNotesExtractor';
 import { FormulaDiffer } from '../util/FormulaDiffer';
 import { ReleaseIntelRepoResolver, ReleaseIntelTagFilter } from '../util/ReleaseIntelRepoResolver';
 import { SemverJudge } from '../util/SemverJudge';
-import { AiSettingsStore } from './AiSettingsStore';
-import { AiError } from '../model/AiTypes';
 import { AiTasks } from './AiTasks';
 import { BrewHttp } from './BrewHttp';
 import { ReleaseIntelBaselineStore } from './ReleaseIntelBaselineStore';
@@ -87,25 +85,24 @@ export class ReleaseIntelService {
   }
 
   /**
-   * 主装配（v1.3.4 起带整卡快照缓存）。
+   * 主装配（v1.3.4 起带整卡快照缓存；v1.3.8 起**不含 AI 段**）。
    *
-   * **快照缓存读**：非 force / 非手动 AI 时,同 (token, toVersion) 1h 内直接复用
-   * 上次装配产物——atom 抓取是装配里唯一的网络步,重复进详情页重拉纯属浪费
-   * （AI 摘要虽另有 24h 缓存,但 verdict/diff/notes 解析仍会重跑一次）。命中即零网络返回。
+   * **快照缓存读**：非 force 时,同 (token, toVersion) 7 天内直接复用上次装配产物
+   * ——atom 抓取是装配里唯一的网络步,重复进详情页重拉纯属浪费。命中即零网络返回。
    *
    * **快照缓存写**：装配成功后落盘（F1/net 瞬态失败不缓存;F2/F3/F4 是稳定事实、
-   * notes-only 与 AI 失败的快照照常缓存——手动 AI/重新生成经 manualAi/force 绕开读缓存）。
+   * notes-only 的快照照常缓存——「重新生成」经 force 绕开读缓存）。
    *
    * 其余语义见 `assembleUncached`：`oldRawJson` 为空串 = 基线缺失（F5）;
-   * atom 拉取内置一次重试（F1）;AI 失败只落 `aiFailed`,结构化区照常（G5）;
-   * `force` 透传给 AI 任务（旁路 AI 缓存,G8）;`manualAi` 绕开「自动解析更新日志」闸
-   * （无 Key 仍 E1 → aiFailed）。
+   * atom 拉取内置一次重试（F1）。AI 段不在本方法里——v1.3.8 两阶段装配：
+   * 结构化区 + notes 原文先落卡（AI 生成期间正文保持原文、只有 AI 入口转
+   * spinner），AI 由 VM 调 `runAi` 后台补跑、完成才把 card 落进快照。
    */
   public static async assemble(rawDoc: Object, oldRawJson: string, token: string,
-    kind: string, fromVersion: string, force: boolean = false, manualAi: boolean = false):
+    kind: string, fromVersion: string, force: boolean = false):
     Promise<ReleaseIntelSnapshot> {
     const toVersionHint: string = ReleaseIntelService.rawVersionOf(rawDoc, kind);
-    if (!force && !manualAi && toVersionHint.length > 0) {
+    if (!force && toVersionHint.length > 0) {
       const cached: SnapshotCacheRead | null =
         ReleaseIntelSnapshotStore.read(token, toVersionHint);
       if (cached !== null && Date.now() - cached.ts < RELEASE_INTEL_SNAPSHOT_TTL_MS) {
@@ -118,7 +115,7 @@ export class ReleaseIntelService {
       }
     }
     const snapshot: ReleaseIntelSnapshot = await ReleaseIntelService.assembleUncached(
-      rawDoc, oldRawJson, token, kind, fromVersion, force, manualAi);
+      rawDoc, oldRawJson, token, kind, fromVersion);
     if (snapshot.toVersion.length > 0 && snapshot.gapCode !== RELEASE_INTEL_GAP_NET) {
       ReleaseIntelSnapshotStore.save(token, snapshot.toVersion, JSON.stringify(snapshot),
         AI_PROMPT_VERSION_RI);
@@ -130,7 +127,7 @@ export class ReleaseIntelService {
    * 无缓存的装配本体（见 `assemble` 的语义注释）。
    */
   private static async assembleUncached(rawDoc: Object, oldRawJson: string, token: string,
-    kind: string, fromVersion: string, force: boolean = false, manualAi: boolean = false):
+    kind: string, fromVersion: string):
     Promise<ReleaseIntelSnapshot> {
     const snapshot: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
     snapshot.token = token;
@@ -193,29 +190,24 @@ export class ReleaseIntelService {
     snapshot.notesFull = notes.text;
     snapshot.notesPreview = notes.text.length > RELEASE_INTEL_NOTES_PREVIEW_CHARS ?
       notes.text.substring(0, RELEASE_INTEL_NOTES_PREVIEW_CHARS) : notes.text;
+    return snapshot;
+  }
 
-    // AI 卡（G5/G8：无 Key → 静默;失败 → aiFailed,UI 给重试）
-    // 闸用「自动解析更新日志」独立开关（设置页可单独关掉情报摘要，不影响 D1 讲解）;
-    // 用户显式触发（手动按钮/重新生成）经 manualAi 绕开此闸。
-    if (!manualAi && !AiSettingsStore.autoReleaseIntel()) {
-      return snapshot; // card=null 静默（UI 落 notes 原文节选）
-    }
+  /**
+   * AI 摘要段（v1.3.8 从 assemble 拆出）：只跑 AI 任务,不做任何结构化/网络装配。
+   * 输入全部来自已落卡的快照（notesFull 与 diff 就是当初要喂 AI 的那份数据）,
+   * 缓存命中（24h TTL）秒回、force 旁路缓存强制重取（G8）。成功返回 card,
+   * 失败抛 AiError——调方（VM）决定落 card 还是 aiFailed,结构化区不受影响（G5）。
+   */
+  public static runAi(token: string, from: string, to: string, notes: string,
+    diff: ReleaseIntelDiff, force: boolean = false): Promise<ReleaseIntelCard> {
     const input: ReleaseIntelInput = new ReleaseIntelInput();
     input.token = token;
-    input.from = fromVersion;
-    input.to = snapshot.toVersion;
-    input.notes = notes.text;
+    input.from = from;
+    input.to = to;
+    input.notes = notes;
     input.diffJson = JSON.stringify(diff);
-    try {
-      snapshot.card = await AiTasks.releaseIntel(input, undefined, force);
-    } catch (err) {
-      // v1.3.7b:日志带 kind+message（AiError.message 已含 ri reason=/http status 等
-      // 归因,Body 截 120 字节且脱敏过）——此前只记 token,真机上失败无从诊断
-      const aiErr: AiError = err as AiError;
-      Logger.warn(TAG, `release intel ai failed, token=${token}, kind=${aiErr.kind}, msg=${aiErr.message}`);
-      snapshot.aiFailed = true;
-    }
-    return snapshot;
+    return AiTasks.releaseIntel(input, undefined, force);
   }
 
   // ------------------------------------------------------------ 基线
@@ -497,6 +489,7 @@ export class ReleaseIntelService {
     out.aiFailed = ReleaseIntelService.boolField(root, 'aiFailed');
     out.stale = ReleaseIntelService.boolField(root, 'stale');
     out.loading = false; // 缓存里只存成品,占位快照从不落盘
+    out.aiPending = false; // 瞬态字段同 loading 口径:缓存里只存成品
     const fetchedAt: Object | undefined = root['fetchedAt'];
     out.fetchedAt = typeof fetchedAt === 'number' ? fetchedAt as number : 0;
     if (out.toVersion.length === 0) {

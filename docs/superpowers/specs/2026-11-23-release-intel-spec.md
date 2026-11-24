@@ -261,3 +261,15 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 **用户问**:非 GitHub 上游的包有没有拿更新日志的好办法?结论=没有通用的。release 托管在 GitHub 之外的形态高度碎片化:GitLab(releases API 匿名可用)、SourceForge(RSS/best_release.json)、GNU/GNOME(镜像目录列表)、Launchpad(OAuth)——每家都要独立通道(探测+解析+测试+设备可达性),是 v2 多通道课题(spec §10 P2 占位),v1 不做。
 
 **用户定调的兜底**:F2(上游不在 GitHub)的缺口行**不渲染**——卡片只展示版本行(verdict)+ diff 小字 + 操作行,空着比一句「抓不到」更干净。实现:卡片缺口行条件加 `gapCode !== RELEASE_INTEL_GAP_REPO`(**数据层照旧落 gapCode**,知识/日志口径不变,只是 UI 不渲染);F1(网络)/F3(无匹配 tag)/F4(无正文)照常渲染——它们是「GitHub 上游但没拿到」的真缺口,有信息量。
+
+## 18. v1.3.8 增补(2026-11-24):两阶段装配 + RI 生成失败病根修复
+
+**用户定调**:①仅当 AI 生成完成了才把原始更新日志替换成 AI 解析;②AI 生成期间**只有「AI 解析」入口变 [spinner] AI 解析中**,整卡不 spinner;③RI 摘要在其他 AI 任务全好的情况下反复生成失败。
+
+**病根(③,两个确定性 bug)**:
+- **max_tokens 腰斩**:RI 输出 schema 是四个 AI 任务里最大的(one_liner+3 新功能+3 修复+3 breaking×3 字段+2 安全+3 gaps),预算却只有 700——CVE 密集的发布说明(cups 7 条 CVE 实证)让模型输出超长 JSON,在 700 token 处被截断,JSON 不完整→E4→aiFailed;重试面对同样 notes 生成同样长的输出必然再截断。v1.3.7c 修的解析层超限截断根本轮不到执行(截断发生在传输层)。处置:`AI_MAX_TOKENS_RI` 700→2000 + prompt 加条数硬上限措辞 + `stringArrayOf` 超限从整段丢弃改为截断取前 N。
+- **AI 缓存读写口径不一致**:fetchIntel 写缓存存 `JSON.stringify(card)`(驼峰),读侧 parseIntel 等 snake_case——**每次命中都解析失败当 miss**,成功结果永远存不下来、失败后也没有旧值兜底。处置:缓存改存模型原始输出(与读侧同口径);`AI_PROMPT_VERSION_RI` 2→3(旧缓存一并作废)。
+
+**两阶段装配(①②)**:assemble 拆成「结构化区+notes 原文」与「AI 段」两步——assemble 不再 await AI(atom 仍是唯一网络步),快照先落卡、正文保持原文;VM 随后调 `ReleaseIntelService.runAi`(输入全部来自已落卡快照,不重跑 atom/结构化装配)后台补跑,期间快照 `aiPending=true`(瞬态,不落盘)驱动操作行 AI 入口转 [spinner] AI 解析中;AI 完成/失败各落一次 fork 副本(@Prop 靠新对象引用触发更新),card 落地由卡片 @Watch 捕获 null→有值转移边自动切 AI 视图(aboutToAppear 同口径,快照缓存带 card 直落 AI 视图)。手动「AI 解析」同走 runAi(不再重跑整个 assemble,也没有「atom 这次失败把整卡打回缺口态」的回归面);无 Key 静默跳过(不再 E1→aiFailed)。v1.3.3 的装配输入 stash 四元组随之删除。诊断:RI 解析失败时打 `finish/len/tail`(finish=length 即截断实锤)。
+
+**v1.3.8b(真机反馈修正)**:①AI 入口可见性曾把 aiPending 也排掉——生成期间 [spinner] AI 解析中跟着一起被藏没了(「原文在,没有任何 AI 相关按钮,片刻后 AI 文本闪现」),修正为入口可见性不排除 aiPending、进行态由入口内 spinner 分支渲染;②「重新生成」此前走 loadReleaseIntel 的占位卡路径(整卡 spinner、原文消失),重写为**无占位流程**:当前快照先 fork 成 card=null+aiPending(正文回原文、AI 入口转 spinner),assemble(force) 与 AI(force) 全程后台跑,新装配有 notes 则带着 pending 态无缝续跑 AI(不闪中间态),没拿到 notes(缺口态)如实落卡;原文**始终保持展示**直到 AI 解析完成。装配输入推导抽 `intelInputsOf` 共用。

@@ -35,9 +35,11 @@ import { common } from '@kit.AbilityKit';
  *   期间卡就上屏（更新是主打功能），assemble 完成后 VM 整体替换快照；
  * - **查看全文**：原文截断时操作行给「查看全文」（半模态,hero + notes 全文,
  *   `snapshot.notesFull`,只放内存）;节选正文封顶 4 行 ellipsis（v1.3.5）。
- * - **手动 AI 解析**：自动解析关闭时操作行给「AI 解析」入口(v1.3.5 并入操作行
- *   文字链)——解析中 spinner,完成前正文一直是原文,完成后自动切到 AI 视图
- *   （@Watch 捕获 card 落地）。
+ * - **AI 解析**（v1.3.8 两阶段装配,自动/手动流同口径）：assemble 只做结构化区 +
+ *   notes 原文,AI 段由 VM 后台补跑（`snapshot.aiPending`）——生成期间**只有操作行
+ *   的 AI 入口转 [spinner] AI 解析中,正文保持原文、整卡不 spinner**;card 落地
+ *   （@Watch 捕获 null→有值转移边）才把正文替换成 AI 解析。自动解析关闭时该入口
+ *   是可点的「AI 解析」按钮（手动触发同款 spinner）。
  *
  * ## 操作行（v1.3.5:单行文字链,全部同款不强调）
  *
@@ -83,22 +85,44 @@ export struct BrewReleaseIntelCard {
   @State aiRequesting: boolean = false;
   /** 「查看全文」半模态开关 */
   @State sheetShown: boolean = false;
+  /** 上一次快照是否已有 AI 卡（@Watch 判「card 落地」的转移边沿用） */
+  private hadCard: boolean = false;
 
-  /** 手动「AI 解析」按钮可见性：有原文、有 Key、AI 没产物也没在失败态、不在占位期 */
+  /**
+   * AI 入口可见性（按钮与 [spinner] AI 解析中共用）：有原文、有 Key、AI 没产物
+   * 也没在失败态、不在占位期。**不排除 aiPending**——进行态正是本入口转 spinner
+   * （v1.3.8b 修：此前把 aiPending 也排掉,生成期间 spinner 跟着一起被藏没了）。
+   */
   private manualAiVisible(): boolean {
     return !this.snapshot.loading && this.snapshot.card === null && !this.snapshot.aiFailed &&
       this.hasKey && this.snapshot.notesPreview.length > 0;
   }
 
   /**
-   * 快照替换回调（@Watch）：手动解析完成时 card 从 null 变为有值——把正文切到
-   * AI 视图（用户定调「解析完成后再替换为 AI 解析」）。自动流不受影响
-   * （aiRequesting=false 不动 showOriginal）。
+   * AI 摘要进行中（自动流后台补跑或手动点击）：操作行 AI 入口转 [spinner] AI 解析中。
+   * 手动点击与 VM 落 aiPending 快照之间有短暂空档,本地 aiRequesting 兜住。
+   */
+  private aiRunning(): boolean {
+    return this.aiRequesting || this.snapshot.aiPending;
+  }
+
+  /**
+   * 快照替换回调（@Watch）：card 从 null 变为有值 = AI 生成完成——把正文切到
+   * AI 视图（用户定调「仅当 AI 生成完成了才把原文替换成 AI 解析」,自动/手动流同口径）。
+   * card 已在时（重新生成换新卡）不动视图,尊重用户当前选择。
    */
   onSnapshotUpdated(): void {
-    if (this.aiRequesting && this.snapshot.card !== null) {
+    const hasCard: boolean = this.snapshot.card !== null;
+    if (hasCard && !this.hadCard) {
       this.showOriginal = false;
     }
+    this.hadCard = hasCard;
+  }
+
+  aboutToAppear(): void {
+    // 组件创建时快照可能已带 card（快照缓存命中）:直接落 AI 视图,与 @Watch 同口径
+    this.hadCard = this.snapshot.card !== null;
+    this.showOriginal = this.snapshot.card === null;
   }
 
   /** 手动解析点击：防重入 → 回调 → 收尾（卡片文案由 @Watch 切） */
@@ -404,12 +428,11 @@ export struct BrewReleaseIntelCard {
               })
               .padding({ right: 16 })
           }
-          // 手动「AI 解析」（v1.3.5 并入操作行）:解析中 spinner 占位替代文字
-          // （防重入由 handleManualAi 兜底）,完成前正文保持原文,完成后 @Watch 切视图
+          // AI 入口（v1.3.5 并入操作行;v1.3.8 覆盖自动流后台补跑）:AI 生成期间
+          // 这里转 [spinner] AI 解析中——只有这个入口变,正文保持原文、整卡不 spinner;
+          // card 落地后本入口整体消失（顶部出现「展示原文」切换）
           if (this.manualAiVisible()) {
-            if (this.aiRequesting) {
-              // v1.3.7b:此前只有 16px 裸 spinner(用户实测「原地消失,空字符串」),
-              // 改为 [spinner] AI 解析中 文字组合,状态始终可读
+            if (this.aiRunning()) {
               Row() {
                 LoadingProgress()
                   .width(14)

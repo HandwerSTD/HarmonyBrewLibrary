@@ -16,8 +16,10 @@ export const RELEASE_INTEL_FEATURE: string = 'release_intel';
 
 /**
  * prompt 版本（spec G8）。**变更即全部情报摘要缓存失效**——改 prompt 必须同时 +1。
+ * v3：prompt 加数组硬上限措辞 + 缓存改存模型原始输出（旧缓存是驼峰卡、读侧解析
+ * 永远 miss，一并作废）。
  */
-export const AI_PROMPT_VERSION_RI: number = 2;
+export const AI_PROMPT_VERSION_RI: number = 3;
 
 /** 情报摘要缓存 TTL（spec G8：24h；上游一次发布只归纳一次，足够新鲜）。 */
 export const AI_CACHE_TTL_RI_MS: number = 24 * 60 * 60 * 1000;
@@ -26,11 +28,15 @@ export const AI_CACHE_TTL_RI_MS: number = 24 * 60 * 60 * 1000;
 export const AI_TEMPERATURE_RI: number = 0.2;
 
 /**
- * 输出护栏：结构化输出按
- * `{one_liner, new_features≤3, fixes≤3, breaking_changes≤3, security_claims≤2, gaps≤3}`
- * 估算约 500 token，700 留余量（截断即 E4-truncated，走 F6 降级）。
+ * 输出护栏。**v1.3.8 病根修复：700 → 2000。** RI 的输出 schema 是四个 AI 任务里
+ * 最大的（one_liner + 3 新功能 + 3 修复 + 3 breaking×3 字段 + 2 安全 + 3 gaps），
+ * CVE 密集的发布说明（cups 7 条 CVE 实证）会让模型输出超长 JSON——700 token 处
+ * 被 max_tokens 腰斩，JSON 不完整 → E4 → aiFailed，且重试面对同样的 notes 生成
+ * 同样长的输出必然再截断（「反复生成失败」的根因；解析层的超限截断根本轮不到
+ * 执行，因为截断发生在传输层）。2000 对 schema 最坏形态（~1200）留足余量，
+ * 计费只按实际用量，上限只是护栏。
  */
-export const AI_MAX_TOKENS_RI: number = 700;
+export const AI_MAX_TOKENS_RI: number = 2000;
 
 /** Release Notes 纯文本上限（spec G4：剥标签后截 ≤4KB，超限标注「已截断」）。 */
 export const RELEASE_INTEL_NOTES_MAX_CHARS: number = 4096;

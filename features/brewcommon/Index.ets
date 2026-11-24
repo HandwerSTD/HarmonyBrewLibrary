@@ -366,6 +366,7 @@ export {
   ReleaseIntelSnapshot,
   ReleaseIntelArchiveEntry,
   releaseIntelArchiveEntryOf,
+  releaseIntelSnapshotFork,
 } from './src/main/ets/model/ReleaseIntelModels';
 export {
   RELEASE_INTEL_FEATURE,
