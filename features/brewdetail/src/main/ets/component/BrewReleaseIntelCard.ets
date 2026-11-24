@@ -335,13 +335,17 @@ export struct BrewReleaseIntelCard {
           .fontColor($r('sys.color.font_emphasize'))
           .bindMenu(this.pauseMenuItems())
           .padding({ right: 16 })
-        Text($r('app.string.ai_d1_regen'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_emphasize'))
-          .onClick(() => {
-            this.onRegenerate();
-          })
-          .padding({ right: 16 })
+        // 重新生成只在有 AI 产物或 AI 失败待重试时有意义;结构化-only(无 Key/调试期)
+        // 不渲染,避免点了没反应的「假按钮」。
+        if (this.snapshot.card !== null || this.snapshot.aiFailed) {
+          Text($r('app.string.ai_d1_regen'))
+            .fontSize($r('sys.float.Body_S'))
+            .fontColor($r('sys.color.font_emphasize'))
+            .onClick(() => {
+              this.onRegenerate();
+            })
+            .padding({ right: 16 })
+        }
       }
       .width('100%')
     }

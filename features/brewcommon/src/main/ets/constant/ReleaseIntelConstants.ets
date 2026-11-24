@@ -110,3 +110,11 @@ export const RELEASE_INTEL_PACK_COMMITS_MAX: number = 3;
 export const RELEASE_INTEL_PACK_COMMITS_PER_PAGE: number = 5;
 /** AtomGit commits 通道超时（与 atom 探针同档）。 */
 export const RELEASE_INTEL_COMMITS_TIMEOUT_MS: number = 5000;
+
+/**
+ * 【临时调试开关,观察期结束后删除】true = 情报卡跳过 AI 调用（card 恒 null），
+ * 只渲染结构化区：判定徽章 / 版本区间 / 本地 diff / 上游缺口 / AtomGit 打包记录。
+ * 用途：真机观察 AtomGit 打包通道的原始返回是否符合预期（用户观察期,Y v1.1）。
+ * 恢复 AI 时改回 false 或整段删除;assemble() 的引用见 ReleaseIntelService。
+ */
+export const RELEASE_INTEL_DEBUG_AI_OFF: boolean = true;

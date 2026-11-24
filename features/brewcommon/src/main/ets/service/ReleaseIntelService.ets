@@ -18,6 +18,7 @@ import {
   RELEASE_INTEL_ATOM_TIMEOUT_MS,
   RELEASE_INTEL_ATOMGIT_API_BASE,
   RELEASE_INTEL_COMMITS_TIMEOUT_MS,
+  RELEASE_INTEL_DEBUG_AI_OFF,
   RELEASE_INTEL_GAP_NET,
   RELEASE_INTEL_GAP_NONE,
   RELEASE_INTEL_GAP_NOTES,
@@ -162,7 +163,9 @@ export class ReleaseIntelService {
     }
 
     // AI 卡（G5/G8：无 Key / 开关关 → 静默；失败 → aiFailed，UI 给重试）
-    if (!AiSettingsStore.autoExplain()) {
+    // 【临时调试开关】RELEASE_INTEL_DEBUG_AI_OFF=true 时跳过 AI（观察期,见常量注释）：
+    // 卡片只剩结构化区,用于真机核对 AtomGit 打包通道原始返回。
+    if (RELEASE_INTEL_DEBUG_AI_OFF || !AiSettingsStore.autoExplain()) {
       return snapshot; // card=null 静默
     }
     const input: ReleaseIntelInput = new ReleaseIntelInput();
