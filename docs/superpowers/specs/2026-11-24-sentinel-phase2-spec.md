@@ -295,7 +295,7 @@ BrewSentinelService.evaluateAndPush(context)
 
 | 键 | 处置 | zh | en |
 | --- | --- | --- | --- |
-| `sentinel_card_count` / `_unit` | 改值（主动安装口径） | %d 个主动安装的软件包可升级 / 个主动安装的软件包可升级 | %d manually installed packages can be upgraded / manually installed packages can be upgraded |
+| `sentinel_card_count` / `_unit` | 改值（主动安装口径，文案用「推荐升级」措辞） | %d 个软件包推荐升级 / 个软件包推荐升级 | %d packages recommended for upgrade / packages recommended for upgrade |
 | `sentinel_card_more` / `_asof` / `_empty` / `_stale` | 保留 | （一期原文） | （一期原文） |
 | `sentinel_card_zero` | 新增 | 全部为最新版本 | All Packages Up to Date |
 | `sentinel_card_hint` | 新增 | 点按查看升级队列 | Tap to view upgrade queue |

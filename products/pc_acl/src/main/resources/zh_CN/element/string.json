@@ -22,7 +22,7 @@
     },
     {
       "name": "sentinel_card_count",
-      "value": "%d 个主动安装的软件包可升级"
+      "value": "%d 个软件包推荐升级"
     },
     {
       "name": "sentinel_card_more",
@@ -50,7 +50,7 @@
     },
     {
       "name": "sentinel_card_unit",
-      "value": "个主动安装的软件包可升级"
+      "value": "个软件包推荐升级"
     }
   ]
 }

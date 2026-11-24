@@ -22,7 +22,7 @@
     },
     {
       "name": "sentinel_card_count",
-      "value": "%d manually installed packages can be upgraded"
+      "value": "%d packages recommended for upgrade"
     },
     {
       "name": "sentinel_card_more",
@@ -50,7 +50,7 @@
     },
     {
       "name": "sentinel_card_unit",
-      "value": "manually installed packages can be upgraded"
+      "value": "packages recommended for upgrade"
     }
   ]
 }

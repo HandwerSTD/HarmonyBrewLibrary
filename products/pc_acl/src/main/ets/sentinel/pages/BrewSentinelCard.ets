@@ -164,13 +164,13 @@ struct BrewSentinelCard {
     .alignItems(VerticalAlign.Center)
   }
 
-  /** hero 下方的单位说明（body 字阶，font_secondary） */
+  /** hero 下方的单位说明（body 字阶，font_secondary）。允许换到 2 行：窄规格下长文案截断成一行会丢口径 */
   @Builder
   UnitLine() {
     Text($r('app.string.sentinel_card_unit'))
       .fontSize(14)
       .fontColor($r('sys.color.font_secondary'))
-      .maxLines(1)
+      .maxLines(2)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
   }
 
@@ -289,6 +289,8 @@ struct BrewSentinelCard {
           Text($r('app.string.sentinel_card_unit'))
             .fontSize(14)
             .fontColor($r('sys.color.font_secondary'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ bottom: 14 })
         }
         .width('100%')
