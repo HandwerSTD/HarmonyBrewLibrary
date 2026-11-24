@@ -266,6 +266,7 @@ BrewSentinelService.evaluateAndPush(context)
 ```
 
 - `items` 上限 6（新常量 `SENTINEL_CARD_ITEMS_LIMIT`），字段取自 `BrewInstalledPackage` 的 `name` / `version` / `latestVersion`（已存在于快照，零新增命令）。
+- **口径：只算主动安装**（用户裁定）：count 与 items 均只覆盖 `installedOnRequest` 的过期包（cask 在 `BrewInstalledParser` 一律按主动安装处理，同款口径）；作为依赖装上的过期随 `brew upgrade` 顺带解决，不进卡片。升级队列页（`MinePackagesView`）仍展示全部过期，卡片数字与队列长度允许不一致。
 - `topNames` 字段废弃：卡片侧从 `items[0..2]` 派生 top3 单行（`SENTINEL_TOP_NAMES_LIMIT` 保留）。
 - `loadBase` 防御同步升级：`readAt>0`、`count>=0`、`items` 为数组且每项 `name` 为 string；**旧格式（有 topNames 无 items）按 miss 处理 → 引导态**（W9），宿主下次评估写 v2 后自愈。
 
@@ -294,7 +295,8 @@ BrewSentinelService.evaluateAndPush(context)
 
 | 键 | 处置 | zh | en |
 | --- | --- | --- | --- |
-| `sentinel_card_count` / `_more` / `_asof` / `_empty` / `_stale` | 保留 | （一期原文） | （一期原文） |
+| `sentinel_card_count` / `_unit` | 改值（主动安装口径，文案用「推荐升级」措辞） | %d 个软件包推荐升级 / 个软件包推荐升级 | %d packages recommended for upgrade / packages recommended for upgrade |
+| `sentinel_card_more` / `_asof` / `_empty` / `_stale` | 保留 | （一期原文） | （一期原文） |
 | `sentinel_card_zero` | 新增 | 全部为最新版本 | All Packages Up to Date |
 | `sentinel_card_hint` | 新增 | 点按查看升级队列 | Tap to view upgrade queue |
 | `sentinel_notify_*` ×5（pc_acl） | 删除 | — | — |

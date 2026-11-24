@@ -269,31 +269,31 @@ export { BrewCacheAdmin } from './src/main/ets/service/BrewCacheAdmin';
 export { BrewCacheEpoch } from './src/main/ets/service/BrewCacheEpoch';
 export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
 
-// ------------------------------------------------------------------ 更新哨兵（桌面卡片 + 系统通知）
+// ------------------------------------------------------------------ 更新哨兵（桌面卡片）
 
 // 哨兵服务：宿主进程与扩展进程（Form/WorkScheduler 回调）共用同一份，公开方法一律收 context。
 // 只读 BrewInstalledLoader 的快照，不跑命令（审计脚本 hmosword-build/brew-sentinel 拦触达点）。
 export { BrewSentinelService } from './src/main/ets/service/BrewSentinelService';
 
-// 哨兵常量：GSKV 键 / 通知 id / 频控档位 / 卡片数据键 / 三档调度开关。
+// 哨兵常量：GSKV 键 / 卡片数据键 / 卡片规格 / 三档调度开关（通知与频控常量已随二期 N 线移除）。
 // 不入 CommonEnums.StorageKey —— 哨兵键是跨进程 preferences 键，与 AppStorage 键物理分开（spec §2）。
 export {
+  SENTINEL_CARD_ITEMS_LIMIT,
   SENTINEL_DATA_AS_OF,
   SENTINEL_DATA_COUNT,
+  SENTINEL_DATA_DIMENSION,
   SENTINEL_DATA_FORM_ID,
   SENTINEL_DATA_HAS_SNAPSHOT,
+  SENTINEL_DATA_ITEMS,
   SENTINEL_DATA_STALE,
-  SENTINEL_DATA_TOP_NAMES,
+  SENTINEL_DIMENSION_2_2,
+  SENTINEL_DIMENSION_2_4,
+  SENTINEL_DIMENSION_4_4,
+  SENTINEL_DIMENSION_DEFAULT,
   SENTINEL_FORM_NAME,
-  SENTINEL_FREQUENCY_DAILY,
-  SENTINEL_FREQUENCY_DEFAULT,
-  SENTINEL_FREQUENCY_OFF,
-  SENTINEL_FREQUENCY_WEEKLY,
-  SENTINEL_NOTIFICATION_ID,
   SENTINEL_PREFERENCES_NAME,
   SENTINEL_STALE_MS,
   SENTINEL_TOP_NAMES_LIMIT,
-  SENTINEL_WANT_KEY_DISMISS,
   SENTINEL_WANT_KEY_ROUTE,
   SENTINEL_WORK_ID,
   SENTINEL_WORK_INTERVAL_MS,

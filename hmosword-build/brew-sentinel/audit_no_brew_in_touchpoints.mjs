@@ -1,11 +1,12 @@
 /**
  * 触达点「零执行」审计（G5/G12）。
  *
- * 两组触达面共用一个脚本：
+ * 两组触达面共用一个脚本。二期（spec 2026-11-24 §3）起哨兵通知链路整体移除：
+ * 触达点再出现通知/跳转代理符号，就是 N 线删漏，同样算违例。
  *
  * 一、更新哨兵（H，G5，spec §6）：哨兵全链路（卡片页、FormExtensionAbility、
- * WorkScheduler 回调、SentinelBootstrap、哨兵服务）必须只做三件事：读盘上快照、
- * 推卡片数据、发通知。它**不允许出现任何 brew 命令拼装/执行符号**——
+ * WorkScheduler 回调、SentinelBootstrap、哨兵服务）必须只做两件事：读盘上快照、
+ * 推卡片数据。它**不允许出现任何 brew 命令拼装/执行符号**——
  * 「替用户按回车」的红线在本功能里没有例外路径。
  *
  * 二、更新情报中心（Y，G12，release intel spec §8）：情报链路（服务/偏好/基线库/
@@ -26,7 +27,9 @@
  *   3. AppStorage：仅 H 组禁（跨进程纯度）；Y 组放行（宿主进程专属链路）；
  *   4. 数据来源单一：BrewSentinelService 必须 import BrewInstalledLoader（只读快照）；
  *   5. 策略联动唯一入口（G6）：BrewSentinelService 必须 import ReleaseIntelFilter，
- *      且 ReleaseIntelFilter 不得 import 任何命令符号（它自己是被 H 信任的守门人）。
+ *      且 ReleaseIntelFilter 不得 import 任何命令符号（它自己是被 H 信任的守门人）；
+ *   6. 通知残留（二期 N 线）：notificationManager / requestEnableNotification /
+ *      openNotificationSettings / NotificationRequest / wantAgent 一个都不能出现。
  *
  * 允许的 brewcommon 内部 import：BrewInstalledLoader / BrewInstalledPackage（只读快照）。
  * 其余 brewcommon 命令相关符号由规则 1 的负向清单拦住。
@@ -67,9 +70,11 @@ const FORBIDDEN_SYMBOLS = [
 const BREW_LITERAL_RE = /(['"`])brew[\s'"`]/;
 const DRY_RUN_RE = /--dry-run/;
 const APP_STORAGE_RE = /\bAppStorage\b/;
+/** 通知链路残留（二期 N 线整体移除后必须为零：notificationManager / wantAgent 等） */
+const NOTIFY_RESIDUE_RE = /\b(notificationManager|requestEnableNotification|openNotificationSettings|NotificationRequest|wantAgent|WantAgent)\b/;
 /** 哨兵服务的数据来源必须且只能是 BrewInstalledLoader 的只读快照 */
 const LOADER_IMPORT_RE = /import\s*\{[^}]*BrewInstalledLoader[^}]*\}\s*from/;
-/** G6：H 的通知计数过滤必须走 ReleaseIntelFilter（策略联动的唯一入口） */
+/** G6：H 的卡片计数过滤必须走 ReleaseIntelFilter（策略联动的唯一入口） */
 const SENTINEL_FILTER_IMPORT_RE = /import\s*\{[^}]*ReleaseIntelFilter[^}]*\}\s*from/;
 
 /**
@@ -158,6 +163,9 @@ export function scanContent(content, forbidden = FORBIDDEN_SYMBOLS, checkAppStor
     if (checkAppStorage && APP_STORAGE_RE.test(line)) {
       violations.push({ line: idx + 1, rule: 'AppStorage', snippet: line.trim().slice(0, 120) });
     }
+    if (NOTIFY_RESIDUE_RE.test(line)) {
+      violations.push({ line: idx + 1, rule: 'notify-residue', snippet: line.trim().slice(0, 120) });
+    }
   });
   return violations;
 }
@@ -180,13 +188,12 @@ function collectEtsFiles(dir) {
 
 const NEGATIVE_CASES = [
   {
-    name: '干净的服务片段（只读快照 + 推卡 + 发通知）',
+    name: '干净的服务片段（只读快照 + 推卡，通知链路已移除）',
     code: `
 import { preferences } from '@kit.ArkData';
 import { BrewInstalledLoader } from './BrewInstalledLoader';
 const snap = BrewInstalledLoader.snapshot();
 formProvider.updateForm(formId, binding);
-notificationManager.publish(request);
 `,
   },
   {
@@ -221,6 +228,8 @@ const POSITIVE_CASES = [
   { name: '--dry-run 拼装', code: `const cmd = commandLine + ' --dry-run';\n` },
   { name: '使用 AppStorage', code: `const v = AppStorage.get<boolean>('x') ?? false;\n` },
   { name: 'import AppStorage', code: `import { AppStorage } from '@ohos/arkui';\n` },
+  { name: 'import notificationManager（N 线残留）', code: `import { notificationManager } from '@kit.NotificationKit';\n` },
+  { name: 'wantAgent 跳转代理（N 线残留）', code: `const agent = await wantAgent.getWantAgent(wantAgent.WantAgentInfo);\n` },
 ];
 
 /** Y 组的组内正反用例：AppStorage 放行但命令符号照禁（scanContent 的参数化行为） */
@@ -314,7 +323,7 @@ function main() {
     console.log(`PASS ${SERVICE_FILE}: imports BrewInstalledLoader`);
   }
 
-  // G6：H 的通知计数过滤必须走 ReleaseIntelFilter（策略联动的唯一入口）
+  // G6：H 的卡片计数过滤必须走 ReleaseIntelFilter（策略联动的唯一入口）
   if (!SENTINEL_FILTER_IMPORT_RE.test(serviceStripped)) {
     console.error(`FAIL ${SERVICE_FILE}: 未 import ReleaseIntelFilter（G6 策略联动唯一入口）`);
     violations++;
@@ -344,7 +353,7 @@ function main() {
     console.error(`audit failed: ${violations} violation(s) in ${files.length + RELEASE_INTEL_FILES.length} touchpoint file(s)`);
     process.exit(1);
   }
-  console.log(`audit passed: ${files.length} sentinel + ${RELEASE_INTEL_FILES.length} release-intel file(s), zero command/exec references`);
+  console.log(`audit passed: ${files.length} sentinel + ${RELEASE_INTEL_FILES.length} release-intel file(s), zero command/exec/notification references`);
 }
 
 main();

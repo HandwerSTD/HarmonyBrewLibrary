@@ -22,7 +22,7 @@
     },
     {
       "name": "sentinel_card_count",
-      "value": "%d 个软件包可升级"
+      "value": "%d 个软件包推荐升级"
     },
     {
       "name": "sentinel_card_more",
@@ -41,20 +41,16 @@
       "value": "打开应用刷新"
     },
     {
-      "name": "sentinel_notify_title",
-      "value": "%d 个软件包有新版本"
+      "name": "sentinel_card_zero",
+      "value": "全部为最新版本"
     },
     {
-      "name": "sentinel_notify_body",
-      "value": "%s 等 %d 个包待升级，点按查看升级队列"
+      "name": "sentinel_card_hint",
+      "value": "点按查看升级队列"
     },
     {
-      "name": "sentinel_notify_action_upgrade",
-      "value": "全部升级"
-    },
-    {
-      "name": "sentinel_notify_action_later",
-      "value": "稍后"
+      "name": "sentinel_card_unit",
+      "value": "个软件包推荐升级"
     }
   ]
 }

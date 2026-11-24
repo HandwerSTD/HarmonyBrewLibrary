@@ -17,7 +17,7 @@ const TAG: string = '[sentinel]';
  *   - 按档位常量决定要不要向系统登记 work scheduler 任务（P1，当前休眠）。
  *
  * PcAbility.onForeground 调 `onForeground(this.context)`：每次回前台评估一次，
- * 应用存活期间卡片与通知都靠它保底（无论探针结论如何，这一档恒成立）。
+ * 应用存活期间卡片数据都靠它保底（二期起通知链路已整体移除；无论探针结论如何，这一档恒成立）。
  */
 export class SentinelBootstrap {
   /**
@@ -30,7 +30,7 @@ export class SentinelBootstrap {
     const service: BrewSentinelService = BrewSentinelService.getInstance();
     if (SentinelBootstrap.snapshotListener === null) {
       SentinelBootstrap.snapshotListener = () => {
-        service.evaluateAndPush(context, true);
+        service.evaluateAndPush(context);
       };
       BrewInstalledLoader.subscribe(SentinelBootstrap.snapshotListener);
       Logger.info(TAG, 'subscribed to installed snapshot updates');
@@ -45,7 +45,7 @@ export class SentinelBootstrap {
   /** 应用回到前台：评估一次快照。UI_CONTEXT 可能尚未写入（loadContent 之后才有），
    *  早期调用读不到快照会被服务静默跳过，无副作用 */
   public static onForeground(context: common.UIAbilityContext): void {
-    BrewSentinelService.getInstance().evaluateAndPush(context, true);
+    BrewSentinelService.getInstance().evaluateAndPush(context);
   }
 
   private static scheduleWork(context: common.UIAbilityContext): void {

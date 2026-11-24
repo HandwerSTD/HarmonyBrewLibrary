@@ -377,38 +377,6 @@
       "value": "This application is an independent third-party client. It is not affiliated with, endorsed by, or officially connected to Homebrew, Harmonybrew, or AtomGit in any way. All trademarks, names, and related rights mentioned in this application belong to their respective owners. Package information shown in this application is fetched from publicly available community repositories and is for reference only. If there is any infringement, please contact us and it will be handled promptly."
     },
     {
-      "name": "sentinel_setting_row",
-      "value": "Update Sentinel"
-    },
-    {
-      "name": "sentinel_setting_frequency",
-      "value": "Reminder frequency"
-    },
-    {
-      "name": "sentinel_freq_off",
-      "value": "Off"
-    },
-    {
-      "name": "sentinel_freq_daily",
-      "value": "Daily"
-    },
-    {
-      "name": "sentinel_freq_weekly",
-      "value": "Weekly"
-    },
-    {
-      "name": "sentinel_setting_auth",
-      "value": "Desktop notifications"
-    },
-    {
-      "name": "sentinel_setting_auth_on",
-      "value": "Enabled"
-    },
-    {
-      "name": "sentinel_setting_auth_go",
-      "value": "Enable"
-    },
-    {
       "name": "ai_privacy_note",
       "value": "AI features send package metadata and command error text to the model provider you configure (e.g. DeepSeek); no account or device identifiers are included. Your API key is stored encrypted on this device only."
     }

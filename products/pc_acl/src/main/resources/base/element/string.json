@@ -22,7 +22,7 @@
     },
     {
       "name": "sentinel_card_count",
-      "value": "%d packages can be upgraded"
+      "value": "%d packages recommended for upgrade"
     },
     {
       "name": "sentinel_card_more",
@@ -41,20 +41,16 @@
       "value": "Open the app to refresh"
     },
     {
-      "name": "sentinel_notify_title",
-      "value": "%d packages have new versions"
+      "name": "sentinel_card_zero",
+      "value": "All Packages Up to Date"
     },
     {
-      "name": "sentinel_notify_body",
-      "value": "%s and %d more pending. Tap to view the upgrade queue"
+      "name": "sentinel_card_hint",
+      "value": "Tap to view upgrade queue"
     },
     {
-      "name": "sentinel_notify_action_upgrade",
-      "value": "Upgrade all"
-    },
-    {
-      "name": "sentinel_notify_action_later",
-      "value": "Later"
+      "name": "sentinel_card_unit",
+      "value": "packages recommended for upgrade"
     }
   ]
 }
