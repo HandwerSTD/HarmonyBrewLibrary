@@ -1,5 +1,7 @@
 # AI Companion 二期 · 解析落点全景 Spec
 
+> 状态：已完成、已归档（封存留档；P1 四落点实现见 `feature/brew-ai-companion-2` 3a60e6f，P2 预留钩子与 P3 未决项随封存不再排期）。
+
 日期:2026-11-23 · 前置:一期(`docs/superpowers/specs/2026-11-22-ai-companion-spec.md`,D1/D2/D3 已实现)、I tldr(已实现:`TldrService`/`BrewTldrSectionView`)、Y 更新情报(`docs/superpowers/specs/2026-11-23-release-intel-spec.md`,AI 摘要内置,本 spec 不重复)
 盘点依据:features/ 232 个 ets 文件枚举(2026-11-23)+ formulae.brew.sh 实测字段(`docs/knowledge/2026-11-23-release-channels-probe.md` 同期报告)
 
