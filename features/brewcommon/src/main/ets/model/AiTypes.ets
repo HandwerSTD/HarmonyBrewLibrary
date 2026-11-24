@@ -75,6 +75,11 @@ export class AiSettingsSnapshot {
    * 恒回 false**——快照里的值即详情页装配的最终判据，装配层不用再查 Key。
    */
   public autoExplain: boolean = false;
+  /**
+   * 「自动解析更新日志」开关（Y 更新情报中心的 AI 摘要闸，默认开）。同上，
+   * 无 Key 时 AiSettingsStore.autoReleaseIntel() 恒回 false。
+   */
+  public autoReleaseIntel: boolean = false;
 }
 
 /** D1 讲解卡。字段名对齐 spec §4 的四段结构。 */

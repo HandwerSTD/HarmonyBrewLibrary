@@ -84,6 +84,23 @@ export struct StatementView {
               bottom: $r('sys.float.padding_level2'),
             })
             .margin({ top: $r('sys.float.padding_level2') })
+
+          // 更新情报披露（release intel spec G13：本功能会访问上游 GitHub Releases
+          // 公开页面并把 Release Notes 原文发给 AI provider 归纳；请求不含用户身份，
+          // 摘要结果缓存在本机。同样只做告知，纯声明行）。
+          Text($r('app.string.release_intel_privacy_note'))
+            .fontColor($r('sys.color.font_secondary'))
+            .fontWeight(FontWeight.Regular)
+            .fontSize($r('sys.float.Body_S'))
+            .textAlign(TextAlign.Start)
+            .width('100%')
+            .padding({
+              left: $r('sys.float.padding_level6'),
+              right: $r('sys.float.padding_level6'),
+              top: $r('sys.float.padding_level4'),
+              bottom: $r('sys.float.padding_level2'),
+            })
+            .margin({ top: $r('sys.float.padding_level2') })
         }
         .alignItems(HorizontalAlign.Start)
         .padding({

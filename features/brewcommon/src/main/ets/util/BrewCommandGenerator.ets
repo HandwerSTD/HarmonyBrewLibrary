@@ -95,6 +95,29 @@ export class BrewCommandGenerator {
   }
 
   /**
+   * 固定版本的参数部分（Y spec G6：`brew pin <token>`）。
+   * **brew pin 仅 formula 存在**——cask 无 pin 语义，UI 侧不渲染 cask 的固定入口。
+   */
+  public static pinArgs(token: string, tap: string): string {
+    return `pin ${BrewCommandGenerator.qualifiedName(token, tap)}`;
+  }
+
+  /** 解除固定的参数部分（`brew unpin <token>`）。 */
+  public static unpinArgs(token: string, tap: string): string {
+    return `unpin ${BrewCommandGenerator.qualifiedName(token, tap)}`;
+  }
+
+  /** 固定版本命令（只生成命令文本；执行入口沿用一期执行 Sheet 的「复制」语义，G13）。 */
+  public static pinCommand(token: string, tap: string): string {
+    return `brew ${BrewCommandGenerator.pinArgs(token, tap)}`;
+  }
+
+  /** 解除固定命令。 */
+  public static unpinCommand(token: string, tap: string): string {
+    return `brew ${BrewCommandGenerator.unpinArgs(token, tap)}`;
+  }
+
+  /**
    * 从详情取安装命令。
    * 优先用数据里已算好的 `installCommand`（由 mock 生成器/后端产出），
    * 缺失时按 kind + token + tap 回退计算，保证 UI 侧不会拿到空串。

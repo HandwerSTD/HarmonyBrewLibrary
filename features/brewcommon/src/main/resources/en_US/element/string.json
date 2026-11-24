@@ -600,10 +600,7 @@
       "name": "brew_tldr_copied",
       "value": "Copied"
     },
-    {
-      "name": "brew_tldr_run",
-      "value": "Run"
-    },
+
     {
       "name": "brew_tldr_attribution",
       "value": "Examples from tldr-pages (CC BY 4.0)"
@@ -825,6 +822,14 @@
       "value": "Generate explanation automatically on detail page open; turn off to require tapping \"AI explain\""
     },
     {
+      "name": "ai_settings_auto_intel",
+      "value": "Auto-digest release notes"
+    },
+    {
+      "name": "ai_settings_auto_intel_hint",
+      "value": "Summarize the release intel card with AI; turn off to show the original notes only"
+    },
+    {
       "name": "ai_d2_related",
       "value": "In catalog"
     },
@@ -835,6 +840,162 @@
     {
       "name": "brew_tldr_command_hint",
       "value": "%s provides the command %s"
+    },
+    {
+      "name": "release_intel_version_of",
+      "value": "Version %s"
+    },
+    {
+      "name": "release_intel_bullet_breaking",
+      "value": "Breaking: %s"
+    },
+    {
+      "name": "release_intel_bullet_security",
+      "value": "Security: %s"
+    },
+    {
+      "name": "release_intel_bullet_fix",
+      "value": "Fix: %s"
+    },
+    {
+      "name": "release_intel_bullet_new",
+      "value": "New: %s"
+    },
+    {
+      "name": "release_intel_security_note",
+      "value": "Quoted verbatim from upstream release notes; not verified against any vulnerability database."
+    },
+    {
+      "name": "release_intel_deps_add",
+      "value": "Added dependencies"
+    },
+    {
+      "name": "release_intel_deps_build_add",
+      "value": "Added build dependencies"
+    },
+    {
+      "name": "release_intel_deps_remove",
+      "value": "Removed dependencies"
+    },
+    {
+      "name": "release_intel_caveats_changed",
+      "value": "Install caveats changed"
+    },
+    {
+      "name": "release_intel_gap_repo",
+      "value": "Upstream repository is not on GitHub; release intelligence unavailable"
+    },
+    {
+      "name": "release_intel_gap_tag",
+      "value": "No matching release found upstream for this version"
+    },
+    {
+      "name": "release_intel_gap_net",
+      "value": "Upstream releases page unreachable; try regenerating later"
+    },
+    {
+      "name": "release_intel_gap_empty",
+      "value": "This release provides no release notes"
+    },
+    {
+      "name": "release_intel_view_source",
+      "value": "Release page"
+    },
+    {
+      "name": "release_intel_pin",
+      "value": "Pin version"
+    },
+    {
+      "name": "release_intel_ignore_menu",
+      "value": "Ignore"
+    },
+    {
+      "name": "release_intel_ai_loading",
+      "value": "AI analyzing…"
+    },
+    {
+      "name": "release_intel_toggle_ai",
+      "value": "AI summary"
+    },
+    {
+      "name": "release_intel_toggle_original",
+      "value": "Show original"
+    },
+    {
+      "name": "release_intel_ignore",
+      "value": "Ignore this version"
+    },
+    {
+      "name": "release_intel_unignore",
+      "value": "Unignore"
+    },
+    {
+      "name": "release_intel_pause_7",
+      "value": "Pause for 7 days"
+    },
+    {
+      "name": "release_intel_pause_30",
+      "value": "Pause for 30 days"
+    },
+    {
+      "name": "release_intel_pause_forever",
+      "value": "Pause indefinitely"
+    },
+    {
+      "name": "release_intel_ai_failed",
+      "value": "AI summary failed; try regenerating later"
+    },
+    {
+      "name": "release_intel_stale",
+      "value": "Cache expired and refresh failed; showing the last result"
+    },
+    {
+      "name": "release_intel_truncated",
+      "value": "Upstream notes were truncated before summarizing"
+    },
+    {
+      "name": "release_intel_view_full",
+      "value": "View full notes"
+    },
+    {
+      "name": "release_intel_fetching",
+      "value": "Fetching release intel…"
+    },
+    {
+      "name": "release_intel_ignored_bar",
+      "value": "Updates to %s are ignored"
+    },
+    {
+      "name": "release_intel_archive",
+      "value": "Update archive"
+    },
+    {
+      "name": "release_intel_verdict_major",
+      "value": "Major upgrade"
+    },
+    {
+      "name": "release_intel_verdict_minor",
+      "value": "Feature update"
+    },
+    {
+      "name": "release_intel_verdict_patch",
+      "value": "Fix update"
+    },
+    {
+      "name": "release_intel_verdict_revision",
+      "value": "Repack"
+    },
+    {
+      "name": "release_intel_verdict_unknown",
+      "value": "Version update"
+    },
+    {
+      "name": "release_intel_privacy_note",
+      "value": "Release intelligence: this feature visits the upstream project's public release page and sends release notes text to your configured AI provider to generate summaries; requests contain no identity information and summaries are stored locally only."
+    },
+    {
+      "name": "release_intel_notes_preview",
+      "value": "Original release notes (excerpt)"
     }
   ]
 }

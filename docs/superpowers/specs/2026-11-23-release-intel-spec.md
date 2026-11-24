@@ -68,12 +68,24 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - 更新成功事件(BrewCommandRunner upgrade 成功回调)→ append `{token, from, to, at, intelRef}` 至 `filesDir/brew_live/ai/release_intel/<token>/archive.json`(cap 20 条,超出淘汰最旧)。
 - 详情页「版本档案」区:有档案才渲染;每行 from→to/时间,点击展开当时的情报快照(若缓存仍在)。为 L 版本时光机预留数据接口(字段对齐,不实现恢复)。
 
-## 4. 交互与视觉
+## 4. 交互与视觉(v1.3 重写:App Store「What's New」形态)
 
-- 卡片位置:详情页 outdated 时,Hero → 生命周期 banner → **更新情报卡** → 安装命令卡 → 元信息条 → D1 讲解卡 → sections → caveats → **版本档案** → 同分类。情报卡与讲解卡视觉同族(卡片+分组标题),徽章用结构徽章样式(大版本=主题色描边、安全=警示色,均带「结构化判定/上游自述」小字区分)。
-- 卡片结构:徽章行(大版本/安全声明数/依赖增删数)→ one_liner → 三分组(重大变更(含 impact/action)→ 修复 → 新功能;空组不渲染)→ 依赖变化行(直述:新增 n 个依赖(x/y…)、移除 m 个)→ caveats 变化行(若有,diff 文本折叠)→ 信息缺口行(三级文案)→ 来源行 + 操作行(固定此版本 ▾ / 忽略本次版本 / 暂停提醒 ▾ / 查看原文(外跳 `github.com/{owner}/{repo}/releases/tag/{tag}`))。
+> **定调(用户 2026-11-24)**:情报卡必须是真正的 App Store 风格更新日志卡片——**卡内只放版本号、有用的信息、若干操作按钮**。v1/v1.2 的「情报报表」形态(卡片标题+双徽章+from→to 行+四个分区标题+AI gaps+完整 diff 表)信息过载,v1.3 全部拆除。
+
+- 卡片位置:详情页 outdated 时,Hero → 生命周期 banner → **更新情报卡** → 安装命令卡 → 元信息条 → D1 讲解卡 → sections → caveats → **版本档案** → 同分类。
+- 卡片结构(自上而下,皆有才显示):
+  1. **版本号主行**「版本 {to}」(App Store 语义:第一行就是版本,不渲染卡片标题);
+  2. **verdict 副行**(大版本升级/功能更新/修复更新/重打包/版本更新;major 用警示色,其余 tertiary);
+  3. **正文**:AI one_liner;AI 缺席(无 Key/失败/调试关)时渲染 `notesPreview` 原文节选(**aiFailed 也降级渲染**——正文缺席才是最伤用户的形态);
+  4. **要点列表**:breaking → security → fixes → new 扁平成带前缀 bullet(「重大变更:{title}：{impact}（{action}）」等四类前缀键),**总数封顶 6 条**(克制:摘要卡不是全文,全文点「查看原文」);
+  5. **结构化 diff 压成小字行**(无分区标题):新增依赖/新增构建依赖/移除依赖/caveats 变化;bottle 重打包这种用户无感口径不渲染;
+  6. **缺口行**(F1–F4 三级文案,secondary 色非红);
+  7. **状态脚注横排一行**(AI 失败/数据过期/原文截断,tertiary 小字);
+  8. **来源声明行**(AI 摘要来源标注 或 无 AI 时来源行;有安全 bullet 时追加「上游自述未经核验」声明);
+  9. **操作行**:固定(复制 pin 命令,G13)/忽略(本次↔撤销)/暂停 ▾(7 天/30 天/无限)/查看原文(外跳 releases/tag)/重新生成(仅 AI 产物存在或 AI 失败时渲染)。
 - 忽略/暂停的次级确认:暂停提供 7 天/30 天/无限 三档;被忽略版本在详情页顶部显示一行弱化条「已忽略 {version} 的更新提醒 · 撤销」。
-- 「重新生成」入口放摘要区右上(与 D1 一致);无 Key 时整卡仅结构化区,不出现任何 AI 引导(对齐一期「无 Key 恒不自动也不引导」)。
+- 无 Key 时整卡仅结构化区+原文节选,不出现任何 AI 引导(对齐一期「无 Key 恒不自动也不引导」)。
+- AI gaps 字段保留收集(prompt 引导 AI 诚实)但 **UI 不渲染**——「notes 没讲什么」是内部元信息,不是用户要的信息。
 
 ## 5. 失败态分级
 
@@ -97,27 +109,25 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - OSV/漏洞库不接入(v1):安全识别仅「上游自述 + 来源标注」,不得表述为核验结论。
 - pc_normal 编译门:情报卡代码置于 brewcommon/brewdetail 时须以 product 条件隔离入口(pc_normal 不注册详情页情报区,路由不注册)。
 
-## 7. 文案表(中文)
+## 7. 文案表(中文;v1.3 按盘上 string.json 实况为准——分区标题类键已删,bullet 前缀/版本号键已增,以 `features/brewcommon/src/main/resources/*/element/string.json` 为权威)
 
-| key | 文案 |
+| key | 文案(节选) |
 |---|---|
-| release_intel_title | 更新情报 |
-| release_intel_major | 大版本升级 |
-| release_intel_security | 安全修复(上游自述,非漏洞库核验) |
-| release_intel_deps_add | 新增 {n} 个依赖:{list} |
-| release_intel_deps_remove | 移除 {n} 个依赖:{list} |
-| release_intel_gap_repo | 暂无可靠发布情报源(上游非 GitHub 托管) |
-| release_intel_gap_tag | 上游未发布对应版本的说明 |
-| release_intel_gap_empty | 上游未附文字说明,仅有版本发布 |
-| release_intel_gap_net | 情报通道不可达(网络无法直连 GitHub) |
-| release_intel_gap_diff | 未保留旧版本对照数据 |
-| release_intel_source | 来自 {repo} release notes · 数据截至 {HH:mm} |
-| release_intel_pin | 固定此版本 |
-| release_intel_ignore | 忽略本次版本 |
-| release_intel_pause | 暂停提醒 |
+| release_intel_version_of | 版本 %s |
+| release_intel_bullet_breaking | 重大变更:%s |
+| release_intel_bullet_security | 安全:%s |
+| release_intel_bullet_fix | 修复:%s |
+| release_intel_bullet_new | 新功能:%s |
+| release_intel_verdict_major/minor/patch/revision/unknown | 大版本升级 / 功能更新 / 修复更新 / 重打包 / 版本更新 |
+| release_intel_deps_add / deps_build_add / deps_remove / caveats_changed | 新增依赖 / 新增构建依赖 / 移除依赖 / 安装注意事项有更新 |
+| release_intel_gap_repo/tag/net/empty | 缺口四级文案(上游非 GitHub / 无对应发布页 / 通道不可达 / 无正文) |
+| release_intel_notes_preview | 原始发布说明(节选) |
+| release_intel_source / ai_badge / security_note | 来源与声明行 |
+| release_intel_pin / ignore / unignore / pause(+_7/_30/_forever) / view_source | 操作行 |
+| release_intel_ai_failed / stale / truncated | 状态脚注 |
 | release_intel_archive | 版本档案 |
-| release_intel_truncated | (上游说明过长,已截断) |
 | release_intel_ignored_bar | 已忽略 {version} 的更新提醒 · 撤销 |
+| release_intel_privacy_note | StatementView 隐私披露行 |
 
 ## 8. 改动清单
 
@@ -161,3 +171,105 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - feed 深度:releases.atom 条目数由 GitHub 控制(实测约 10 条),高频发布项目可能不覆盖较旧版本段——v1 只解释「已装→最新」一段,不受影响;档案回看更早版本段时可能缺口(记入 F3)。
 - archive 快照引用依赖 AI 缓存存活(BrewCacheAdmin 清理后档案只剩元数据行)——接受,文案不承诺全文回看。
 - 与 AA Brew Preview(J 装机预演)的关系未梳理:AA 的 dry-run 解读(`BrewDryRunParser` 已存在)与本 spec 的依赖 diff 可能撞车,实施前对齐口径。
+
+## 11. v1.1 增补(2026-11-24):AtomGit 打包通道(G14/F8)
+
+**缺陷来源(用户实测反馈)**:harmonybrew 源的包「上游不是 GitHub 就获取不了」——Harmonybrew 的打包上游本来就不是 GitHub(tap 是 AtomGit 仓库 `Harmonybrew/homebrew-core`),formula 记录的 homepage 是原始项目页,RepoResolver 全部落 F2,AI 区恒空,情报卡只剩缺口。
+
+### 11.1 通道实证(2026-11-24,详见 knowledge 文档 v1.1 一节)
+
+- 打包上游 = AtomGit `Harmonybrew/homebrew-core`(组织页:「核心 tap,大部分 formula 搬迁自上游 Homebrew/homebrew-core」;目录同为 `Formula/<首字母>/<token>.rb` 分片)。
+- AtomGit v5 API 文档允许匿名:`GET https://api.atomgit.com/api/v5/repos/{owner}/{repo}/commits?path=<file>&per_page=N`(GitHub v5 兼容形状);**实测匿名 429**(匿名共享 `p_repoRobot` 账号 10W/hour 配额,时忙时闲)。
+- `raw` 文件通道不可用(返回 HTML 页壳);本地 git log 通道违反 G12 审计零执行设计,弃。
+- 本地 diff/verdict 对 harmonybrew 包**可用**:HarmonybrewMap 已把目录记录映射成 official 形状(versions.stable 等字段齐),v1 卡在此的只有上游通道。
+
+### 11.2 设计:双通道
+
+- **GitHub 上游通道不动**(G9 探针门、TagFilter、NotesExtractor、AI 摘要全照旧);GitHub 托管 homepage 的包双通道并行。
+- **新增 AtomGit 打包通道(仅 harmonybrew 源 + formula)**:`fetchPackCommits` 取「动过 `Formula/<x>/<token>.rb` 的最近提交」≤3 条 `{sha7, message 首行≤120, date YYYY-MM-DD, html_url}`;快照增 `packCommits[]`;情报卡增「Harmonybrew 打包记录」结构化组(分区空表整体不渲染)。
+- **打包记录不进 AI**:commit message 简短、原样转述即可,AI 归纳价值低且引编造风险(P2 再议)。
+- **429/404/网络失败 = 静默降级**:打包记录组不渲染,落一次 info 日志;**不重试轰炸**(匿名配额是共享资源);上游缺口行照旧诚实展示(G5 语义不变)。
+- **G14 新增判据**:harmonybrew 源的 formula 详情页(已装且 outdated),情报卡除缺口行外必须呈现打包记录组(通道可达时);非 harmonybrew 源不发起 AtomGit 请求。
+- **F8 新增失败态**:AtomGit 打包通道不可达/429 → 打包记录组不渲染(静默,不占缺口行——缺口行语义保留给上游通道)。
+- 本地 git log 通道(读 tap 工作区)违反 G12,不做;access_token BYOK 形态列 P2。
+- 文案增 `release_intel_pack_title`(Harmonybrew 打包记录);审计清单不变(ReleaseIntelService 仍零命令符号);改动文件:ReleaseIntelConstants/ReleaseIntelModels/ReleaseIntelService/BrewReleaseIntelCard/string.json×3/Index.ets/单测(shard path 两例)。
+
+## 12. v1.2 增补(2026-11-24):打包通道移除 + AI 不可用降级渲染 notes 原文
+
+**G14/F8 撤销(真机实证)**:临时关掉 AI 放出打包记录组观察,结论=**AtomGit tap 提交流全是机器人提交(迁移 bot),对用户完全没有信息量**。v1.1 的打包通道整段移除(constants/models/service/card/string/单测/Index 导出);harmonybrew 源的包回到「结构化 diff + 上游缺口诚实展示」的 v1 行为。通道实验的实证记录保留在 knowledge 文档 §8(不做无谓重试)。
+
+**AI 不可用时的降级渲染(G5 补充)**:调试观察同时暴露第二个缺口——「更新日志」只经 AI 摘要渲染,无 Key/AI 失败/调试期关 AI 时这块整个空掉,用户感知为「抓不到」(cups v2.4.20 实证:release 正文完整存在,CVE 清单,但卡片不显示)。v1.2 起:
+
+- 快照增 `notesPreview`(notes 原文节选 ≤700 字符,`RELEASE_INTEL_NOTES_PREVIEW_CHARS`);`card === null && !aiFailed && notesPreview 非空` 时卡片渲染「原始发布说明(节选)」组——**上游原文直接展示,零编造**(AI 只解释事实;没有 AI 就给事实本身)。
+- **GitHub 空说明占位符识别**:未填写正文的 release,feed content 是字面量 `No content.`(ohos-selfsign 实证,10 条 release 里 8 条是占位符)——NotesExtractor 识别为空 → F4「该版本未填写发布说明」,占位符不进 AI、不进节选。
+- 文案:`release_intel_pack_title` 删,`release_intel_notes_preview`(原始发布说明(节选))增。
+- 「重新生成」按钮改为只在 `card !== null || aiFailed` 时渲染(结构化-only 视图不再有假按钮)。
+- 单测:shard path 两例删,`notes_github_no_content_placeholder` 增(占位符→空;真实正文不受影响)。
+- commits.atom(匿名可用、人类提交质量高,ohos-selfsign 实证)作为「无 release notes 仓库的候选通道」**暂不实施**——与打包通道同属提交列表形态,先看打包通道的教训;若要接,只接「notes 为空时」的兜底且须过滤 bot 作者,P2 议题。
+
+## 13. v1.3 增补(2026-11-24):App Store 风格重构
+
+**定调(用户)**:目标是真正的 App Store 风格更新日志卡片——卡内只展示版本号、有用的信息、若干操作按钮。自查发现 v1.2 卡片是「情报报表」形态,自纠清单:
+
+1. 删卡片标题行+双徽章+from→to 行 → 「版本 {to}」主行 + verdict 副行;
+2. 删四个分区标题 → 要点扁平带前缀 bullet(总数封顶 6,顺序 breaking→security→fixes→new);
+3. 删 AI gaps 渲染(内部元信息;字段保留收集);
+4. 删 bottle 重打包行(用户无感);
+5. 三条状态脚注竖排 → 横排一行小字;
+6. aiFailed 时也降级渲染 notesPreview(v1.2 只在 !aiFailed 渲染,自查修正);
+7. 「查看原文」并入操作行。
+
+文案:删 title/major/security/fixes/new/diff_title/deps_repack/gap_diff 8 键,增 version_of/bullet_breaking/bullet_security/bullet_fix/bullet_new 5 键(三份 string.json 均 245 键,ConvertFrom-Json 校验通过);模型/服务层零改动,仅 BrewReleaseIntelCard.ets 重写 + spec §4/§7 重写。
+
+## 14. v1.3.1–v1.3.3 增补(2026-11-24):卡片交互打磨
+
+**v1.3.1(用户)**:情报来源声明行删除(release_intel_source/ai_badge 两键删);verdict 标签挪到版本号同行(major 警示色)。
+
+**v1.3.2(用户)**:①正文视图切换——默认原文,「AI 解析」按钮点按后展示 AI 摘要、按钮变「展示原文」;②「查看原文」文案改「发布页」(行为不变,外跳 releases/tag);③「忽略此版本」与「暂停提醒」合为一个菜单(首项忽略/撤销,后接暂停三档)。
+
+**v1.3.3(用户,本节)**:
+- **占位卡**:更新是主打功能,情报获取期间就渲染「版本号 + spinner」卡——`ReleaseIntelSnapshot.loading=true` 占位快照(toVersion=installed.latestVersion,verdict 本地 SemverJudge 预算),VM 在 assemble 发起前先落卡、完成后整体替换;assemble 抛错/无版本增量时收卡(`hasReleaseIntel=false`),防 spinner 永转。
+- **节选 4 行 + 查看全文**:`RELEASE_INTEL_NOTES_PREVIEW_CHARS` 700→160(约 4 行);快照增 `notesFull`(extract 全文 ≤4KB,只放内存不落盘);正文截断时节选尾部给「查看全文」,点开**半模态**(bindSheet,SheetSize.MEDIUM/CENTER,hero=包名+版本行+verdict,正文=notesFull 滚动)。
+- **手动 AI 解析**:自动解析开关关闭时操作行下最后一行右对齐仍有「AI 解析」按钮——`assemble` 增 `manualAi` 参数绕开 autoReleaseIntel 闸(无 Key 仍 E1→aiFailed);装配输入四元组 stash 进 **state**(VM 是单例而详情页可叠页,挂 VM 会串页);解析中按钮禁用+spinner,完成前正文保持原文,完成后由卡片 `@Watch` 捕获 card 落地自动切 AI 视图;「重新生成」同口径 manualAi=true。
+- **tldr 执行按钮移除**:示例命令行尾只留「复制」——命令执行入口统一收敛在安装/升级主操作与执行 Sheet,示例不提供一键执行(brew_tldr_run 键删)。
+- 文案:增 release_intel_view_full/release_intel_fetching,删 brew_tldr_run(三份 248 键);审计与双构建口径不变。
+## 15. v1.3.4 增补(2026-11-24):整卡快照缓存
+
+**动机(用户)**:更新情报的缓存此前只覆盖 AI 摘要段(AiCache 24h,key=`token_to`,swr)——但装配里唯一的网络步(atom 抓取,5s 超时×2)与 verdict/diff/notes 解析每次进详情页都重跑,重复进页纯浪费。
+
+**方案**:整卡快照缓存 `ReleaseIntelSnapshotStore`——assemble 产物按 (token, toVersion) 落盘 `filesDir/brew_live/ai/release_intel_snapshot/<token>/<to>.json`(envelope {ts,dataJson},同 token+to **覆盖写**),1h TTL(`RELEASE_INTEL_SNAPSHOT_TTL_MS`)内命中零网络直返。要点:
+
+- 缓存读在 assemble 入口(keyed on rawDoc 的权威 toVersion,非 VM 的 latestVersion,防安装快照滞后错键);force(重新生成)/manualAi(手动 AI 解析)**绕开读**——两条手动路径语义就是「强制现拉」。
+- 缓存写:F1(net)瞬态失败**不缓存**;F2/F3/F4 是稳定事实、notes-only(自动解析关)与 AI 失败快照照常缓存(手动路径绕开读,不会拿到无 AI 的旧值);占位 loading 快照从不落盘。
+- 解析防御式逐字段重建(snapshotFromJson,损坏→按 miss;card 缺失→null;与 parseJsonSafe 同口径,不直接把 JSON.parse 结果当类用)。
+- LRU cap 40 条(单条 ~8–15KB,≈600KB 封顶);随 BrewCacheAdmin.clear 一并清空(换源=口径失效)。
+- 与 AI 缓存分工:AI 缓存管「摘要生成贵」;快照缓存管「装配整体重复」。TTL 过期后重装配,card 段大概率仍命中 AI 24h 缓存,不会重复烧 token。
+- 改动:ReleaseIntelConstants(3 常量)/ReleaseIntelSnapshotStore(新)/ReleaseIntelService(assemble 包缓存层+snapshotFromJson)/Index.ets 导出/审计清单 7→8;VM 与 UI 零改动(缓存对装配层外部透明)。
+## 16. v1.3.5 增补(2026-11-24):缓存 TTL 7 天 + 操作行形态修正
+
+**用户反馈(截图 cups 2.4.20)**:①快照缓存 1h 太短——「他总不能发版本之后再改更新日志?」;②手动「AI 解析」是蓝色强调按钮悬浮在卡片右下角,应与操作行文字平齐、不强调;③节选没有 ellipsis 截断;④「查看全文」入口不在。
+
+**处置**:
+- **TTL 1h→7 天**(`RELEASE_INTEL_SNAPSHOT_TTL_MS`):同版本的 release notes 视为不变,长缓存无信息损失;作者补日志的兜底=「重新生成」(force 绕开读缓存)或清缓存。F1 瞬态失败不缓存、AI card 独立 24h 缓存等 v1.3.4 语义不变。
+- **手动 AI 解析并入操作行**:删独立行蓝色按钮,改操作行同款文字链(font_emphasize);解析中用 16px spinner 占位替代文字(防重入 handleManualAi 兜底),完成后 @Watch 切 AI 视图的 v1.3.3 语义不变。
+- **「查看全文」并入操作行**,位置在手动 AI 解析右侧(用户定调);节选尾部独立入口删除。
+- **节选展示封顶 4 行**:`maxLines(4) + TextOverflow.Ellipsis`(数据层节选仍 160 字符不变)。
+- 操作行顺序:固定版本 → 忽略 → 发布页 → 手动 AI 解析(条件) → 查看全文(条件) → 重新生成(条件;与手动解析互斥)。
+- 零文案/零模型改动;spec §15 的 TTL 表述以本节为准。
+## 17. v1.3.6 增补(2026-11-24):F2 缺口行不渲染
+
+**用户问**:非 GitHub 上游的包有没有拿更新日志的好办法?结论=没有通用的。release 托管在 GitHub 之外的形态高度碎片化:GitLab(releases API 匿名可用)、SourceForge(RSS/best_release.json)、GNU/GNOME(镜像目录列表)、Launchpad(OAuth)——每家都要独立通道(探测+解析+测试+设备可达性),是 v2 多通道课题(spec §10 P2 占位),v1 不做。
+
+**用户定调的兜底**:F2(上游不在 GitHub)的缺口行**不渲染**——卡片只展示版本行(verdict)+ diff 小字 + 操作行,空着比一句「抓不到」更干净。实现:卡片缺口行条件加 `gapCode !== RELEASE_INTEL_GAP_REPO`(**数据层照旧落 gapCode**,知识/日志口径不变,只是 UI 不渲染);F1(网络)/F3(无匹配 tag)/F4(无正文)照常渲染——它们是「GitHub 上游但没拿到」的真缺口,有信息量。
+
+## 18. v1.3.8 增补(2026-11-24):两阶段装配 + RI 生成失败病根修复
+
+**用户定调**:①仅当 AI 生成完成了才把原始更新日志替换成 AI 解析;②AI 生成期间**只有「AI 解析」入口变 [spinner] AI 解析中**,整卡不 spinner;③RI 摘要在其他 AI 任务全好的情况下反复生成失败。
+
+**病根(③,两个确定性 bug)**:
+- **max_tokens 腰斩**:RI 输出 schema 是四个 AI 任务里最大的(one_liner+3 新功能+3 修复+3 breaking×3 字段+2 安全+3 gaps),预算却只有 700——CVE 密集的发布说明(cups 7 条 CVE 实证)让模型输出超长 JSON,在 700 token 处被截断,JSON 不完整→E4→aiFailed;重试面对同样 notes 生成同样长的输出必然再截断。v1.3.7c 修的解析层超限截断根本轮不到执行(截断发生在传输层)。处置:`AI_MAX_TOKENS_RI` 700→2000 + prompt 加条数硬上限措辞 + `stringArrayOf` 超限从整段丢弃改为截断取前 N。
+- **AI 缓存读写口径不一致**:fetchIntel 写缓存存 `JSON.stringify(card)`(驼峰),读侧 parseIntel 等 snake_case——**每次命中都解析失败当 miss**,成功结果永远存不下来、失败后也没有旧值兜底。处置:缓存改存模型原始输出(与读侧同口径);`AI_PROMPT_VERSION_RI` 2→3(旧缓存一并作废)。
+
+**两阶段装配(①②)**:assemble 拆成「结构化区+notes 原文」与「AI 段」两步——assemble 不再 await AI(atom 仍是唯一网络步),快照先落卡、正文保持原文;VM 随后调 `ReleaseIntelService.runAi`(输入全部来自已落卡快照,不重跑 atom/结构化装配)后台补跑,期间快照 `aiPending=true`(瞬态,不落盘)驱动操作行 AI 入口转 [spinner] AI 解析中;AI 完成/失败各落一次 fork 副本(@Prop 靠新对象引用触发更新),card 落地由卡片 @Watch 捕获 null→有值转移边自动切 AI 视图(aboutToAppear 同口径,快照缓存带 card 直落 AI 视图)。手动「AI 解析」同走 runAi(不再重跑整个 assemble,也没有「atom 这次失败把整卡打回缺口态」的回归面);无 Key 静默跳过(不再 E1→aiFailed)。v1.3.3 的装配输入 stash 四元组随之删除。诊断:RI 解析失败时打 `finish/len/tail`(finish=length 即截断实锤)。
+
+**v1.3.8b(真机反馈修正)**:①AI 入口可见性曾把 aiPending 也排掉——生成期间 [spinner] AI 解析中跟着一起被藏没了(「原文在,没有任何 AI 相关按钮,片刻后 AI 文本闪现」),修正为入口可见性不排除 aiPending、进行态由入口内 spinner 分支渲染;②「重新生成」此前走 loadReleaseIntel 的占位卡路径(整卡 spinner、原文消失),重写为**无占位流程**:当前快照先 fork 成 card=null+aiPending(正文回原文、AI 入口转 spinner),assemble(force) 与 AI(force) 全程后台跑,新装配有 notes 则带着 pending 态无缝续跑 AI(不闪中间态),没拿到 notes(缺口态)如实落卡;原文**始终保持展示**直到 AI 解析完成。装配输入推导抽 `intelInputsOf` 共用。

@@ -10,7 +10,7 @@
  */
 
 /** 每个任务 prompt 的版本号。**变更即该任务的全部落盘缓存失效**（spec G9）。 */
-export const AI_PROMPT_VERSION_D1: number = 1;
+export const AI_PROMPT_VERSION_D1: number = 2;
 export const AI_PROMPT_VERSION_D2: number = 1;
 
 /**
@@ -81,6 +81,13 @@ export const AI_PROVIDER_CUSTOM: string = 'custom';
  * 关 = 显式按钮触发。布尔单独存，不进 config JSON（与 nonStreaming 曾用的模式同构）。
  */
 export const AI_PREFS_KEY_AUTO_EXPLAIN: string = 'brew_ai_auto_explain';
+
+/**
+ * 「自动解析更新日志」开关的偏好键（Y 更新情报中心的 AI 摘要闸，默认开）：
+ * 开 = 详情页情报卡允许发起 AI 摘要（缓存链路复用，失败静默）；
+ * 关 = 情报卡只渲染上游 notes 原文节选。布尔单独存，不进 config JSON。
+ */
+export const AI_PREFS_KEY_AUTO_RELEASE_INTEL: string = 'brew_ai_auto_release_intel';
 
 /** DeepSeek 预置模板（spec §3.1）。baseURL 不含 `/chat/completions` 尾段。 */
 export const AI_DEEPSEEK_BASE_URL: string = 'https://api.deepseek.com';

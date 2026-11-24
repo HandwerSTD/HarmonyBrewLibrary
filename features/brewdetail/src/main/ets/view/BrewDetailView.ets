@@ -48,7 +48,10 @@ import { BrewAiExplainCard } from '../component/BrewAiExplainCard';
 import { BrewDetailHero } from '../component/BrewDetailHero';
 import { BrewDetailMetaBar, BrewInfoSectionView, BrewInstallCommandCard } from '../component/BrewInfoSectionView';
 import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
+import { BrewReleaseArchiveView } from '../component/BrewReleaseArchiveView';
+import { BrewReleaseIntelCard } from '../component/BrewReleaseIntelCard';
 import { BrewTldrSectionView } from '../component/BrewTldrSectionView';
+import { RELEASE_INTEL_PAUSE_FOREVER_MS, ReleaseIntelPrefs } from '@ohos/brewcommon';
 import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
 
@@ -188,6 +191,32 @@ export struct BrewDetailView {
    * 直接 push 到 AI 设置路由——它注册在 mine 模块的 routerMap，全局可达）。 */
   private openAiSettings(): void {
     this.detailState.pathStack?.pushPath({ name: PageEnum.MINE_AI_SETTINGS_VIEW });
+  }
+
+  // ---------------- Y · 更新情报的页面处理器（spec §4 操作行） ----------------
+
+  /** 忽略 / 撤销忽略（G6：写 ReleaseIntelPrefs + 翻 state 开关；H 通知计数随之变化） */
+  private handleIntelToggleIgnore(): void {
+    const token: string = this.detailState.params.token;
+    if (this.detailState.releaseIntelIgnored) {
+      ReleaseIntelPrefs.clearIgnored(token);
+      this.detailState.releaseIntelIgnored = false;
+      return;
+    }
+    ReleaseIntelPrefs.setIgnored(token, this.detailState.releaseIntel.toVersion);
+    this.detailState.releaseIntelIgnored = true;
+  }
+
+  /** 暂停提醒：卡片给的是「时长」，prefs 存的是「截止时刻」（0 = 无限期） */
+  private handleIntelPause(durationMs: number): void {
+    const until: number = durationMs === RELEASE_INTEL_PAUSE_FOREVER_MS ?
+      RELEASE_INTEL_PAUSE_FOREVER_MS : Date.now() + durationMs;
+    ReleaseIntelPrefs.setPaused(this.detailState.params.token, until);
+  }
+
+  /** 重新生成（G8）：旁路 AI 缓存强制重跑，结构化区同步重算 */
+  private handleIntelRegenerate(): void {
+    this.viewModel.regenerateReleaseIntel(this.detailState.params, this.detailState);
   }
 
   /** 失败/无网/未找到时的重试。必须重新发请求 —— 只重置标志位的话按钮点了没反应。
@@ -334,6 +363,52 @@ export struct BrewDetailView {
           BrewLifecycleBanner({ notice: this.detailState.data.lifecycle })
         }
 
+        // Y · 更新情报（release intel spec §4：生命周期之后、安装命令卡之前）。
+        // 忽略弱化条只在「该版本已被忽略」时出现；情报卡由 hasReleaseIntel 开关驱动
+        // （tldr 同款：数据到达前不渲染、不占位，300ms 淡入转场在装配层做）。
+        if (this.detailState.hasReleaseIntel && this.detailState.releaseIntelIgnored) {
+          Row() {
+            Text($r('app.string.release_intel_ignored_bar',
+              this.detailState.releaseIntel.toVersion))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_secondary'))
+              .layoutWeight(1)
+            Text($r('app.string.release_intel_unignore'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_emphasize'))
+              .onClick(() => {
+                this.handleIntelToggleIgnore();
+              })
+              .padding({ left: 8 })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .padding($r('sys.float.padding_level6'))
+          .backgroundColor($r('sys.color.comp_background_tertiary'))
+          .borderRadius($r('sys.float.corner_radius_level8'))
+        }
+        if (this.detailState.hasReleaseIntel) {
+          BrewReleaseIntelCard({
+            snapshot: this.detailState.releaseIntel,
+            pinCommand: this.detailState.releaseIntelPinCommand,
+            ignored: this.detailState.releaseIntelIgnored,
+            // 手动「AI 解析」按钮的可见性判据（v1.3.3）：快照判据含冷启探针
+            hasKey: AiSettingsStore.snapshot().hasKey,
+            onToggleIgnore: (): void => {
+              this.handleIntelToggleIgnore();
+            },
+            onPause: (durationMs: number): void => {
+              this.handleIntelPause(durationMs);
+            },
+            onRegenerate: (): void => {
+              this.handleIntelRegenerate();
+            },
+            onManualAi: (): Promise<void> => {
+              return this.viewModel.requestReleaseIntelAi(this.detailState);
+            },
+          })
+        }
+
         // 2 安装命令 + 复制（主操作按钮不在这里，见 ActionBarBuilder）
         BrewInstallCommandCard({ command: this.detailState.data.installCommand })
 
@@ -383,6 +458,12 @@ export struct BrewDetailView {
             .padding($r('sys.float.padding_level6'))
             .backgroundColor($r('sys.color.comp_background_list_card'))
             .borderRadius($r('sys.float.corner_radius_level8'))
+        }
+
+        // 9.5 版本档案（release intel §3.3：caveats 与 siblings 之间；增益记录，
+        // 加载失败/为空整区不渲染，不占位不提示）
+        if (this.detailState.releaseArchive.length > 0) {
+          BrewReleaseArchiveView({ entries: this.detailState.releaseArchive })
         }
 
         // 10 同分类其他包

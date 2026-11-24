@@ -22,6 +22,14 @@ import {
   AI_TEMPERATURE_D2,
   AI_TEMPERATURE_D3,
 } from '../constant/AiConstants';
+// RI（更新情报）的常量单独成文件：只被 release intel 一条链路使用，见 ReleaseIntelConstants
+import {
+  AI_CACHE_TTL_RI_MS,
+  AI_MAX_TOKENS_RI,
+  AI_PROMPT_VERSION_RI,
+  AI_TEMPERATURE_RI,
+  RELEASE_INTEL_FEATURE,
+} from '../constant/ReleaseIntelConstants';
 import {
   AiError,
   AiErrorKind,
@@ -33,6 +41,12 @@ import {
   AiToolCandidate,
   AiToolResult,
 } from '../model/AiTypes';
+import {
+  ReleaseIntelBreakingChange,
+  ReleaseIntelCard,
+  ReleaseIntelInput,
+  ReleaseIntelSecurityClaim,
+} from '../model/ReleaseIntelModels';
 import { AiCache, AiCacheReadResult } from './AiCache';
 import { AiClient } from './AiClient';
 import type { AiClientTask, AiCompletion as AiCompletion2 } from './AiClient';
@@ -148,6 +162,19 @@ export class AiTasks {
     return base + '\n请按 schema 输出 JSON。';
   }
 
+  /**
+   * 平台口径（全任务共用，拼在每个 system prompt 末尾）：用户设备是 HarmonyOS PC
+   * （2in1 电脑），不是 macOS——但上游资料（Release Notes、系统要求、报错输出）里
+   * 满篇都是 macOS 语境，模型会顺嘴把「macOS」写进解读。术语解释（formula/cask/
+   * bottle）不受影响；引用原文时 macOS 字样保留，面向用户的表述一律按 HarmonyOS PC。
+   */
+  private static readonly PLATFORM_RULE: string =
+    '平台口径：用户的设备是 HarmonyOS PC（2in1 电脑），不是 macOS。解释 Homebrew 术语' +
+    '（formula/cask/bottle 等）不受影响；但任何涉及「在什么系统上运行/安装」的表述都' +
+    '必须以 HarmonyOS PC 为准，不得把 macOS 说成用户的设备系统或建议 macOS 专属操作；' +
+    '引用上游原文（发布说明、系统要求、报错输出）时 macOS 字样保留原文，' +
+    '面向用户的解读一律按 HarmonyOS PC 语境。';
+
   private static readonly D1_SYSTEM: string = '你是 Homebrew 包讲解助手，像懂行的朋友向新手介绍这个包，' +
     '不是在填表。只基于用户提供的字段回答，用简体中文；不得虚构版本号、命令或功能；' +
     'caveats 是英文原文时翻译成中文并归纳风险点；字段里没有的信息就直说无法判断。\n' +
@@ -156,7 +183,8 @@ export class AiTasks {
     '**禁止**输出「未提供」「为空」「暂无」之类的填充句——宁可少一段，不写废话。\n' +
     '输出仍然必须是 JSON，字段结构不变：' +
     '{"summary":"定位一句话或两句话","scenarios":["适用场景，0–3条，自然短语"],' +
-    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"]}。';
+    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"]}。' +
+    AiTasks.PLATFORM_RULE;
 
   private static parseExplain(text: string, outcome?: ParseOutcome): AiExplainCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiExplainCard | null => {
@@ -164,7 +192,7 @@ export class AiTasks {
       card.summary = typeof obj['summary'] === 'string' ? obj['summary'] as string : '';
       card.scenarios = stringArrayOf(obj['scenarios'], 3);
       card.caveats = stringArrayOf(obj['caveats'], 3);
-      // steps 上限 3（isValid 收 2–3 条）；解析层 6 是给「超限即格式不符」判据留的余量口径不变
+      // steps 上限 3（isValid 收 2–3 条）；超限由 stringArrayOf 截断取前 3
       card.steps = stringArrayOf(obj['steps'], 3);
       if (!card.isValid()) {
         return null;
@@ -428,7 +456,8 @@ export class AiTasks {
     '推荐最多 5 个真实存在的通用命令行工具（Homebrew 包名）。' +
     '输出 JSON：{"candidates":[{"token":"包名（英文小写）","why":"一句话中文理由"}]}，' +
     '**candidates 必须是对象里的数组键，不要输出裸数组**；' +
-    '没有合适的推荐就输出 {"candidates":[]}，这是合法结果，不要编造包名。';
+    '没有合适的推荐就输出 {"candidates":[]}，这是合法结果，不要编造包名。' +
+    AiTasks.PLATFORM_RULE;
 
   // ------------------------------------------------------------ D3 · 报错解读
 
@@ -481,7 +510,8 @@ export class AiTasks {
   private static readonly D3_SYSTEM: string = '你是 Homebrew 命令报错解读助手。' +
     '基于给出的命令、失败分类与输出尾部，解释失败原因。用简体中文；只陈述输出里有依据的结论，' +
     '推测要标注「可能」。输出 JSON：{"what":"发生了什么，一句话","causes":["可能原因，最多3条"],' +
-    '"nextSteps":["下一步建议，最多3条，可以包含具体命令"]}。';
+    '"nextSteps":["下一步建议，最多3条，可以包含具体命令"]}。' +
+    AiTasks.PLATFORM_RULE;
 
   private static parseFailure(text: string, outcome?: ParseOutcome): AiFailureCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiFailureCard | null => {
@@ -489,6 +519,187 @@ export class AiTasks {
       card.what = typeof obj['what'] === 'string' ? obj['what'] as string : '';
       card.causes = stringArrayOf(obj['causes'], 3);
       card.nextSteps = stringArrayOf(obj['nextSteps'], 3);
+      if (!card.isValid()) {
+        return null;
+      }
+      return card;
+    });
+  }
+
+  // ------------------------------------------------------------ RI · 更新情报摘要（Y）
+
+  /**
+   * 更新情报摘要（Y spec G8）：TTL 24h、stale-while-revalidate、promptVersion=ri-1。
+   * 缓存键 `<token>_<to>`（同一目标版本只归纳一次；to 变了 = 新一次归纳）。
+   * force（「重新生成」）旁路缓存直接取数（对齐 D1 的 2026-11-23 修复结论）。
+   */
+  public static releaseIntel(input: ReleaseIntelInput,
+    onRefreshed?: (card: ReleaseIntelCard) => void, force: boolean = false): Promise<ReleaseIntelCard> {
+    const cacheKey: string = `${input.token}_${input.to}`;
+    const providerKey: string = AiTasks.providerModelKey();
+    if (force) {
+      return AiTasks.fetchIntel(input, providerKey, onRefreshed);
+    }
+    const cached: AiCacheLookup = AiTasks.lookup(RELEASE_INTEL_FEATURE, providerKey, cacheKey,
+      AI_PROMPT_VERSION_RI, AI_CACHE_TTL_RI_MS);
+    if (cached.hit) {
+      const card: ReleaseIntelCard | null = AiTasks.parseIntel(cached.dataJson);
+      if (card !== null) {
+        Logger.info(TAG, `ri cache hit token=${input.token} age=${cached.age}`);
+        return Promise.resolve(card);
+      }
+    }
+    if (cached.stale) {
+      const staleCard: ReleaseIntelCard | null = AiTasks.parseIntel(cached.dataJson);
+      if (staleCard !== null) {
+        Logger.info(TAG, `ri stale-while-revalidate token=${input.token}`);
+        // 后台刷新失败只意味着继续用旧值，吞掉 rejection 防 unhandled
+        AiTasks.fetchIntel(input, providerKey, onRefreshed)
+          .catch((err: Error) => {
+            Logger.warn(TAG, `ri background refresh failed. reason=${err.message}`);
+          });
+        return Promise.resolve(staleCard);
+      }
+    }
+    return AiTasks.fetchIntel(input, providerKey, onRefreshed);
+  }
+
+  /**
+   * 读「已有」的情报卡（档案钩子用，spec §3.3）：只查缓存不发请求，HIT/STALE 都收。
+   * 升级完成时详情页大概率已经打开过情报卡（Y 的入口就在详情页），缓存命中是常态；
+   * miss（用户没打开过）→ 返回 null，档案条目 cardJson 留空，档案区退化为版本区间行。
+   */
+  public static cachedIntelCard(token: string, to: string): ReleaseIntelCard | null {
+    const providerKey: string = AiTasks.providerModelKey();
+    const cached: AiCacheLookup = AiTasks.lookup(RELEASE_INTEL_FEATURE, providerKey,
+      `${token}_${to}`, AI_PROMPT_VERSION_RI, AI_CACHE_TTL_RI_MS);
+    if (cached.dataJson.length === 0) {
+      return null;
+    }
+    return AiTasks.parseIntel(cached.dataJson);
+  }
+
+  private static fetchIntel(input: ReleaseIntelInput, providerKey: string,
+    onRefreshed?: (card: ReleaseIntelCard) => void): Promise<ReleaseIntelCard> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.RI_SYSTEM;
+    task.user = AiTasks.riUserPrompt(input);
+    task.temperature = AI_TEMPERATURE_RI;
+    task.maxTokens = AI_MAX_TOKENS_RI;
+    const cacheKey: string = `${input.token}_${input.to}`;
+    return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
+      const card: ReleaseIntelCard | null = AiTasks.parseIntel(completion.content, outcome);
+      if (card === null) {
+        // 诊断打点（真机归因用）：finish=length 即 max_tokens 截断；tail 能看出
+        // JSON 断在哪。head 由 AiClient 打点，这里补 tail 与总长。
+        Logger.warn(TAG, `ri parse fail finish=${completion.finishReason} ` +
+          `len=${completion.content.length} ` +
+          `tail=${AiClient.sanitize(completion.content.substring(Math.max(0,
+          completion.content.length - 80)))}`);
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `ri reason=${e4ReasonOf(completion, outcome.reason)}`);
+      }
+      // 缓存存**模型原始输出**（snake_case），与读侧 parseIntel 同口径——此前存
+      // JSON.stringify(card)（驼峰），读侧按 snake_case 解析永远 miss，缓存形同虚设
+      AiCache.write(RELEASE_INTEL_FEATURE, providerKey, cacheKey, AI_PROMPT_VERSION_RI,
+        completion.model, completion.content);
+      Logger.info(TAG, `ri ok token=${input.token} latency=${completion.latencyMs}`);
+      if (onRefreshed !== undefined) {
+        onRefreshed(card);
+      }
+      return card;
+    });
+  }
+
+  private static riUserPrompt(input: ReleaseIntelInput): string {
+    // grounding（spec G4）：notes（已剥标签 ≤4KB）+ diff JSON + 版本区间，没有别的。
+    // notes 超限时循环砍半（对齐 D1 的 caveats 砍法）；diff 与版本区间是最小集合不砍。
+    let notes: string = input.notes;
+    let base: string = RiTasksPromptShell.of(input, notes);
+    while ((AiTasks.RI_SYSTEM.length + base.length) > AI_PROMPT_MAX_CHARS && notes.length > 64) {
+      notes = notes.substring(0, Math.floor(notes.length / 2));
+      base = RiTasksPromptShell.of(input, notes);
+    }
+    return base + '\n请按 schema 输出 JSON。';
+  }
+
+  private static readonly RI_SYSTEM: string = '你是 Homebrew 包更新情报助手，向熟悉命令行的用户' +
+    '归纳一次版本更新。只基于给定的 Release Notes 与本地 diff JSON 回答，用简体中文；' +
+    'notes 没有的信息不得编造，没有依据的方面写进 gaps（如「无兼容性说明」）；' +
+    '安全相关内容只逐条转述 notes 原文（security_claims），不得自行推断严重性或补充漏洞编号。' +
+    'breaking_changes 每条给出 impact（对本机使用的影响）与 action（建议动作），' +
+    '没有可靠依据时 action 输出空串。\n' +
+    '条数硬上限（发布说明里条目再多也只挑最重要的，绝不超出）：new_features≤3、' +
+    'fixes≤3、breaking_changes≤3、security_claims≤2、gaps≤3；每条控制在一句话。' +
+    '输出必须是一个**完整**的 JSON 对象，不得中途截断。\n' +
+    '空字段原则：new_features/fixes/breaking_changes/security_claims/gaps 没有内容时输出 []，' +
+    '禁止输出「无」「暂无」之类的填充句。\n' +
+    '输出 JSON：{"one_liner":"这次更新最值得注意什么，一句话","new_features":["0–3条"],' +
+    '"fixes":["0–3条"],"breaking_changes":[{"title":"变更是什么","impact":"对本机使用的影响",' +
+    '"action":"建议动作，可为空串"}],"security_claims":[{"claim":"上游自述原文转述"}],' +
+    '"gaps":["0–3条"],"confidence":"full|partial|none"}。' +
+    AiTasks.PLATFORM_RULE;
+
+  private static parseIntel(text: string, outcome?: ParseOutcome): ReleaseIntelCard | null {
+    return parseJsonSafe(text, (obj: Record<string, Object>): ReleaseIntelCard | null => {
+      const card: ReleaseIntelCard = new ReleaseIntelCard();
+      card.oneLiner = typeof obj['one_liner'] === 'string' ? obj['one_liner'] as string : '';
+      card.newFeatures = stringArrayOf(obj['new_features'], 3);
+      card.fixes = stringArrayOf(obj['fixes'], 3);
+      card.gaps = stringArrayOf(obj['gaps'], 3);
+      // breaking_changes 逐条 cast：缺 title 的条目跳过;超上限**截断**不整页拒绝
+      // （v1.3.7b 修:此前 >3 整页 null→E4,cups 7 条 CVE 实证必炸;与 snapshotFromJson 同口径）
+      const breaking: Object | undefined = obj['breaking_changes'];
+      if (breaking !== undefined && Array.isArray(breaking)) {
+        const list: Array<Object> = breaking as Array<Object>;
+        for (let i: number = 0; i < list.length && card.breakingChanges.length < 3; i++) {
+          const rec: Object | undefined = list[i];
+          if (rec === undefined || rec === null) {
+            continue;
+          }
+          const recObj: Record<string, Object> = rec as Record<string, Object>;
+          const title: string = typeof recObj['title'] === 'string' ? recObj['title'] as string : '';
+          if (title.trim().length === 0) {
+            continue;
+          }
+          const item: ReleaseIntelBreakingChange = new ReleaseIntelBreakingChange();
+          item.title = title;
+          item.impact = typeof recObj['impact'] === 'string' ? recObj['impact'] as string : '';
+          item.action = typeof recObj['action'] === 'string' ? recObj['action'] as string : '';
+          card.breakingChanges.push(item);
+        }
+      }
+      // security_claims 容两种元素形态：纯字符串（自述原文）或 {claim} 对象;超 2 条**截断**
+      // （v1.3.7b 修:此前 >2 整页 null→E4,cups 7 条 CVE 实证必炸）
+      const security: Object | undefined = obj['security_claims'];
+      if (security !== undefined && Array.isArray(security)) {
+        const list: Array<Object> = security as Array<Object>;
+        for (let i: number = 0; i < list.length && card.securityClaims.length < 2; i++) {
+          const rec: Object | undefined = list[i];
+          if (rec === undefined || rec === null) {
+            continue;
+          }
+          let claim: string = '';
+          if (typeof rec === 'string') {
+            claim = rec as string;
+          } else {
+            const recObj: Record<string, Object> = rec as Record<string, Object>;
+            claim = typeof recObj['claim'] === 'string' ? recObj['claim'] as string : '';
+          }
+          if (claim.trim().length === 0) {
+            continue;
+          }
+          const item: ReleaseIntelSecurityClaim = new ReleaseIntelSecurityClaim();
+          item.claim = claim;
+          card.securityClaims.push(item);
+        }
+      }
+      const confidence: string =
+        typeof obj['confidence'] === 'string' ? obj['confidence'] as string : '';
+      if (confidence.length > 0) {
+        card.confidence = confidence; // 非法值由 isValid 兜底判 false
+      }
       if (!card.isValid()) {
         return null;
       }
@@ -530,6 +741,15 @@ export class AiTasks {
 }
 
 // ------------------------------------------------------- 模块级工具函数
+
+/** ri prompt 的拼装壳（超限砍半循环里复用，保持两次拼装口径一致）。 */
+class RiTasksPromptShell {
+  public static of(input: ReleaseIntelInput, notes: string): string {
+    return `包名: ${input.token}\n版本区间: ${input.from} → ${input.to}\n` +
+      `本地结构化 diff(JSON): ${input.diffJson}\n` +
+      `上游 Release Notes(纯文本，超长已截断):\n${notes}`;
+  }
+}
 
 /** E4 的 reason 判定：finishReason=length 即截断；其余用解析层的归类（schema/fence/nonjson）。 */
 function e4ReasonOf(completion: AiCompletion2, parseReason: string): string {
@@ -699,24 +919,25 @@ function tryParseArray(text: string): Object | null {
   }
 }
 
-/** string[] 字段抽取：非数组 / 元素非字符串 / 超上限都判格式不符。 */
+/**
+ * string[] 字段抽取：非数组 → 空表；元素非串/空白串跳过；**超上限截断取前 max 条**
+ * （v1.3.8：此前超限整段丢弃返回 []——模型多写一条就整段白费，截断保住已有内容；
+ * isValid 的上限校验仍兜底）。
+ */
 function stringArrayOf(value: Object | undefined, max: number): string[] {
   if (value === undefined || !Array.isArray(value)) {
     return [];
   }
   const list: Array<Object> = value as Array<Object>;
-  if (list.length > max) {
-    return [];
-  }
   const out: string[] = [];
-  for (let i: number = 0; i < list.length; i++) {
+  for (let i: number = 0; i < list.length && out.length < max; i++) {
     const one: Object = list[i];
     if (typeof one !== 'string') {
-      return [];
+      continue;
     }
     const text: string = one as string;
     if (text.trim().length === 0) {
-      return [];
+      continue;
     }
     out.push(text);
   }
