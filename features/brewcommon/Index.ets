@@ -363,7 +363,6 @@ export {
   ReleaseIntelDiff,
   ReleaseIntelVerdict,
   ReleaseIntelSnapshot,
-  ReleaseIntelPackCommit,
   ReleaseIntelArchiveEntry,
   releaseIntelArchiveEntryOf,
 } from './src/main/ets/model/ReleaseIntelModels';

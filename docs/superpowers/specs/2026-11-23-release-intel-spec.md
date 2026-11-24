@@ -183,3 +183,16 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - **F8 新增失败态**:AtomGit 打包通道不可达/429 → 打包记录组不渲染(静默,不占缺口行——缺口行语义保留给上游通道)。
 - 本地 git log 通道(读 tap 工作区)违反 G12,不做;access_token BYOK 形态列 P2。
 - 文案增 `release_intel_pack_title`(Harmonybrew 打包记录);审计清单不变(ReleaseIntelService 仍零命令符号);改动文件:ReleaseIntelConstants/ReleaseIntelModels/ReleaseIntelService/BrewReleaseIntelCard/string.json×3/Index.ets/单测(shard path 两例)。
+
+## 12. v1.2 增补(2026-11-24):打包通道移除 + AI 不可用降级渲染 notes 原文
+
+**G14/F8 撤销(真机实证)**:临时关掉 AI 放出打包记录组观察,结论=**AtomGit tap 提交流全是机器人提交(迁移 bot),对用户完全没有信息量**。v1.1 的打包通道整段移除(constants/models/service/card/string/单测/Index 导出);harmonybrew 源的包回到「结构化 diff + 上游缺口诚实展示」的 v1 行为。通道实验的实证记录保留在 knowledge 文档 §8(不做无谓重试)。
+
+**AI 不可用时的降级渲染(G5 补充)**:调试观察同时暴露第二个缺口——「更新日志」只经 AI 摘要渲染,无 Key/AI 失败/调试期关 AI 时这块整个空掉,用户感知为「抓不到」(cups v2.4.20 实证:release 正文完整存在,CVE 清单,但卡片不显示)。v1.2 起:
+
+- 快照增 `notesPreview`(notes 原文节选 ≤700 字符,`RELEASE_INTEL_NOTES_PREVIEW_CHARS`);`card === null && !aiFailed && notesPreview 非空` 时卡片渲染「原始发布说明(节选)」组——**上游原文直接展示,零编造**(AI 只解释事实;没有 AI 就给事实本身)。
+- **GitHub 空说明占位符识别**:未填写正文的 release,feed content 是字面量 `No content.`(ohos-selfsign 实证,10 条 release 里 8 条是占位符)——NotesExtractor 识别为空 → F4「该版本未填写发布说明」,占位符不进 AI、不进节选。
+- 文案:`release_intel_pack_title` 删,`release_intel_notes_preview`(原始发布说明(节选))增。
+- 「重新生成」按钮改为只在 `card !== null || aiFailed` 时渲染(结构化-only 视图不再有假按钮)。
+- 单测:shard path 两例删,`notes_github_no_content_placeholder` 增(占位符→空;真实正文不受影响)。
+- commits.atom(匿名可用、人类提交质量高,ohos-selfsign 实证)作为「无 release notes 仓库的候选通道」**暂不实施**——与打包通道同属提交列表形态,先看打包通道的教训;若要接,只接「notes 为空时」的兜底且须过滤 bot 作者,P2 议题。

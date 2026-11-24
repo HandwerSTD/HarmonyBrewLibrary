@@ -8,7 +8,6 @@ import {
   FormulaDiffer,
   BrewNotesExtractor,
   ReleaseIntelRepoResolver,
-  ReleaseIntelService,
   ReleaseIntelTagFilter,
 } from '../../../../Index';
 
@@ -200,17 +199,19 @@ export default function releaseIntelTest() {
       expect(extract.truncated).assertTrue();
     });
 
-    // ---------------- 打包通道路径分片（v1.1 G14） ----------------
+    // ---------------- notes 数据质量（GitHub 空说明占位符,ohos-selfsign 实证） ----------------
 
-    it('shard_path_letters', 0, () => {
-      // homebrew-core 惯例分片：Formula/<首字母小写>/<token>.rb
-      expect(ReleaseIntelService.formulaShardPath('wget')).assertEqual('Formula/w/wget.rb');
-      expect(ReleaseIntelService.formulaShardPath('Ant@1.9')).assertEqual('Formula/a/Ant@1.9.rb');
-    });
-
-    it('shard_path_empty_token', 0, () => {
-      expect(ReleaseIntelService.formulaShardPath('')).assertEqual('');
-      expect(ReleaseIntelService.formulaShardPath('   ')).assertEqual('');
+    it('notes_github_no_content_placeholder', 0, () => {
+      // GitHub 对未填写正文的 release,atom feed 的 content 是字面量「No content.」;
+      // 必须识别为空(F4 缺口),否则占位符会被当正文喂给 AI。
+      const extract = BrewNotesExtractor.extract('No content.');
+      expect(extract.text.length).assertEqual(0);
+      expect(extract.truncated).assertFalse();
+      const cased = BrewNotesExtractor.extract('<p>no content.</p>');
+      expect(cased.text.length).assertEqual(0);
+      // 真实正文不受影响
+      const real = BrewNotesExtractor.extract('<p>Fix --force resign data loss</p>');
+      expect(real.text).assertEqual('Fix --force resign data loss');
     });
   });
 }

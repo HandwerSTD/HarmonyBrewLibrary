@@ -989,8 +989,8 @@
       "value": "更新情报：本功能会访问上游项目的公开发布页，并在生成摘要时把 Release Notes 原文发送给您配置的 AI 服务商；请求不包含您的身份信息，摘要结果仅保存在本机。"
     },
     {
-      "name": "release_intel_pack_title",
-      "value": "Harmonybrew 打包记录"
+      "name": "release_intel_notes_preview",
+      "value": "原始发布说明（节选）"
     }
   ]
 }

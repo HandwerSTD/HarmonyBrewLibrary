@@ -20,7 +20,10 @@ export class BrewNotesExtract {
  *   1. 实体反转义（`&lt;` `&gt;` `&amp;` `&quot;` `&#39;` 与数字实体）；
  *   2. 剥 HTML 标签（块级标签换成空白，避免行粘连）；
  *   3. 折叠空白、去首尾；
- *   4. 截断到 RELEASE_INTEL_NOTES_MAX_CHARS（4KB，UTF-16 code unit 口径，spec G4）。
+ *   4. GitHub 空说明占位符识别：未填写正文的 release,feed 里的 content 是字面量
+ *      「No content.」（ohos-selfsign 实证,2026-11-24）——必须当空返回（F4 缺口），
+ *      否则占位符会被当正文喂给 AI；
+ *   5. 截断到 RELEASE_INTEL_NOTES_MAX_CHARS（4KB，UTF-16 code unit 口径，spec G4）。
  *
  * 注意：notes 是**不可信文本**（spec §6），进入 prompt 前的「不可信文本防御」
  * 由 AiTasks 的 prompt 结构保证（系统提示声明字段不可信），本类只做机械清洗。
@@ -31,6 +34,10 @@ export class BrewNotesExtractor {
     let text: string = BrewNotesExtractor.decodeEntities(html);
     text = BrewNotesExtractor.stripTags(text);
     text = BrewNotesExtractor.collapseWhitespace(text);
+    // GitHub 空说明 release 的占位符（含大小写变体与标签包裹形态）一律视为无正文
+    if (text.toLowerCase() === 'no content.') {
+      return out;
+    }
     if (text.length > RELEASE_INTEL_NOTES_MAX_CHARS) {
       out.text = text.substring(0, RELEASE_INTEL_NOTES_MAX_CHARS);
       out.truncated = true;

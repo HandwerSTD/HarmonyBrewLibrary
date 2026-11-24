@@ -15,7 +15,6 @@ import {
 } from '@ohos/brewcommon';
 import type {
   ReleaseIntelBreakingChange,
-  ReleaseIntelPackCommit,
   ReleaseIntelSecurityClaim,
 } from '@ohos/brewcommon';
 import { common } from '@kit.AbilityKit';
@@ -255,12 +254,14 @@ export struct BrewReleaseIntelCard {
         }
       }
 
-      // ---------- Harmonybrew 打包记录（v1.1 G14：harmonybrew 源才有；空表整体不渲染） ----------
-      if (this.snapshot.packCommits.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_pack_title'))
-        ForEach(this.snapshot.packCommits, (item: ReleaseIntelPackCommit) => {
-          this.PackCommitLine(item)
-        }, (item: ReleaseIntelPackCommit, index: number) => `pack_${index}`)
+      // ---------- 原始发布说明（AI 不可用时的降级：上游 notes 原文节选,零编造） ----------
+      if (this.snapshot.card === null && !this.snapshot.aiFailed &&
+        this.snapshot.notesPreview.length > 0) {
+        this.SectionTitle($r('app.string.release_intel_notes_preview'))
+        Text(this.snapshot.notesPreview)
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
       }
 
       // ---------- 通道缺口行（F1/F2/F3/F4；视觉弱化：secondary 色，非红非报错） ----------
@@ -440,33 +441,6 @@ export struct BrewReleaseIntelCard {
     .width('100%')
     .alignItems(VerticalAlign.Top)
     .padding({ left: 10 })
-  }
-
-  /**
-   * 打包提交行（v1.1 G14）：首行提交信息 + sha/日期注脚；有提交页 URL 时整行可点外跳。
-   * 这是 tap 打包事实的转述，不进 AI、不参与归纳——「动了什么」由 commit message 原样说话。
-   */
-  @Builder
-  PackCommitLine(item: ReleaseIntelPackCommit) {
-    Column({ space: 2 }) {
-      Text(item.message)
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_primary'))
-        .width('100%')
-        .padding({ left: 10 })
-      Text(`${item.date} · ${item.sha}`)
-        .fontSize($r('sys.float.Body_S'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
-        .padding({ left: 10 })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .onClick(() => {
-      if (item.url.length > 0) {
-        this.openUrl(item.url);
-      }
-    })
   }
 }
 

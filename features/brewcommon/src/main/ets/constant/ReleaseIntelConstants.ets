@@ -92,29 +92,7 @@ export const RELEASE_INTEL_GAP_NET: string = 'net';
 export const RELEASE_INTEL_GAP_NOTES: string = 'notes';
 
 /**
- * AtomGit 打包通道（v1.1，spec G14）。
- *
- * harmonybrew 源的包，其「打包上游」不是 GitHub 而是 AtomGit 仓库
- * `Harmonybrew/homebrew-core`（组织页实证，2026-11-24；formula 大多搬迁自上游
- * Homebrew/homebrew-core，目录布局同为 `Formula/<首字母>/<token>.rb` 分片）。
- * 情报通道 = 按该文件路径过滤的提交列表：
- * `GET {api}/repos/{owner}/{repo}/commits?path=<formulaPath>&per_page=N`
- * （api-doc「允许匿名访问」，实测匿名共享配额 p_repoRobot 10W/hour 会 429 —— 429/失败
- * 一律静默降级为不渲染该组，**绝不**重试轰炸）。
+ * notes 原文节选长度（AI 不可用时卡片渲染的降级文本上限）。notes 提取本身仍是
+ * 4KB（喂 AI 用）,节选只截头部——原文长说明的细节走「查看原文」外跳。
  */
-export const RELEASE_INTEL_ATOMGIT_API_BASE: string = 'https://api.atomgit.com/api/v5';
-export const RELEASE_INTEL_TAP_OWNER: string = 'Harmonybrew';
-export const RELEASE_INTEL_TAP_REPO: string = 'homebrew-core';
-/** 打包提交条数上限（渲染 ≤3 条，请求 5 条留筛选余量）。 */
-export const RELEASE_INTEL_PACK_COMMITS_MAX: number = 3;
-export const RELEASE_INTEL_PACK_COMMITS_PER_PAGE: number = 5;
-/** AtomGit commits 通道超时（与 atom 探针同档）。 */
-export const RELEASE_INTEL_COMMITS_TIMEOUT_MS: number = 5000;
-
-/**
- * 【临时调试开关,观察期结束后删除】true = 情报卡跳过 AI 调用（card 恒 null），
- * 只渲染结构化区：判定徽章 / 版本区间 / 本地 diff / 上游缺口 / AtomGit 打包记录。
- * 用途：真机观察 AtomGit 打包通道的原始返回是否符合预期（用户观察期,Y v1.1）。
- * 恢复 AI 时改回 false 或整段删除;assemble() 的引用见 ReleaseIntelService。
- */
-export const RELEASE_INTEL_DEBUG_AI_OFF: boolean = true;
+export const RELEASE_INTEL_NOTES_PREVIEW_CHARS: number = 700;

@@ -96,3 +96,15 @@ bottle 体积不在 formula API(`bottle.stable.files` 仅 sha256);`brew info` �
 2. **429 必须一等公民化**:匿名共享配额,任何失败(429/404/网络/解析)静默降级为不渲染打包记录组,不重试轰炸;`access_token` query 参数文档支持,BYOK 形态列 P2。
 3. 本地 git log 通道(读 tap 工作区)违反 G12 审计零执行设计,不做。
 4. verdict/diff 对 harmonybrew 包本就可用(HarmonybrewMap 映射后是 official 形状),v1.1 只补上游情报通道。
+
+## 9. v1.2 增补:打包通道实证失败并移除;GitHub 数据质量两例(2026-11-24)
+
+**打包通道移除**:临时关 AI 放出打包记录组真机观察,结论=**AtomGit tap 提交流全是机器人提交(迁移 bot),对用户无信息量**。通道整段拆除(spec §12,G14/F8 撤销);本节探测记录保留作教训——「提交列表」形态的情报对 tap 类流水线仓库无效,评估同类通道前先抽样看 message 质量。
+
+**GitHub releases 数据质量(两例实证)**:
+
+| 仓库 | releases.atom 实况 | 对 Y 的含义 |
+|---|---|---|
+| `hqzing/ohos-selfsign` | 10 条 release,tag 齐全(v3.1.1→v1.1.0),但 **8/10 正文是字面量 `No content.`** 占位符,只有 v3.0.0/v2.0.0 各一句真实说明 | 空说明占位符必须识别为空 → F4「该版本未填写发布说明」,否则占位符会被当正文喂给 AI(v1.2 已修:NotesExtractor 识别 `No content.`) |
+| `OpenPrinting/cups` | v2.4.20 正文完整(CVE-2026-55480 等 7 个 CVE 清单 + What's Changed),v2.4.13–2.4.19 每篇有内容——**通道没问题** | 用户误判「抓不到」的真因=更新日志只经 AI 摘要渲染,AI 关/无 Key 时卡片不渲染 notes 原文 → v1.2 增 `notesPreview`(≤700 字符原文节选),card=null 时渲染「原始发布说明(节选)」,零编造 |
+| 同仓 `commits.atom` | 匿名可用,人类中文提交质量高(「修复 --force 重签时丢失 .codesign 段之后内容的问题」) | 「无 release notes 仓库」的候选兜底通道,但与打包通道同属提交列表形态——**暂不实施**(先看打包通道教训;若接,只接 notes 为空时兜底 + 过滤 bot 作者,P2) |
