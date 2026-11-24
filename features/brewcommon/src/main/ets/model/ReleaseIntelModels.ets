@@ -114,6 +114,22 @@ export class ReleaseIntelVerdict {
 }
 
 /**
+ * AtomGit 打包提交条目（v1.1 G14：harmonybrew 源的包没有 GitHub 上游 release，
+ * 「动过该 formula 文件的提交」就是它的打包更新记录）。字段取自
+ * `GET /api/v5/repos/{owner}/{repo}/commits?path=...` 的 GitHub 兼容形状。
+ */
+export class ReleaseIntelPackCommit {
+  /** 提交短 sha（前 7 位，UI 展示用） */
+  public sha: string = '';
+  /** 提交信息首行（≤120 字符截断） */
+  public message: string = '';
+  /** 提交日期（YYYY-MM-DD，取 commit.author.date 的日期部分） */
+  public date: string = '';
+  /** 提交页 URL（html_url；为空时该行不可点） */
+  public url: string = '';
+}
+
+/**
  * 详情页的情报快照（spec §4 卡片的数据源）。**恒非 null 实例 + hasReleaseIntel 开关**
  * （与 BrewDetailState.tldrPage/hasTldr 同规：ArkUI 的 if 不收窄联合类型）。
  * `card === null` 时 UI 只渲染结构化区 + 缺口行；`hasReleaseIntel === false` 时整卡不渲染。
@@ -138,6 +154,12 @@ export class ReleaseIntelSnapshot {
   public card: ReleaseIntelCard | null = null;
   /** AI 调过但失败（区别于「没配 Key 的静默」：UI 给重试入口） */
   public aiFailed: boolean = false;
+  /**
+   * AtomGit 打包提交（v1.1 G14，仅 harmonybrew 源的包非空）。空数组 =
+   * 非 harmonybrew 源 / 通道不可达（429 等，静默）/ tap 里没有提交——三种情况
+   * UI 都不渲染该组（诚实降级，不编造）。
+   */
+  public packCommits: ReleaseIntelPackCommit[] = [];
   /** 本次快照完成时间（F7 的「数据截至 HH:mm」用它） */
   public fetchedAt: number = 0;
   /** true = 展示的是过期缓存且后台刷新也失败了（F7） */

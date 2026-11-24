@@ -161,3 +161,25 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - feed 深度:releases.atom 条目数由 GitHub 控制(实测约 10 条),高频发布项目可能不覆盖较旧版本段——v1 只解释「已装→最新」一段,不受影响;档案回看更早版本段时可能缺口(记入 F3)。
 - archive 快照引用依赖 AI 缓存存活(BrewCacheAdmin 清理后档案只剩元数据行)——接受,文案不承诺全文回看。
 - 与 AA Brew Preview(J 装机预演)的关系未梳理:AA 的 dry-run 解读(`BrewDryRunParser` 已存在)与本 spec 的依赖 diff 可能撞车,实施前对齐口径。
+
+## 11. v1.1 增补(2026-11-24):AtomGit 打包通道(G14/F8)
+
+**缺陷来源(用户实测反馈)**:harmonybrew 源的包「上游不是 GitHub 就获取不了」——Harmonybrew 的打包上游本来就不是 GitHub(tap 是 AtomGit 仓库 `Harmonybrew/homebrew-core`),formula 记录的 homepage 是原始项目页,RepoResolver 全部落 F2,AI 区恒空,情报卡只剩缺口。
+
+### 11.1 通道实证(2026-11-24,详见 knowledge 文档 v1.1 一节)
+
+- 打包上游 = AtomGit `Harmonybrew/homebrew-core`(组织页:「核心 tap,大部分 formula 搬迁自上游 Homebrew/homebrew-core」;目录同为 `Formula/<首字母>/<token>.rb` 分片)。
+- AtomGit v5 API 文档允许匿名:`GET https://api.atomgit.com/api/v5/repos/{owner}/{repo}/commits?path=<file>&per_page=N`(GitHub v5 兼容形状);**实测匿名 429**(匿名共享 `p_repoRobot` 账号 10W/hour 配额,时忙时闲)。
+- `raw` 文件通道不可用(返回 HTML 页壳);本地 git log 通道违反 G12 审计零执行设计,弃。
+- 本地 diff/verdict 对 harmonybrew 包**可用**:HarmonybrewMap 已把目录记录映射成 official 形状(versions.stable 等字段齐),v1 卡在此的只有上游通道。
+
+### 11.2 设计:双通道
+
+- **GitHub 上游通道不动**(G9 探针门、TagFilter、NotesExtractor、AI 摘要全照旧);GitHub 托管 homepage 的包双通道并行。
+- **新增 AtomGit 打包通道(仅 harmonybrew 源 + formula)**:`fetchPackCommits` 取「动过 `Formula/<x>/<token>.rb` 的最近提交」≤3 条 `{sha7, message 首行≤120, date YYYY-MM-DD, html_url}`;快照增 `packCommits[]`;情报卡增「Harmonybrew 打包记录」结构化组(分区空表整体不渲染)。
+- **打包记录不进 AI**:commit message 简短、原样转述即可,AI 归纳价值低且引编造风险(P2 再议)。
+- **429/404/网络失败 = 静默降级**:打包记录组不渲染,落一次 info 日志;**不重试轰炸**(匿名配额是共享资源);上游缺口行照旧诚实展示(G5 语义不变)。
+- **G14 新增判据**:harmonybrew 源的 formula 详情页(已装且 outdated),情报卡除缺口行外必须呈现打包记录组(通道可达时);非 harmonybrew 源不发起 AtomGit 请求。
+- **F8 新增失败态**:AtomGit 打包通道不可达/429 → 打包记录组不渲染(静默,不占缺口行——缺口行语义保留给上游通道)。
+- 本地 git log 通道(读 tap 工作区)违反 G12,不做;access_token BYOK 形态列 P2。
+- 文案增 `release_intel_pack_title`(Harmonybrew 打包记录);审计清单不变(ReleaseIntelService 仍零命令符号);改动文件:ReleaseIntelConstants/ReleaseIntelModels/ReleaseIntelService/BrewReleaseIntelCard/string.json×3/Index.ets/单测(shard path 两例)。

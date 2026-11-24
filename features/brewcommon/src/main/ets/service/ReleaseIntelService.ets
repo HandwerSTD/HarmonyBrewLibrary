@@ -8,23 +8,33 @@ import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Logger, StorageKey } from '@ohos/common';
 import {
+  BREW_DIALECT_HARMONYBREW,
+} from '../constant/BrewSourceConstants';
+import {
   RELEASE_INTEL_ARCHIVE_CAP,
   RELEASE_INTEL_ARCHIVE_FILE,
   RELEASE_INTEL_ARCHIVE_SEGMENT,
   RELEASE_INTEL_ATOM_PATH,
   RELEASE_INTEL_ATOM_TIMEOUT_MS,
+  RELEASE_INTEL_ATOMGIT_API_BASE,
+  RELEASE_INTEL_COMMITS_TIMEOUT_MS,
   RELEASE_INTEL_GAP_NET,
   RELEASE_INTEL_GAP_NONE,
   RELEASE_INTEL_GAP_NOTES,
   RELEASE_INTEL_GAP_REPO,
   RELEASE_INTEL_GAP_TAG,
+  RELEASE_INTEL_PACK_COMMITS_MAX,
+  RELEASE_INTEL_PACK_COMMITS_PER_PAGE,
   RELEASE_INTEL_RELEASES_PATH,
+  RELEASE_INTEL_TAP_OWNER,
+  RELEASE_INTEL_TAP_REPO,
 } from '../constant/ReleaseIntelConstants';
 import {
   ReleaseIntelArchiveEntry,
   ReleaseIntelCard,
   ReleaseIntelDiff,
   ReleaseIntelInput,
+  ReleaseIntelPackCommit,
   ReleaseIntelSnapshot,
   releaseIntelArchiveEntryOf,
 } from '../model/ReleaseIntelModels';
@@ -35,6 +45,7 @@ import { SemverJudge } from '../util/SemverJudge';
 import { AiSettingsStore } from './AiSettingsStore';
 import { AiTasks } from './AiTasks';
 import { BrewHttp } from './BrewHttp';
+import { BrewSourceStore } from './BrewSourceStore';
 import { ReleaseIntelBaselineStore } from './ReleaseIntelBaselineStore';
 
 const TAG: string = '[release-intel]';
@@ -112,6 +123,13 @@ export class ReleaseIntelService {
       }
     }
     snapshot.diff = diff;
+
+    // AtomGit 打包通道（v1.1 G14：harmonybrew 源的包没有 GitHub 上游 release，
+    // 「动过该 formula 文件的提交」就是它的打包更新记录）。失败/429 → 空表静默，
+    // 不影响后面上游通道的缺口判定。
+    if (kind === KIND_FORMULA && ReleaseIntelService.isHarmonybrewSource()) {
+      snapshot.packCommits = await ReleaseIntelService.fetchPackCommits(token);
+    }
 
     // 上游 repo（F2：非 GitHub）
     const repo = ReleaseIntelRepoResolver.resolve(rawDoc);
@@ -412,6 +430,111 @@ export class ReleaseIntelService {
       return '';
     }
     return body.substring(gt + 1, end).trim();
+  }
+
+  // ------------------------------------------------------------ 打包通道（AtomGit）
+
+  /** 当前会话数据源是否 harmonybrew 方言（只有它才有 AtomGit 打包上游）。 */
+  private static isHarmonybrewSource(): boolean {
+    try {
+      const sourceId: string = BrewSourceStore.sessionActive().id;
+      return BrewSourceStore.dialectOf(sourceId) === BREW_DIALECT_HARMONYBREW;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * tap 内 formula 文件路径（homebrew-core 惯例分片）：`Formula/<首字母>/<token>.rb`。
+   * token 为空 → 空串（调用方跳过）。
+   */
+  public static formulaShardPath(token: string): string {
+    if (token.trim().length === 0) {
+      return '';
+    }
+    return 'Formula/' + token.charAt(0).toLowerCase() + '/' + token + '.rb';
+  }
+
+  /**
+   * 取「动过该 formula 文件」的最近提交（v1.1 G14）。
+   *
+   * `GET {api}/repos/Harmonybrew/homebrew-core/commits?path=<formulaPath>&per_page=5`
+   * ——AtomGit v5 文档允许匿名访问，但匿名请求共享 `p_repoRobot` 账号的 10W/hour
+   * 配额，**429 是常态而非异常**（2026-11-24 实测）。所以这里任何失败（429/404/
+   * 网络错误/解析失败）都只落一次 info 日志并返回空表——UI 不渲染打包记录组，
+   * 不重试轰炸，也不影响上游通道的缺口展示。
+   */
+  private static async fetchPackCommits(token: string): Promise<ReleaseIntelPackCommit[]> {
+    const formulaPath: string = ReleaseIntelService.formulaShardPath(token);
+    if (formulaPath.length === 0) {
+      return [];
+    }
+    const url: string = RELEASE_INTEL_ATOMGIT_API_BASE + '/repos/' + RELEASE_INTEL_TAP_OWNER +
+      '/' + RELEASE_INTEL_TAP_REPO + '/commits?path=' + encodeURIComponent(formulaPath) +
+      '&per_page=' + RELEASE_INTEL_PACK_COMMITS_PER_PAGE;
+    for (let attempt: number = 0; attempt < 2; attempt++) {
+      try {
+        const result = await BrewHttp.request(url, http.RequestMethod.GET, {}, RELEASE_INTEL_COMMITS_TIMEOUT_MS);
+        if (result.code === 200 && result.text.length > 0) {
+          return ReleaseIntelService.parsePackCommits(result.text, token);
+        }
+        // 429=匿名配额限流；404=tap 里没有这个 formula 文件；其余=网关类失败
+        Logger.info(TAG, `pack commits unavailable, code=${result.code}, token=${token}`);
+        return [];
+      } catch (err) {
+        const e: BusinessError = err as BusinessError;
+        Logger.info(TAG, `pack commits fetch failed, code=${e?.code}, token=${token}`);
+      }
+    }
+    return [];
+  }
+
+  /**
+   * commits 响应（GitHub v5 兼容形状）→ 打包记录 ≤3 条。
+   * 逐条防御式取值：缺 sha 的条目跳过；message 只取首行；date 截 YYYY-MM-DD。
+   */
+  private static parsePackCommits(text: string, token: string): ReleaseIntelPackCommit[] {
+    const out: ReleaseIntelPackCommit[] = [];
+    try {
+      const parsed: Object = JSON.parse(text) as Object;
+      if (!Array.isArray(parsed)) {
+        return out;
+      }
+      const list: Array<Object> = parsed as Array<Object>;
+      for (let i: number = 0; i < list.length && out.length < RELEASE_INTEL_PACK_COMMITS_MAX; i++) {
+        const item: Record<string, Object> = list[i] as Record<string, Object>;
+        const sha: Object | undefined = item['sha'];
+        if (typeof sha !== 'string') {
+          continue;
+        }
+        const commitObj: Record<string, Object> = (item['commit'] === undefined ||
+          item['commit'] === null ? {} : item['commit']) as Record<string, Object>;
+        const authorObj: Record<string, Object> = (commitObj['author'] === undefined ||
+          commitObj['author'] === null ? {} : commitObj['author']) as Record<string, Object>;
+        const row: ReleaseIntelPackCommit = new ReleaseIntelPackCommit();
+        row.sha = (sha as string).length > 7 ? (sha as string).substring(0, 7) : sha as string;
+        row.message = ReleaseIntelService.firstLineOf(
+          typeof commitObj['message'] === 'string' ? commitObj['message'] as string : '', 120);
+        const dateIso: string = typeof authorObj['date'] === 'string' ? authorObj['date'] as string : '';
+        row.date = dateIso.length >= 10 ? dateIso.substring(0, 10) : '';
+        row.url = typeof item['html_url'] === 'string' ? item['html_url'] as string : '';
+        out.push(row);
+      }
+    } catch (err) {
+      Logger.info(TAG, `pack commits parse failed, token=${token}`);
+    }
+    return out;
+  }
+
+  /** 提交信息取首行并截断（换行多的 body 部分不要）。 */
+  private static firstLineOf(message: string, maxChars: number): string {
+    const trimmed: string = message.trim();
+    if (trimmed.length === 0) {
+      return '';
+    }
+    const nl: number = trimmed.indexOf('\n');
+    const line: string = nl >= 0 ? trimmed.substring(0, nl).trim() : trimmed;
+    return line.length > maxChars ? line.substring(0, maxChars) : line;
   }
 
   // ------------------------------------------------------------ 杂项

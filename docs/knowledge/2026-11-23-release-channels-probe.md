@@ -74,3 +74,25 @@ bottle 体积不在 formula API(`bottle.stable.files` 仅 sha256);`brew info` �
 | 安全修复 | notes 文本自述 + 来源标注 | 无声明 → 不显示;漏洞库 P2 |
 | 中文摘要 | AI(复用一期 BYOK 底座) | 无 Key / AI 失败 → 结构化部分照常显示,AI 区不出现 |
 | 体积差 | 不可得 | 显示「未知」 |
+
+## 8. v1.1 增补:AtomGit 打包通道(2026-11-24,harmonybrew 源专用)
+
+**背景**:用户实测反馈「上游不是 GitHub 就获取不了,而 harmonybrew 的上游本来就不是 GitHub」。harmonybrew 源的打包上游是 AtomGit 仓库,formula 的 homepage 是原始项目页——RepoResolver 全部落 F2,AI 区恒空。
+
+探测(全部 2026-11-24,代理池出口):
+
+| 探测 | 结果 |
+|---|---|
+| `https://atomgit.com/Harmonybrew`(组织页) | **200**:「核心 tap,大部分 formula 搬迁自上游 Homebrew/homebrew-core」;另有 Harmonybrew/brew(brew 客户端鸿蒙移植)、formula-migration-tool、custom-tap-example |
+| `https://atomgit.com/Harmonybrew/homebrew-core` 仓库页 | 200,commit 活跃(当天有更新);目录为 homebrew-core 惯例 `Formula/<首字母>/<token>.rb` 分片 |
+| AtomGit API 文档([commits](https://atomgit-api-doc.atomgit.com/6.commit/130.get_all_repository_commits.html)) | **允许匿名**:`GET https://api.atomgit.com/api/v5/repos/{owner}/{repo}/commits?path=<file>&per_page≤100`,支持 path 按文件过滤(GitHub v5 兼容响应形状);另有 release 接口(body=markdown) |
+| `GET .../api/v5/repos/Harmonybrew/homebrew-core/releases`(匿名) | **HTTP 429** `{"error_code":429,...,"Threshold: 10W times per user per hour. Limited account:p_repoRobot"}` |
+| `GET .../api/v5/repos/Harmonybrew/homebrew-core/commits?path=Formula/a/apr.rb&per_page=5`(匿名) | **HTTP 429**(同上;匿名请求共享 p_repoRobot 机器人账号的时配额,时忙时闲) |
+| `https://atomgit.com/Harmonybrew/homebrew-core/raw/main/Formula/a/apr.rb` | 返回 HTML 页壳而非裸文件——**raw 直链不可用** |
+
+**结论与设计落点(v1.1,spec §11)**:
+
+1. harmonybrew 包的「打包更新记录」通道 = commits API 按 formula 文件路径过滤;GitHub 上游通道保留(部分包 homepage 本身是 GitHub 托管,双通道并行)。
+2. **429 必须一等公民化**:匿名共享配额,任何失败(429/404/网络/解析)静默降级为不渲染打包记录组,不重试轰炸;`access_token` query 参数文档支持,BYOK 形态列 P2。
+3. 本地 git log 通道(读 tap 工作区)违反 G12 审计零执行设计,不做。
+4. verdict/diff 对 harmonybrew 包本就可用(HarmonybrewMap 映射后是 official 形状),v1.1 只补上游情报通道。

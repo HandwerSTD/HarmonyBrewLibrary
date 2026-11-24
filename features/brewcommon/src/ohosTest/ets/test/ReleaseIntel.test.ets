@@ -8,6 +8,7 @@ import {
   FormulaDiffer,
   BrewNotesExtractor,
   ReleaseIntelRepoResolver,
+  ReleaseIntelService,
   ReleaseIntelTagFilter,
 } from '../../../../Index';
 
@@ -197,6 +198,19 @@ export default function releaseIntelTest() {
       const extract = BrewNotesExtractor.extract(long);
       expect(extract.text.length).assertEqual(4096);
       expect(extract.truncated).assertTrue();
+    });
+
+    // ---------------- 打包通道路径分片（v1.1 G14） ----------------
+
+    it('shard_path_letters', 0, () => {
+      // homebrew-core 惯例分片：Formula/<首字母小写>/<token>.rb
+      expect(ReleaseIntelService.formulaShardPath('wget')).assertEqual('Formula/w/wget.rb');
+      expect(ReleaseIntelService.formulaShardPath('Ant@1.9')).assertEqual('Formula/a/Ant@1.9.rb');
+    });
+
+    it('shard_path_empty_token', 0, () => {
+      expect(ReleaseIntelService.formulaShardPath('')).assertEqual('');
+      expect(ReleaseIntelService.formulaShardPath('   ')).assertEqual('');
     });
   });
 }

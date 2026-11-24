@@ -15,6 +15,7 @@ import {
 } from '@ohos/brewcommon';
 import type {
   ReleaseIntelBreakingChange,
+  ReleaseIntelPackCommit,
   ReleaseIntelSecurityClaim,
 } from '@ohos/brewcommon';
 import { common } from '@kit.AbilityKit';
@@ -66,18 +67,22 @@ export struct BrewReleaseIntelCard {
 
   /** 「查看原文」外跳（BrewTldrSectionView.openRepo 同款：UIAbilityContext.openLink） */
   private openSource(): void {
-    const url: string = this.snapshot.sourceUrl;
-    if (url.length === 0) {
+    if (this.snapshot.sourceUrl.length === 0) {
       return;
     }
+    this.openUrl(this.snapshot.sourceUrl);
+  }
+
+  /** 通用外跳：来源页 / 打包提交页共用（harmonybrew 打包记录行也用，v1.1 G14）。 */
+  private openUrl(url: string): void {
     const host: Context | undefined = this.getUIContext().getHostContext();
     if (host === undefined) {
-      Logger.warn(TAG, 'release intel openSource: host context missing');
+      Logger.warn(TAG, 'release intel openUrl: host context missing');
       return;
     }
     const ability: common.UIAbilityContext = host as common.UIAbilityContext;
     ability.openLink(url).catch((error: Error) => {
-      Logger.warn(TAG, `release intel openSource failed. reason=${error.message}`);
+      Logger.warn(TAG, `release intel openUrl failed. reason=${error.message}`);
     });
   }
 
@@ -248,6 +253,14 @@ export struct BrewReleaseIntelCard {
         if (this.snapshot.diff.caveatsChanged) {
           this.DiffLine($r('app.string.release_intel_caveats_changed'), '')
         }
+      }
+
+      // ---------- Harmonybrew 打包记录（v1.1 G14：harmonybrew 源才有；空表整体不渲染） ----------
+      if (this.snapshot.packCommits.length > 0) {
+        this.SectionTitle($r('app.string.release_intel_pack_title'))
+        ForEach(this.snapshot.packCommits, (item: ReleaseIntelPackCommit) => {
+          this.PackCommitLine(item)
+        }, (item: ReleaseIntelPackCommit, index: number) => `pack_${index}`)
       }
 
       // ---------- 通道缺口行（F1/F2/F3/F4；视觉弱化：secondary 色，非红非报错） ----------
@@ -423,6 +436,33 @@ export struct BrewReleaseIntelCard {
     .width('100%')
     .alignItems(VerticalAlign.Top)
     .padding({ left: 10 })
+  }
+
+  /**
+   * 打包提交行（v1.1 G14）：首行提交信息 + sha/日期注脚；有提交页 URL 时整行可点外跳。
+   * 这是 tap 打包事实的转述，不进 AI、不参与归纳——「动了什么」由 commit message 原样说话。
+   */
+  @Builder
+  PackCommitLine(item: ReleaseIntelPackCommit) {
+    Column({ space: 2 }) {
+      Text(item.message)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_primary'))
+        .width('100%')
+        .padding({ left: 10 })
+      Text(`${item.date} · ${item.sha}`)
+        .fontSize($r('sys.float.Body_S'))
+        .fontColor($r('sys.color.font_tertiary'))
+        .width('100%')
+        .padding({ left: 10 })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .onClick(() => {
+      if (item.url.length > 0) {
+        this.openUrl(item.url);
+      }
+    })
   }
 }
 

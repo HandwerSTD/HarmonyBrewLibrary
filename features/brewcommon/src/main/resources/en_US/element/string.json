@@ -987,6 +987,10 @@
     {
       "name": "release_intel_privacy_note",
       "value": "Release intelligence: this feature visits the upstream project's public release page and sends release notes text to your configured AI provider to generate summaries; requests contain no identity information and summaries are stored locally only."
+    },
+    {
+      "name": "release_intel_pack_title",
+      "value": "Harmonybrew packaging history"
     }
   ]
 }

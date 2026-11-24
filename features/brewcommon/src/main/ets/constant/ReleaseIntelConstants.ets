@@ -90,3 +90,23 @@ export const RELEASE_INTEL_GAP_REPO: string = 'repo';
 export const RELEASE_INTEL_GAP_TAG: string = 'tag';
 export const RELEASE_INTEL_GAP_NET: string = 'net';
 export const RELEASE_INTEL_GAP_NOTES: string = 'notes';
+
+/**
+ * AtomGit 打包通道（v1.1，spec G14）。
+ *
+ * harmonybrew 源的包，其「打包上游」不是 GitHub 而是 AtomGit 仓库
+ * `Harmonybrew/homebrew-core`（组织页实证，2026-11-24；formula 大多搬迁自上游
+ * Homebrew/homebrew-core，目录布局同为 `Formula/<首字母>/<token>.rb` 分片）。
+ * 情报通道 = 按该文件路径过滤的提交列表：
+ * `GET {api}/repos/{owner}/{repo}/commits?path=<formulaPath>&per_page=N`
+ * （api-doc「允许匿名访问」，实测匿名共享配额 p_repoRobot 10W/hour 会 429 —— 429/失败
+ * 一律静默降级为不渲染该组，**绝不**重试轰炸）。
+ */
+export const RELEASE_INTEL_ATOMGIT_API_BASE: string = 'https://api.atomgit.com/api/v5';
+export const RELEASE_INTEL_TAP_OWNER: string = 'Harmonybrew';
+export const RELEASE_INTEL_TAP_REPO: string = 'homebrew-core';
+/** 打包提交条数上限（渲染 ≤3 条，请求 5 条留筛选余量）。 */
+export const RELEASE_INTEL_PACK_COMMITS_MAX: number = 3;
+export const RELEASE_INTEL_PACK_COMMITS_PER_PAGE: number = 5;
+/** AtomGit commits 通道超时（与 atom 探针同档）。 */
+export const RELEASE_INTEL_COMMITS_TIMEOUT_MS: number = 5000;
