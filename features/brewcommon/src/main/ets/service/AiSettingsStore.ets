@@ -41,6 +41,8 @@ export class AiSettingsStore {
   private static memoryKey: string = '';
   /** 会话内缓存「Key 是否可用」的结论，避免读路径每次都过一遍 asset.query。 */
   private static keyAvailable: boolean = false;
+  /** hasApiKey() 的懒探针是否已跑过（一次会话只问一次 Asset 存在性）。 */
+  private static keyProbeDone: boolean = false;
   /** 偏好句柄（懒加载；Context 未就绪时返回 null，与 BrewSourcePrefs 同语义）。 */
   private static store: preferences.Preferences | undefined = undefined;
 
@@ -164,8 +166,22 @@ export class AiSettingsStore {
     }
   }
 
-  /** Key 是否存在（不读取值）。Asset 结论 + 内存兜底。 */
+  /**
+   * Key 是否存在（不读取值）。Asset 结论 + 内存兜底。
+   *
+   * **冷启自愈**：`keyAvailable` 是会话级缓存（saveApiKey/loadApiKey 成功才置位），
+   * 冷启进程里恒 false——而 `autoExplain()` / `autoReleaseIntel()` / 详情页 hasKey
+   * 走的都是本方法，不会经过 snapshot() 的探针。这里懒探针一次（probeOnce 守卫，
+   * 避免每次 UI 刷新都打 Asset binder）：首次调用同步问一次 Asset 存在性并写回缓存。
+   * 用户实测 2026-11-24：Key 已存、AI 能用（AiClient 每次请求自己 load），
+   * 但情报卡手动解析点了没反应——就是本方法误报「无 Key」把 AI 段闸掉了。
+   */
   public static hasApiKey(): boolean {
+    if (!AiSettingsStore.keyAvailable && AiSettingsStore.memoryKey.length === 0 &&
+      !AiSettingsStore.keyProbeDone) {
+      AiSettingsStore.keyProbeDone = true;
+      AiSettingsStore.probeKeyAvailable();
+    }
     return AiSettingsStore.keyAvailable || AiSettingsStore.memoryKey.length > 0;
   }
 

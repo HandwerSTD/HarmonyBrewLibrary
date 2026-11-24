@@ -219,9 +219,13 @@ export struct BrewReleaseIntelCard {
     return !this.showOriginal && card !== null && card.securityClaims.length > 0;
   }
 
-  /** 「查看全文」按钮可见性：正文被截断且全文在手（半模态渲染 notesFull） */
+  /**
+   * 「查看全文」按钮可见性：全文比节选长就给入口（v1.3.7 修——旧判据
+   * `notesTruncated` 只有超 4KB 硬截断才显示,700–4096 字之间的发布说明
+   * 节选后没有入口,用户实测「按钮依旧没有」）。
+   */
   private viewFullVisible(): boolean {
-    return this.snapshot.notesTruncated && this.snapshot.notesFull.length > 0;
+    return this.snapshot.notesFull.length > this.snapshot.notesPreview.length;
   }
 
   /** 依赖名称列表的展示串：去空、去重、逗号连接；全空返回空串（调用方判空跳过） */
