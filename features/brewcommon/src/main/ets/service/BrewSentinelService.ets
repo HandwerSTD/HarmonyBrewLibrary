@@ -356,14 +356,19 @@ export class BrewSentinelService {
   /**
    * 快照 → 镜像（二期 spec §6.1）。镜像只装展示所需的最小集：count + 前
    * SENTINEL_CARD_ITEMS_LIMIT 条版本对（name/version/latestVersion），集合明细不跨进程搬运。
+   * 口径：只算主动安装（installedOnRequest，cask 一律按主动安装——BrewInstalledParser
+   * 同款口径）的过期包；作为依赖装上的过期随 `brew upgrade` 顺带解决，不占 hero 数字，
+   * 也不进版本对列表（用户裁定：卡片只展示主动安装的）。
    */
   private deriveBase(snap: BrewInstalledSnapshot): SentinelCardBase {
     const base: SentinelCardBase = new SentinelCardBase();
     base.readAt = snap.readAt;
-    base.count = snap.sets.outdated.length;
-    const limit: number = Math.min(SENTINEL_CARD_ITEMS_LIMIT, snap.sets.outdated.length);
+    const onRequest: BrewInstalledPackage[] = snap.sets.outdated.filter(
+      (one: BrewInstalledPackage) => one.installedOnRequest);
+    base.count = onRequest.length;
+    const limit: number = Math.min(SENTINEL_CARD_ITEMS_LIMIT, onRequest.length);
     for (let i = 0; i < limit; i++) {
-      const one: BrewInstalledPackage = snap.sets.outdated[i];
+      const one: BrewInstalledPackage = onRequest[i];
       const item: SentinelCardItem = new SentinelCardItem();
       item.name = one.name;
       item.version = one.version;
