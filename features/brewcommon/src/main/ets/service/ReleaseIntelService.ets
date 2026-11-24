@@ -8,6 +8,7 @@ import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Logger, StorageKey } from '@ohos/common';
 import {
+  AI_PROMPT_VERSION_RI,
   RELEASE_INTEL_ARCHIVE_CAP,
   RELEASE_INTEL_ARCHIVE_FILE,
   RELEASE_INTEL_ARCHIVE_SEGMENT,
@@ -104,7 +105,8 @@ export class ReleaseIntelService {
     Promise<ReleaseIntelSnapshot> {
     const toVersionHint: string = ReleaseIntelService.rawVersionOf(rawDoc, kind);
     if (!force && !manualAi && toVersionHint.length > 0) {
-      const cached: SnapshotCacheRead | null = ReleaseIntelSnapshotStore.read(token, toVersionHint);
+      const cached: SnapshotCacheRead | null =
+        ReleaseIntelSnapshotStore.read(token, toVersionHint, AI_PROMPT_VERSION_RI);
       if (cached !== null && Date.now() - cached.ts < RELEASE_INTEL_SNAPSHOT_TTL_MS) {
         const parsed: ReleaseIntelSnapshot | null =
           ReleaseIntelService.snapshotFromJson(cached.dataJson);
@@ -117,7 +119,8 @@ export class ReleaseIntelService {
     const snapshot: ReleaseIntelSnapshot = await ReleaseIntelService.assembleUncached(
       rawDoc, oldRawJson, token, kind, fromVersion, force, manualAi);
     if (snapshot.toVersion.length > 0 && snapshot.gapCode !== RELEASE_INTEL_GAP_NET) {
-      ReleaseIntelSnapshotStore.save(token, snapshot.toVersion, JSON.stringify(snapshot));
+      ReleaseIntelSnapshotStore.save(token, snapshot.toVersion, JSON.stringify(snapshot),
+        AI_PROMPT_VERSION_RI);
     }
     return snapshot;
   }

@@ -13,9 +13,10 @@ import {
 
 const TAG: string = '[release-intel]';
 
-/** 快照缓存条目的盘上形态：{ts, dataJson}（dataJson = ReleaseIntelSnapshot JSON）。 */
+/** 快照缓存条目的盘上形态：{ts, pv, dataJson}（pv=AI promptVersion,换提示词即失效）。 */
 class SnapshotEnvelope {
   public ts: number = 0;
+  public pv: number = 0;
   public dataJson: string = '';
 }
 
@@ -46,8 +47,8 @@ class SnapshotStamp {
  */
 export class ReleaseIntelSnapshotStore {
   /** 覆盖写一条快照缓存（写失败只记日志——缓存缺席=下次 miss,不影响正确性）。 */
-  public static save(token: string, toVersion: string, dataJson: string): void {
-    if (token.length === 0 || toVersion.length === 0 || dataJson.length === 0) {
+  public static save(token: string, toVersion: string, dataJson: string, promptVersion: number): void {
+    if (token.length === 0 || toVersion.length === 0 || dataJson.length === 0 || promptVersion <= 0) {
       return;
     }
     const dir: string = ReleaseIntelSnapshotStore.tokenDir(token);
@@ -57,6 +58,7 @@ export class ReleaseIntelSnapshotStore {
     }
     const envelope: SnapshotEnvelope = new SnapshotEnvelope();
     envelope.ts = Date.now();
+    envelope.pv = promptVersion;
     envelope.dataJson = dataJson;
     let file: fileIo.File | undefined = undefined;
     const tempPath: string = path + '.tmp';
@@ -91,11 +93,12 @@ export class ReleaseIntelSnapshotStore {
 
   /**
    * 读快照缓存（**不判 TTL**——过期判断留给调用方, stale 时返回 null 由装配层重算,
-   * 旧文件留待下次 save 覆盖）。无/损坏 → null。
+   * 旧文件留待下次 save 覆盖）。promptVersion 不符 → null（提示词升级,旧卡视为无效,
+   * 与 AiCache 同语义）。无/损坏 → null。
    */
-  public static read(token: string, toVersion: string): SnapshotCacheRead | null {
+  public static read(token: string, toVersion: string, promptVersion: number): SnapshotCacheRead | null {
     const path: string = ReleaseIntelSnapshotStore.pathOf(token, toVersion);
-    if (path.length === 0) {
+    if (path.length === 0 || promptVersion <= 0) {
       return null;
     }
     let file: fileIo.File | undefined = undefined;
@@ -122,6 +125,12 @@ export class ReleaseIntelSnapshotStore {
       const data: Object | undefined = rec['dataJson'];
       out.dataJson = typeof data === 'string' ? data as string : '';
       if (out.ts === 0 || out.dataJson.length === 0) {
+        return null;
+      }
+      const pv: Object | undefined = rec['pv'];
+      const envelopeVersion: number = typeof pv === 'number' ? pv as number : 0;
+      if (envelopeVersion !== promptVersion) {
+        // 提示词升级后的旧卡不返回（文件留给下次 save 覆盖,或被 LRU 淘汰）
         return null;
       }
       return out;

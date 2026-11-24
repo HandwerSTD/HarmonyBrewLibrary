@@ -162,6 +162,19 @@ export class AiTasks {
     return base + '\n请按 schema 输出 JSON。';
   }
 
+  /**
+   * 平台口径（全任务共用，拼在每个 system prompt 末尾）：用户设备是 HarmonyOS PC
+   * （2in1 电脑），不是 macOS——但上游资料（Release Notes、系统要求、报错输出）里
+   * 满篇都是 macOS 语境，模型会顺嘴把「macOS」写进解读。术语解释（formula/cask/
+   * bottle）不受影响；引用原文时 macOS 字样保留，面向用户的表述一律按 HarmonyOS PC。
+   */
+  private static readonly PLATFORM_RULE: string =
+    '平台口径：用户的设备是 HarmonyOS PC（2in1 电脑），不是 macOS。解释 Homebrew 术语' +
+    '（formula/cask/bottle 等）不受影响；但任何涉及「在什么系统上运行/安装」的表述都' +
+    '必须以 HarmonyOS PC 为准，不得把 macOS 说成用户的设备系统或建议 macOS 专属操作；' +
+    '引用上游原文（发布说明、系统要求、报错输出）时 macOS 字样保留原文，' +
+    '面向用户的解读一律按 HarmonyOS PC 语境。';
+
   private static readonly D1_SYSTEM: string = '你是 Homebrew 包讲解助手，像懂行的朋友向新手介绍这个包，' +
     '不是在填表。只基于用户提供的字段回答，用简体中文；不得虚构版本号、命令或功能；' +
     'caveats 是英文原文时翻译成中文并归纳风险点；字段里没有的信息就直说无法判断。\n' +
@@ -170,7 +183,8 @@ export class AiTasks {
     '**禁止**输出「未提供」「为空」「暂无」之类的填充句——宁可少一段，不写废话。\n' +
     '输出仍然必须是 JSON，字段结构不变：' +
     '{"summary":"定位一句话或两句话","scenarios":["适用场景，0–3条，自然短语"],' +
-    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"]}。';
+    '"caveats":["注意与坑，0–3条"],"steps":["上手步骤，2–3条，命令要可直接复制"]}。' +
+    AiTasks.PLATFORM_RULE;
 
   private static parseExplain(text: string, outcome?: ParseOutcome): AiExplainCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiExplainCard | null => {
@@ -442,7 +456,8 @@ export class AiTasks {
     '推荐最多 5 个真实存在的通用命令行工具（Homebrew 包名）。' +
     '输出 JSON：{"candidates":[{"token":"包名（英文小写）","why":"一句话中文理由"}]}，' +
     '**candidates 必须是对象里的数组键，不要输出裸数组**；' +
-    '没有合适的推荐就输出 {"candidates":[]}，这是合法结果，不要编造包名。';
+    '没有合适的推荐就输出 {"candidates":[]}，这是合法结果，不要编造包名。' +
+    AiTasks.PLATFORM_RULE;
 
   // ------------------------------------------------------------ D3 · 报错解读
 
@@ -495,7 +510,8 @@ export class AiTasks {
   private static readonly D3_SYSTEM: string = '你是 Homebrew 命令报错解读助手。' +
     '基于给出的命令、失败分类与输出尾部，解释失败原因。用简体中文；只陈述输出里有依据的结论，' +
     '推测要标注「可能」。输出 JSON：{"what":"发生了什么，一句话","causes":["可能原因，最多3条"],' +
-    '"nextSteps":["下一步建议，最多3条，可以包含具体命令"]}。';
+    '"nextSteps":["下一步建议，最多3条，可以包含具体命令"]}。' +
+    AiTasks.PLATFORM_RULE;
 
   private static parseFailure(text: string, outcome?: ParseOutcome): AiFailureCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): AiFailureCard | null => {
@@ -607,7 +623,8 @@ export class AiTasks {
     '输出 JSON：{"one_liner":"这次更新最值得注意什么，一句话","new_features":["0–3条"],' +
     '"fixes":["0–3条"],"breaking_changes":[{"title":"变更是什么","impact":"对本机使用的影响",' +
     '"action":"建议动作，可为空串"}],"security_claims":[{"claim":"上游自述原文转述"}],' +
-    '"gaps":["0–3条"],"confidence":"full|partial|none"}。';
+    '"gaps":["0–3条"],"confidence":"full|partial|none"}。' +
+    AiTasks.PLATFORM_RULE;
 
   private static parseIntel(text: string, outcome?: ParseOutcome): ReleaseIntelCard | null {
     return parseJsonSafe(text, (obj: Record<string, Object>): ReleaseIntelCard | null => {

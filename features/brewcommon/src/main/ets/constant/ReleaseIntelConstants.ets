@@ -17,7 +17,7 @@ export const RELEASE_INTEL_FEATURE: string = 'release_intel';
 /**
  * prompt 版本（spec G8）。**变更即全部情报摘要缓存失效**——改 prompt 必须同时 +1。
  */
-export const AI_PROMPT_VERSION_RI: number = 1;
+export const AI_PROMPT_VERSION_RI: number = 2;
 
 /** 情报摘要缓存 TTL（spec G8：24h；上游一次发布只归纳一次，足够新鲜）。 */
 export const AI_CACHE_TTL_RI_MS: number = 24 * 60 * 60 * 1000;

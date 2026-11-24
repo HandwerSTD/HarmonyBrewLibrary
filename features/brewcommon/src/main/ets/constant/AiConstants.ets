@@ -10,7 +10,7 @@
  */
 
 /** 每个任务 prompt 的版本号。**变更即该任务的全部落盘缓存失效**（spec G9）。 */
-export const AI_PROMPT_VERSION_D1: number = 1;
+export const AI_PROMPT_VERSION_D1: number = 2;
 export const AI_PROMPT_VERSION_D2: number = 1;
 
 /**
