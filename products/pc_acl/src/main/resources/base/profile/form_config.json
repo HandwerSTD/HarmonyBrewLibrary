@@ -19,7 +19,9 @@
       "defaultDimension": "2*2",
       "resizable": true,
       "supportDimensions": [
-        "2*2"
+        "2*2",
+        "2*4",
+        "4*4"
       ]
     }
   ]

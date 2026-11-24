@@ -1,0 +1,12 @@
+{
+  "color": [
+    {
+      "name": "sentinel_accent",
+      "value": "#FF9F0A"
+    },
+    {
+      "name": "sentinel_success",
+      "value": "#30D158"
+    }
+  ]
+}
