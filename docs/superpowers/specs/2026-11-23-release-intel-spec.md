@@ -233,3 +233,15 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - **手动 AI 解析**:自动解析开关关闭时操作行下最后一行右对齐仍有「AI 解析」按钮——`assemble` 增 `manualAi` 参数绕开 autoReleaseIntel 闸(无 Key 仍 E1→aiFailed);装配输入四元组 stash 进 **state**(VM 是单例而详情页可叠页,挂 VM 会串页);解析中按钮禁用+spinner,完成前正文保持原文,完成后由卡片 `@Watch` 捕获 card 落地自动切 AI 视图;「重新生成」同口径 manualAi=true。
 - **tldr 执行按钮移除**:示例命令行尾只留「复制」——命令执行入口统一收敛在安装/升级主操作与执行 Sheet,示例不提供一键执行(brew_tldr_run 键删)。
 - 文案:增 release_intel_view_full/release_intel_fetching,删 brew_tldr_run(三份 248 键);审计与双构建口径不变。
+## 15. v1.3.4 增补(2026-11-24):整卡快照缓存
+
+**动机(用户)**:更新情报的缓存此前只覆盖 AI 摘要段(AiCache 24h,key=`token_to`,swr)——但装配里唯一的网络步(atom 抓取,5s 超时×2)与 verdict/diff/notes 解析每次进详情页都重跑,重复进页纯浪费。
+
+**方案**:整卡快照缓存 `ReleaseIntelSnapshotStore`——assemble 产物按 (token, toVersion) 落盘 `filesDir/brew_live/ai/release_intel_snapshot/<token>/<to>.json`(envelope {ts,dataJson},同 token+to **覆盖写**),1h TTL(`RELEASE_INTEL_SNAPSHOT_TTL_MS`)内命中零网络直返。要点:
+
+- 缓存读在 assemble 入口(keyed on rawDoc 的权威 toVersion,非 VM 的 latestVersion,防安装快照滞后错键);force(重新生成)/manualAi(手动 AI 解析)**绕开读**——两条手动路径语义就是「强制现拉」。
+- 缓存写:F1(net)瞬态失败**不缓存**;F2/F3/F4 是稳定事实、notes-only(自动解析关)与 AI 失败快照照常缓存(手动路径绕开读,不会拿到无 AI 的旧值);占位 loading 快照从不落盘。
+- 解析防御式逐字段重建(snapshotFromJson,损坏→按 miss;card 缺失→null;与 parseJsonSafe 同口径,不直接把 JSON.parse 结果当类用)。
+- LRU cap 40 条(单条 ~8–15KB,≈600KB 封顶);随 BrewCacheAdmin.clear 一并清空(换源=口径失效)。
+- 与 AI 缓存分工:AI 缓存管「摘要生成贵」;快照缓存管「装配整体重复」。TTL 过期后重装配,card 段大概率仍命中 AI 24h 缓存,不会重复烧 token。
+- 改动:ReleaseIntelConstants(3 常量)/ReleaseIntelSnapshotStore(新)/ReleaseIntelService(assemble 包缓存层+snapshotFromJson)/Index.ets 导出/审计清单 7→8;VM 与 UI 零改动(缓存对装配层外部透明)。

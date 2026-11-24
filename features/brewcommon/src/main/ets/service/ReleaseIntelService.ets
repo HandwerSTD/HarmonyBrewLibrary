@@ -20,12 +20,15 @@ import {
   RELEASE_INTEL_GAP_TAG,
   RELEASE_INTEL_NOTES_PREVIEW_CHARS,
   RELEASE_INTEL_RELEASES_PATH,
+  RELEASE_INTEL_SNAPSHOT_TTL_MS,
 } from '../constant/ReleaseIntelConstants';
 import {
   ReleaseIntelArchiveEntry,
+  ReleaseIntelBreakingChange,
   ReleaseIntelCard,
   ReleaseIntelDiff,
   ReleaseIntelInput,
+  ReleaseIntelSecurityClaim,
   ReleaseIntelSnapshot,
   releaseIntelArchiveEntryOf,
 } from '../model/ReleaseIntelModels';
@@ -37,6 +40,7 @@ import { AiSettingsStore } from './AiSettingsStore';
 import { AiTasks } from './AiTasks';
 import { BrewHttp } from './BrewHttp';
 import { ReleaseIntelBaselineStore } from './ReleaseIntelBaselineStore';
+import { ReleaseIntelSnapshotStore, SnapshotCacheRead } from './ReleaseIntelSnapshotStore';
 
 const TAG: string = '[release-intel]';
 
@@ -81,14 +85,47 @@ export class ReleaseIntelService {
   }
 
   /**
-   * 主装配。`oldRawJson` 为空串 = 基线缺失（F5，diff.baselineAvailable=false）。
-   * atom 拉取内置一次重试（F1）；AI 失败只落 `aiFailed`，结构化区照常（G5）。
-   * `force` 仅透传给 AI 任务（「重新生成」= 旁路 AI 缓存强制取数，G8；与 D1 同口径），
-   * atom 每次都是现拉的，不受 force 影响。
-   * `manualAi`（v1.3.3）：用户显式点「AI 解析 / 重新生成」时为 true——绕开
-   * 「自动解析更新日志」开关（那是自动流的闸），但无 Key 仍走 E1 → aiFailed。
+   * 主装配（v1.3.4 起带整卡快照缓存）。
+   *
+   * **快照缓存读**：非 force / 非手动 AI 时,同 (token, toVersion) 1h 内直接复用
+   * 上次装配产物——atom 抓取是装配里唯一的网络步,重复进详情页重拉纯属浪费
+   * （AI 摘要虽另有 24h 缓存,但 verdict/diff/notes 解析仍会重跑一次）。命中即零网络返回。
+   *
+   * **快照缓存写**：装配成功后落盘（F1/net 瞬态失败不缓存;F2/F3/F4 是稳定事实、
+   * notes-only 与 AI 失败的快照照常缓存——手动 AI/重新生成经 manualAi/force 绕开读缓存）。
+   *
+   * 其余语义见 `assembleUncached`：`oldRawJson` 为空串 = 基线缺失（F5）;
+   * atom 拉取内置一次重试（F1）;AI 失败只落 `aiFailed`,结构化区照常（G5）;
+   * `force` 透传给 AI 任务（旁路 AI 缓存,G8）;`manualAi` 绕开「自动解析更新日志」闸
+   * （无 Key 仍 E1 → aiFailed）。
    */
   public static async assemble(rawDoc: Object, oldRawJson: string, token: string,
+    kind: string, fromVersion: string, force: boolean = false, manualAi: boolean = false):
+    Promise<ReleaseIntelSnapshot> {
+    const toVersionHint: string = ReleaseIntelService.rawVersionOf(rawDoc, kind);
+    if (!force && !manualAi && toVersionHint.length > 0) {
+      const cached: SnapshotCacheRead | null = ReleaseIntelSnapshotStore.read(token, toVersionHint);
+      if (cached !== null && Date.now() - cached.ts < RELEASE_INTEL_SNAPSHOT_TTL_MS) {
+        const parsed: ReleaseIntelSnapshot | null =
+          ReleaseIntelService.snapshotFromJson(cached.dataJson);
+        if (parsed !== null) {
+          Logger.info(TAG, `release intel snapshot cache hit, token=${token} to=${toVersionHint}`);
+          return parsed;
+        }
+      }
+    }
+    const snapshot: ReleaseIntelSnapshot = await ReleaseIntelService.assembleUncached(
+      rawDoc, oldRawJson, token, kind, fromVersion, force, manualAi);
+    if (snapshot.toVersion.length > 0 && snapshot.gapCode !== RELEASE_INTEL_GAP_NET) {
+      ReleaseIntelSnapshotStore.save(token, snapshot.toVersion, JSON.stringify(snapshot));
+    }
+    return snapshot;
+  }
+
+  /**
+   * 无缓存的装配本体（见 `assemble` 的语义注释）。
+   */
+  private static async assembleUncached(rawDoc: Object, oldRawJson: string, token: string,
     kind: string, fromVersion: string, force: boolean = false, manualAi: boolean = false):
     Promise<ReleaseIntelSnapshot> {
     const snapshot: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
@@ -427,6 +464,123 @@ export class ReleaseIntelService {
   }
 
   // ------------------------------------------------------------ 杂项
+
+  /**
+   * 缓存 JSON → 快照（v1.3.4）：逐字段防御式重建（损坏/缺字段 → null,按 miss 处理）。
+   * 与 AI 解析的 parseJsonSafe 同口径——**不把 JSON.parse 结果直接当类用**。
+   */
+  private static snapshotFromJson(json: string): ReleaseIntelSnapshot | null {
+    let root: Record<string, Object>;
+    try {
+      root = JSON.parse(json) as Record<string, Object>;
+    } catch (err) {
+      return null;
+    }
+    const out: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
+    out.token = ReleaseIntelService.strField(root, 'token');
+    out.kind = ReleaseIntelService.strField(root, 'kind');
+    out.fromVersion = ReleaseIntelService.strField(root, 'fromVersion');
+    out.toVersion = ReleaseIntelService.strField(root, 'toVersion');
+    out.verdict = ReleaseIntelService.strField(root, 'verdict');
+    out.sourceUrl = ReleaseIntelService.strField(root, 'sourceUrl');
+    out.gapCode = ReleaseIntelService.strField(root, 'gapCode');
+    out.notesFull = ReleaseIntelService.strField(root, 'notesFull');
+    out.notesPreview = ReleaseIntelService.strField(root, 'notesPreview');
+    out.notesTruncated = ReleaseIntelService.boolField(root, 'notesTruncated');
+    out.aiFailed = ReleaseIntelService.boolField(root, 'aiFailed');
+    out.stale = ReleaseIntelService.boolField(root, 'stale');
+    out.loading = false; // 缓存里只存成品,占位快照从不落盘
+    const fetchedAt: Object | undefined = root['fetchedAt'];
+    out.fetchedAt = typeof fetchedAt === 'number' ? fetchedAt as number : 0;
+    if (out.toVersion.length === 0) {
+      return null;
+    }
+
+    // diff（嵌套对象,字段缺 → 默认值）
+    const diffObj: Object | undefined = root['diff'];
+    const diffRec: Record<string, Object> =
+      (diffObj === undefined || diffObj === null ? {} : diffObj) as Record<string, Object>;
+    const diff: ReleaseIntelDiff = new ReleaseIntelDiff();
+    diff.baselineAvailable = ReleaseIntelService.boolField(diffRec, 'baselineAvailable');
+    diff.caveatsChanged = ReleaseIntelService.boolField(diffRec, 'caveatsChanged');
+    diff.depsAdded = ReleaseIntelService.strListField(diffRec, 'depsAdded');
+    diff.depsRemoved = ReleaseIntelService.strListField(diffRec, 'depsRemoved');
+    diff.buildDepsAdded = ReleaseIntelService.strListField(diffRec, 'buildDepsAdded');
+    out.diff = diff;
+
+    // card（v1.3.4 恢复语义:缓存里可能有,重建;缺 → null）
+    const cardObj: Object | undefined = root['card'];
+    if (cardObj !== undefined && cardObj !== null) {
+      const cardRec: Record<string, Object> = cardObj as Record<string, Object>;
+      const card: ReleaseIntelCard = new ReleaseIntelCard();
+      card.oneLiner = ReleaseIntelService.strField(cardRec, 'oneLiner');
+      card.newFeatures = ReleaseIntelService.strListField(cardRec, 'newFeatures');
+      card.fixes = ReleaseIntelService.strListField(cardRec, 'fixes');
+      card.gaps = ReleaseIntelService.strListField(cardRec, 'gaps');
+      card.confidence = ReleaseIntelService.strField(cardRec, 'confidence');
+      const breaking: Object | undefined = cardRec['breakingChanges'];
+      if (Array.isArray(breaking)) {
+        const breakingArr: Array<Object> = breaking as Array<Object>;
+        for (let i: number = 0; i < breakingArr.length && card.breakingChanges.length < 3; i++) {
+          const one: Record<string, Object> = breakingArr[i] as Record<string, Object>;
+          const title: string = ReleaseIntelService.strField(one, 'title');
+          if (title.length === 0) {
+            continue; // 缺 title 的单条跳过,不整页拒绝（与 parseIntel 同口径）
+          }
+          const change: ReleaseIntelBreakingChange = new ReleaseIntelBreakingChange();
+          change.title = title;
+          change.impact = ReleaseIntelService.strField(one, 'impact');
+          change.action = ReleaseIntelService.strField(one, 'action');
+          card.breakingChanges.push(change);
+        }
+      }
+      const security: Object | undefined = cardRec['securityClaims'];
+      if (Array.isArray(security)) {
+        const securityArr: Array<Object> = security as Array<Object>;
+        for (let i: number = 0; i < securityArr.length && card.securityClaims.length < 2; i++) {
+          const one: Record<string, Object> = securityArr[i] as Record<string, Object>;
+          const claim: string = ReleaseIntelService.strField(one, 'claim');
+          if (claim.length === 0) {
+            continue;
+          }
+          const sc: ReleaseIntelSecurityClaim = new ReleaseIntelSecurityClaim();
+          sc.claim = claim;
+          card.securityClaims.push(sc);
+        }
+      }
+      out.card = card;
+    }
+    return out;
+  }
+
+  /** Record 取字符串字段（非串 → 空串）。 */
+  private static strField(rec: Record<string, Object>, key: string): string {
+    const v: Object | undefined = rec[key];
+    return typeof v === 'string' ? v as string : '';
+  }
+
+  /** Record 取布尔字段（非布尔 → false）。 */
+  private static boolField(rec: Record<string, Object>, key: string): boolean {
+    const v: Object | undefined = rec[key];
+    return typeof v === 'boolean' ? v as boolean : false;
+  }
+
+  /** Record 取字符串数组字段（非数组/元素非串 → 空数组）。 */
+  private static strListField(rec: Record<string, Object>, key: string): string[] {
+    const v: Object | undefined = rec[key];
+    if (v === undefined || !Array.isArray(v)) {
+      return [];
+    }
+    const out: string[] = [];
+    const arr: Array<Object> = v as Array<Object>;
+    for (let i: number = 0; i < arr.length; i++) {
+      const one: Object = arr[i];
+      if (typeof one === 'string') {
+        out.push(one as string);
+      }
+    }
+    return out;
+  }
 
   /** raw JSON 的版本口径：formula=versions.stable，cask=version。 */
   private static rawVersionOf(rawDoc: Object, kind: string): string {

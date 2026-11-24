@@ -351,6 +351,7 @@ export { ReleaseIntelService } from './src/main/ets/service/ReleaseIntelService'
 export { ReleaseIntelFilter } from './src/main/ets/service/ReleaseIntelFilter';
 export { ReleaseIntelPrefs } from './src/main/ets/service/ReleaseIntelPrefs';
 export { ReleaseIntelBaselineStore } from './src/main/ets/service/ReleaseIntelBaselineStore';
+export { ReleaseIntelSnapshotStore, SnapshotCacheRead } from './src/main/ets/service/ReleaseIntelSnapshotStore';
 export { SemverJudge } from './src/main/ets/util/SemverJudge';
 export { FormulaDiffer } from './src/main/ets/util/FormulaDiffer';
 export { BrewNotesExtractor } from './src/main/ets/util/BrewNotesExtractor';
@@ -387,6 +388,9 @@ export {
   RELEASE_INTEL_GAP_TAG,
   RELEASE_INTEL_GAP_NET,
   RELEASE_INTEL_GAP_NOTES,
+  RELEASE_INTEL_SNAPSHOT_SEGMENT,
+  RELEASE_INTEL_SNAPSHOT_CAP,
+  RELEASE_INTEL_SNAPSHOT_TTL_MS,
 } from './src/main/ets/constant/ReleaseIntelConstants';
 
 // ------------------------------------------------------------------ 本机包（设备上的 brew 安装记录）

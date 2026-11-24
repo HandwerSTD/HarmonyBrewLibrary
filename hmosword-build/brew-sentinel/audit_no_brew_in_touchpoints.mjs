@@ -48,6 +48,7 @@ const RELEASE_INTEL_FILES = [
   'features/brewcommon/src/main/ets/service/ReleaseIntelFilter.ets',
   'features/brewcommon/src/main/ets/service/ReleaseIntelPrefs.ets',
   'features/brewcommon/src/main/ets/service/ReleaseIntelBaselineStore.ets',
+  'features/brewcommon/src/main/ets/service/ReleaseIntelSnapshotStore.ets',
   'features/brewcommon/src/main/ets/util/ReleaseIntelRepoResolver.ets',
   'features/brewdetail/src/main/ets/component/BrewReleaseIntelCard.ets',
   'features/brewdetail/src/main/ets/component/BrewReleaseArchiveView.ets',
@@ -322,7 +323,7 @@ function main() {
   }
 
   // Y 组（G12）：情报链路零命令符号。AppStorage 在 Y 组放行（checkAppStorage=false）。
-  if (RELEASE_INTEL_FILES.length < 7) {
+  if (RELEASE_INTEL_FILES.length < 8) {
     throw new Error(`Y 组触达面文件数异常（${RELEASE_INTEL_FILES.length}），检查清单是否被裁剪`);
   }
   for (const rel of RELEASE_INTEL_FILES) {
