@@ -38,6 +38,15 @@ export class AiSettingAutoExplainEvent implements BaseVMEvent {
   }
 }
 
+/** 切「自动解析更新日志」开关（Y 更新情报中心；即时落盘，同上与保存按钮解耦）。 */
+export class AiSettingAutoIntelEvent implements BaseVMEvent {
+  public enabled: boolean;
+
+  public constructor(enabled: boolean) {
+    this.enabled = enabled;
+  }
+}
+
 export class AiSettingSaveEvent implements BaseVMEvent {
 }
 
@@ -84,6 +93,8 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
       this.switchProvider(event.provider);
     } else if (event instanceof AiSettingAutoExplainEvent) {
       this.setAutoExplain(event.enabled);
+    } else if (event instanceof AiSettingAutoIntelEvent) {
+      this.setAutoIntel(event.enabled);
     } else if (event instanceof AiSettingSaveEvent) {
       this.saveConfig();
     } else if (event instanceof AiSettingKeySaveEvent) {
@@ -125,6 +136,7 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
     state.editingKey = '';
     state.errorText = '';
     state.editingAutoExplain = AiSettingsStore.autoExplain();
+    state.editingAutoIntel = AiSettingsStore.autoReleaseIntel();
     state.testOkModel = '';
     state.testOkLatencyMs = -1;
     state.testErrorKind = '';
@@ -152,6 +164,16 @@ export class AiSettingVM extends BaseVM<AiSettingState> {
     const ok: boolean = AiSettingsStore.saveAutoExplain(enabled);
     if (ok) {
       state.editingAutoExplain = enabled;
+      state.snapshot = AiSettingsStore.snapshot();
+    }
+  }
+
+  /** 自动解析更新日志开关：即时落盘，成功后同步快照（语义与 setAutoExplain 同构）。 */
+  private setAutoIntel(enabled: boolean): void {
+    const state: AiSettingState = this.getState();
+    const ok: boolean = AiSettingsStore.saveAutoReleaseIntel(enabled);
+    if (ok) {
+      state.editingAutoIntel = enabled;
       state.snapshot = AiSettingsStore.snapshot();
     }
   }

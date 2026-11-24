@@ -825,6 +825,14 @@
       "value": "Generate explanation automatically on detail page open; turn off to require tapping \"AI explain\""
     },
     {
+      "name": "ai_settings_auto_intel",
+      "value": "Auto-digest release notes"
+    },
+    {
+      "name": "ai_settings_auto_intel_hint",
+      "value": "Summarize the release intel card with AI; turn off to show the original notes only"
+    },
+    {
       "name": "ai_d2_related",
       "value": "In catalog"
     },
@@ -893,20 +901,24 @@
       "value": "This release provides no release notes"
     },
     {
-      "name": "release_intel_source",
-      "value": "Source: upstream release page"
-    },
-    {
-      "name": "release_intel_ai_badge",
-      "value": "Summary AI-generated from upstream release notes; may be inaccurate"
-    },
-    {
       "name": "release_intel_view_source",
-      "value": "View source"
+      "value": "Release page"
     },
     {
       "name": "release_intel_pin",
       "value": "Pin version"
+    },
+    {
+      "name": "release_intel_ignore_menu",
+      "value": "Ignore"
+    },
+    {
+      "name": "release_intel_toggle_ai",
+      "value": "AI summary"
+    },
+    {
+      "name": "release_intel_toggle_original",
+      "value": "Show original"
     },
     {
       "name": "release_intel_ignore",
@@ -915,10 +927,6 @@
     {
       "name": "release_intel_unignore",
       "value": "Unignore"
-    },
-    {
-      "name": "release_intel_pause",
-      "value": "Pause alerts"
     },
     {
       "name": "release_intel_pause_7",

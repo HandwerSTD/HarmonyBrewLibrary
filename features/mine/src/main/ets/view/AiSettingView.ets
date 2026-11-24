@@ -10,6 +10,7 @@ import {
 } from '@ohos/brewcommon';
 import {
   AiSettingAutoExplainEvent,
+  AiSettingAutoIntelEvent,
   AiSettingInitEvent,
   AiSettingKeyClearEvent,
   AiSettingKeySaveEvent,
@@ -274,6 +275,30 @@ export struct AiSettingView {
             .selectedColor($r('sys.color.ohos_id_color_emphasize'))
             .onChange((isOn: boolean) => {
               AiSettingVM.getInstance().sendEvent(new AiSettingAutoExplainEvent(isOn));
+            })
+        }
+        .width(CommonConstants.FULL_PERCENT)
+        .margin({ top: 12 })
+        .alignItems(VerticalAlign.Center)
+
+        // 「自动解析更新日志」开关（Y 更新情报中心，默认开）。关闭后情报卡
+        // 只渲染上游 notes 原文节选，不发起 AI 请求。
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text($r('app.string.ai_settings_auto_intel'))
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_primary'))
+            Text($r('app.string.ai_settings_auto_intel_hint'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.state.editingAutoIntel })
+            .selectedColor($r('sys.color.ohos_id_color_emphasize'))
+            .onChange((isOn: boolean) => {
+              AiSettingVM.getInstance().sendEvent(new AiSettingAutoIntelEvent(isOn));
             })
         }
         .width(CommonConstants.FULL_PERCENT)

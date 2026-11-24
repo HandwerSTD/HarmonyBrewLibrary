@@ -82,6 +82,13 @@ export const AI_PROVIDER_CUSTOM: string = 'custom';
  */
 export const AI_PREFS_KEY_AUTO_EXPLAIN: string = 'brew_ai_auto_explain';
 
+/**
+ * 「自动解析更新日志」开关的偏好键（Y 更新情报中心的 AI 摘要闸，默认开）：
+ * 开 = 详情页情报卡允许发起 AI 摘要（缓存链路复用，失败静默）；
+ * 关 = 情报卡只渲染上游 notes 原文节选。布尔单独存，不进 config JSON。
+ */
+export const AI_PREFS_KEY_AUTO_RELEASE_INTEL: string = 'brew_ai_auto_release_intel';
+
 /** DeepSeek 预置模板（spec §3.1）。baseURL 不含 `/chat/completions` 尾段。 */
 export const AI_DEEPSEEK_BASE_URL: string = 'https://api.deepseek.com';
 export const AI_DEEPSEEK_DEFAULT_MODEL: string = 'deepseek-chat';

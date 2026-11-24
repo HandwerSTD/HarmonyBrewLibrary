@@ -10,6 +10,7 @@ import { Logger, StorageKey } from '@ohos/common';
 import {
   AI_ASSET_ALIAS_API_KEY,
   AI_PREFS_KEY_AUTO_EXPLAIN,
+  AI_PREFS_KEY_AUTO_RELEASE_INTEL,
   AI_PREFS_KEY_CONFIG,
   AI_PREFS_STORE,
 } from '../constant/AiConstants';
@@ -168,6 +169,35 @@ export class AiSettingsStore {
     return AiSettingsStore.keyAvailable || AiSettingsStore.memoryKey.length > 0;
   }
 
+  /**
+   * 同步存在性探针：冷启进程里 `keyAvailable` 初始为 false（它只被 saveApiKey /
+   * loadApiKey 的成功路径置位），而设置页首屏走的是同步 `snapshot()`——
+   * 在 `loadApiKey()` 被任何一次 AI 请求调过之前，已持久化的 Key 会被误报
+   * 「未配置」(用户实测 2026-11-24)。querySync 是同步 API，这里在快照读之前
+   * 直接问一次 Asset 的存在性，把结论写回会话缓存。**只判断存在，不返回值**。
+   */
+  private static probeKeyAvailable(): void {
+    try {
+      const query: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+      query.set(asset.Tag.ALIAS, AiSettingsStore.toBytes(AI_ASSET_ALIAS_API_KEY));
+      query.set(asset.Tag.RETURN_TYPE, asset.ReturnType.ALL);
+      const result: Array<asset.AssetMap> = asset.querySync(query);
+      for (let i: number = 0; i < result.length; i++) {
+        if (result[i].has(asset.Tag.SECRET)) {
+          AiSettingsStore.keyAvailable = true;
+          return;
+        }
+      }
+      AiSettingsStore.keyAvailable = false;
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      if (e.code !== asset.ErrorCode.NOT_FOUND) {
+        Logger.warn(TAG, `asset probe failed, code=${e.code}, msg=${e.message}`);
+      }
+      AiSettingsStore.keyAvailable = false;
+    }
+  }
+
   private static toBytes(text: string): Uint8Array {
     const encoder: util.TextEncoder = util.TextEncoder.create('utf-8');
     return encoder.encodeInto(text);
@@ -234,13 +264,15 @@ export class AiSettingsStore {
     }
   }
 
-  /** 设置页首屏快照：配置 + Key 存在性。 */
+  /** 设置页首屏快照：配置 + Key 存在性（含冷启探针，见 probeKeyAvailable）。 */
   public static snapshot(): AiSettingsSnapshot {
+    AiSettingsStore.probeKeyAvailable();
     const out: AiSettingsSnapshot = new AiSettingsSnapshot();
     out.config = AiSettingsStore.loadConfig();
     out.hasKey = AiSettingsStore.hasApiKey();
     out.keyMemoryOnly = AiSettingsStore.memoryKey.length > 0;
     out.autoExplain = AiSettingsStore.autoExplain();
+    out.autoReleaseIntel = AiSettingsStore.autoReleaseIntel();
     return out;
   }
 
@@ -276,6 +308,38 @@ export class AiSettingsStore {
     }
   }
 
+  /**
+   * 「自动解析更新日志」开关（Y 更新情报中心的 AI 摘要闸，默认开）。**无 Key 时恒
+   * 返回 false**；关闭后情报卡只渲染 notes 原文节选，不发起 AI 请求。
+   */
+  public static autoReleaseIntel(): boolean {
+    if (!AiSettingsStore.hasApiKey()) {
+      return false;
+    }
+    const store: preferences.Preferences | null = AiSettingsStore.open();
+    if (store === null) {
+      return false;
+    }
+    return store.getSync(AI_PREFS_KEY_AUTO_RELEASE_INTEL, true) === true;
+  }
+
+  /** 写「自动解析更新日志」开关（布尔单独存；不含 Key）。 */
+  public static saveAutoReleaseIntel(enabled: boolean): boolean {
+    const store: preferences.Preferences | null = AiSettingsStore.open();
+    if (store === null) {
+      return false;
+    }
+    try {
+      store.putSync(AI_PREFS_KEY_AUTO_RELEASE_INTEL, enabled === true);
+      Logger.info(TAG, `auto release intel saved enabled=${enabled}`);
+      return true;
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      Logger.error(TAG, `auto release intel save failed, code=${e.code}, msg=${e.message}`);
+      return false;
+    }
+  }
+
   /** 清空全部 AI 设置（含 Key）。 */
   public static async clearAll(): Promise<void> {
     await AiSettingsStore.removeApiKey();
@@ -284,6 +348,7 @@ export class AiSettingsStore {
       try {
         store.deleteSync(AI_PREFS_KEY_CONFIG);
         store.deleteSync(AI_PREFS_KEY_AUTO_EXPLAIN);
+        store.deleteSync(AI_PREFS_KEY_AUTO_RELEASE_INTEL);
       } catch (err) {
         const e: BusinessError = err as BusinessError;
         Logger.error(TAG, `config delete failed, code=${e.code}`);

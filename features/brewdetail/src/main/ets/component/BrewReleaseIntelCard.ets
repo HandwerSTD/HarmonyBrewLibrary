@@ -32,11 +32,12 @@ import { common } from '@kit.AbilityKit';
  * - AI 报告的 gaps（「notes 没讲什么」）是内部元信息，不渲染；
  * - 状态脚注（AI 失败 / 数据过期 / 原文截断）横排一行小字，不再三条竖排。
  *
- * ## 操作行（spec §4 / G6）
- *
- * 固定版本（复制 `brew pin <token>`，只有复制永不执行 G13）/ 忽略此版本 /
- * 暂停提醒（7 天 / 30 天 / 无限期菜单）/ 重新生成（AI 失败时才有，G8 force）/
- * 查看原文（外跳 `{repo}/releases/tag/{tag}`）。
+ * - **正文视图切换（v1.3.2）**：默认展示 `notesPreview` 原文（零编造），AI 可用时
+ *   有「AI 解析」按钮——点按后展示 AI 摘要、按钮文字变「展示原文」可切回；
+ *   card 缺席（AI 失败/无 Key/调试关）时恒为原文、无按钮；
+ * - **操作行**：固定版本（复制 pin 命令，永不执行 G13）/「忽略」合并菜单
+ *   （忽略此版本或撤销 + 暂停 7 天 / 30 天 / 无限期三档，v1.3.2 合而为一）/
+ *   「发布页」外跳 `{repo}/releases/tag/{tag}` / 重新生成（AI 失败时才有，G8 force）。
  *
  * ## 缺口行（spec §5）
  *
@@ -60,6 +61,8 @@ export struct BrewReleaseIntelCard {
   /** 重新生成（页面处理器：VM 旁路缓存强制重跑） */
   onRegenerate: () => void = () => {
   };
+  /** 正文视图开关（v1.3.2 用户定调）：默认展示原文，「AI 解析」点按后展示 AI 解析、按钮变「展示原文」 */
+  @State showOriginal: boolean = true;
 
   /** 「查看原文」外跳（BrewTldrSectionView.openRepo 同款：UIAbilityContext.openLink） */
   private openSource(): void {
@@ -142,6 +145,23 @@ export struct BrewReleaseIntelCard {
       diff.buildDepsAdded.length > 0 || diff.caveatsChanged);
   }
 
+  /** 当前是否处于「AI 解析」正文视图（card 缺席时恒否——正文恒为原文，零编造） */
+  private showAiBody(): boolean {
+    return !this.showOriginal && this.snapshot.card !== null;
+  }
+
+  /** AI 一句话摘要（card 缺席返回空串；UI 块内不收窄联合类型，取值收敛到方法里） */
+  private aiOneLiner(): string {
+    const card: ReleaseIntelCard | null = this.snapshot.card;
+    return card === null ? '' : card.oneLiner;
+  }
+
+  /** 安全免责行判据：仅 AI 解析视图且存在安全条目时显示 */
+  private showSecurityNote(): boolean {
+    const card: ReleaseIntelCard | null = this.snapshot.card;
+    return !this.showOriginal && card !== null && card.securityClaims.length > 0;
+  }
+
   /** 依赖名称列表的展示串：去空、去重、逗号连接；全空返回空串（调用方判空跳过） */
   private namesLabel(names: string[]): string {
     const seen: Set<string> = new Set<string>();
@@ -158,41 +178,56 @@ export struct BrewReleaseIntelCard {
 
   build() {
     Column({ space: 12 }) {
-      // ---------- 头部：版本号（App Store 语义） + verdict 副行 ----------
-      Text($r('app.string.release_intel_version_of', this.snapshot.toVersion))
-        .fontSize($r('sys.float.Body_M'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('sys.color.font_primary'))
-        .width('100%')
-      Text(this.verdictLabel())
-        .fontSize($r('sys.float.Body_S'))
-        .fontColor(this.snapshot.verdict === 'major' ? $r('sys.color.warning') :
-        $r('sys.color.font_tertiary'))
-        .width('100%')
-
-      // ---------- 正文：AI 摘要 / AI 缺席时的 notes 原文节选（零编造降级） ----------
-      if (this.snapshot.card !== null && this.snapshot.card.oneLiner.length > 0) {
-        Text(this.snapshot.card.oneLiner)
+      // ---------- 头部：版本号 + verdict 标签同行（App Store 语义；v1.3.1 用户定调） ----------
+      Row({ space: 8 }) {
+        Text($r('app.string.release_intel_version_of', this.snapshot.toVersion))
           .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-      }
-      // AI 失败（aiFailed）也降级渲染原文——正文缺席才是最伤用户的形态（v1.3 自查修正）
-      if (this.snapshot.card === null && this.snapshot.notesPreview.length > 0) {
-        Text(this.snapshot.notesPreview)
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-      }
-
-      // ---------- 要点列表（扁平带前缀，空卡整体不渲染，G5） ----------
-      ForEach(this.bulletItems(), (item: ResourceStr) => {
-        Text(item)
-          .fontSize($r('sys.float.Body_M'))
+          .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
-          .width('100%')
-          .padding({ left: 10 })
-      }, (item: ResourceStr, index: number) => `bullet_${index}`)
+        Text(this.verdictLabel())
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor(this.snapshot.verdict === 'major' ? $r('sys.color.warning') :
+          $r('sys.color.font_tertiary'))
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // ---------- 正文视图切换（v1.3.2）：默认原文；AI 可用时按钮在「AI 解析 / 展示原文」间翻转 ----------
+      if (this.snapshot.card !== null && this.snapshot.notesPreview.length > 0) {
+        Text(this.showOriginal ? $r('app.string.release_intel_toggle_ai') :
+        $r('app.string.release_intel_toggle_original'))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_emphasize'))
+          .onClick(() => {
+            this.showOriginal = !this.showOriginal;
+          })
+      }
+
+      // ---------- 正文：原文（默认，零编造）/ AI 解析（点按切换；card 缺席时恒为原文） ----------
+      if (this.showOriginal || this.snapshot.card === null) {
+        if (this.snapshot.notesPreview.length > 0) {
+          Text(this.snapshot.notesPreview)
+            .fontSize($r('sys.float.Body_S'))
+            .fontColor($r('sys.color.font_secondary'))
+            .width('100%')
+        }
+      }
+      if (this.showAiBody()) {
+        if (this.aiOneLiner().length > 0) {
+          Text(this.aiOneLiner())
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_primary'))
+            .width('100%')
+        }
+        // 要点列表（扁平带前缀，空数组整体不渲染，G5）
+        ForEach(this.bulletItems(), (item: ResourceStr) => {
+          Text(item)
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_primary'))
+            .width('100%')
+            .padding({ left: 10 })
+        }, (item: ResourceStr, index: number) => `bullet_${index}`)
+      }
 
       // ---------- 结构化 diff（G3 零 AI）：压成几行小字，无分区标题 ----------
       if (this.diffHasContent()) {
@@ -244,13 +279,8 @@ export struct BrewReleaseIntelCard {
         .alignItems(VerticalAlign.Center)
       }
 
-      // ---------- 来源声明行（G13 隐私口径：说清楚归纳依据） ----------
-      Text(this.snapshot.card === null ? $r('app.string.release_intel_source') :
-      $r('app.string.release_intel_ai_badge'))
-        .fontSize($r('sys.float.Body_S'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
-      if (this.snapshot.card !== null && this.snapshot.card.securityClaims.length > 0) {
+      // ---------- 安全声明免责（仅 AI 解析视图显示；上游自述未经核验） ----------
+      if (this.showSecurityNote()) {
         Text($r('app.string.release_intel_security_note'))
           .fontSize($r('sys.float.Body_S'))
           .fontColor($r('sys.color.font_tertiary'))
@@ -268,18 +298,10 @@ export struct BrewReleaseIntelCard {
             })
             .padding({ right: 16 })
         }
-        Text(this.ignored ? $r('app.string.release_intel_unignore') :
-        $r('app.string.release_intel_ignore'))
+        Text($r('app.string.release_intel_ignore_menu'))
           .fontSize($r('sys.float.Body_S'))
           .fontColor($r('sys.color.font_emphasize'))
-          .onClick(() => {
-            this.onToggleIgnore();
-          })
-          .padding({ right: 16 })
-        Text($r('app.string.release_intel_pause'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_emphasize'))
-          .bindMenu(this.pauseMenuItems())
+          .bindMenu(this.ignoreMenuItems())
           .padding({ right: 16 })
         if (this.snapshot.sourceUrl.length > 0) {
           Text($r('app.string.release_intel_view_source'))
@@ -329,9 +351,19 @@ export struct BrewReleaseIntelCard {
     return $r('app.string.release_intel_gap_net');
   }
 
-  /** 暂停提醒的三档菜单（spec §4：7 天 / 30 天 / 无限期；bindMenu 先例 BrewSourceSettingView） */
-  private pauseMenuItems(): MenuElement[] {
+  /**
+   * 「忽略」合并菜单（v1.3.2 用户定调：忽略此版本与暂停更新合而为一）：
+   * 首项 = 忽略此版本 / 撤销忽略（随 ignored 翻转），后接暂停三档。
+   */
+  private ignoreMenuItems(): MenuElement[] {
     const items: Array<MenuElement> = [
+      {
+        value: this.ignored ? $r('app.string.release_intel_unignore') :
+        $r('app.string.release_intel_ignore'),
+        action: () => {
+          this.onToggleIgnore();
+        },
+      },
       {
         value: $r('app.string.release_intel_pause_7'),
         action: () => {

@@ -24,6 +24,8 @@ export class AiSettingState extends BaseState {
   public keyMemoryOnly: boolean = false;
   /** 「自动生成 AI 讲解」开关（表单副本；保存时落 AiSettingsStore）。 */
   public editingAutoExplain: boolean = false;
+  /** 「自动解析更新日志」开关（表单副本；即时落盘，不走保存按钮）。 */
+  public editingAutoIntel: boolean = false;
   /** 「测试连接」进行中。 */
   public testing: boolean = false;
   /**

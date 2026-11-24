@@ -829,6 +829,14 @@
       "value": "进入详情页时自动生成讲解；关闭后需手动点击「AI 讲解」按钮"
     },
     {
+      "name": "ai_settings_auto_intel",
+      "value": "自动解析更新日志"
+    },
+    {
+      "name": "ai_settings_auto_intel_hint",
+      "value": "用 AI 归纳更新情报卡的摘要；关闭后仅展示发布说明原文"
+    },
+    {
       "name": "ai_d2_related",
       "value": "目录相关"
     },
@@ -893,20 +901,24 @@
       "value": "该发布没有提供正文说明"
     },
     {
-      "name": "release_intel_source",
-      "value": "情报来源：上游发布页"
-    },
-    {
-      "name": "release_intel_ai_badge",
-      "value": "摘要由 AI 依据上游 Release Notes 归纳，可能存在偏差"
-    },
-    {
       "name": "release_intel_view_source",
-      "value": "查看原文"
+      "value": "发布页"
     },
     {
       "name": "release_intel_pin",
       "value": "固定版本"
+    },
+    {
+      "name": "release_intel_ignore_menu",
+      "value": "忽略"
+    },
+    {
+      "name": "release_intel_toggle_ai",
+      "value": "AI 解析"
+    },
+    {
+      "name": "release_intel_toggle_original",
+      "value": "展示原文"
     },
     {
       "name": "release_intel_ignore",
@@ -915,10 +927,6 @@
     {
       "name": "release_intel_unignore",
       "value": "撤销忽略"
-    },
-    {
-      "name": "release_intel_pause",
-      "value": "暂停提醒"
     },
     {
       "name": "release_intel_pause_7",

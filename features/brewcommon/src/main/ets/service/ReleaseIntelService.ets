@@ -149,7 +149,8 @@ export class ReleaseIntelService {
       notes.text.substring(0, RELEASE_INTEL_NOTES_PREVIEW_CHARS) : notes.text;
 
     // AI 卡（G5/G8：无 Key → 静默;失败 → aiFailed,UI 给重试）
-    if (!AiSettingsStore.autoExplain()) {
+    // 闸用「自动解析更新日志」独立开关（设置页可单独关掉情报摘要，不影响 D1 讲解）
+    if (!AiSettingsStore.autoReleaseIntel()) {
       return snapshot; // card=null 静默（UI 落 notes 原文节选）
     }
     const input: ReleaseIntelInput = new ReleaseIntelInput();
