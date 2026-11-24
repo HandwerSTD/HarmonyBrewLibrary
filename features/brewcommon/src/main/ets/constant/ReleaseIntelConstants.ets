@@ -92,7 +92,8 @@ export const RELEASE_INTEL_GAP_NET: string = 'net';
 export const RELEASE_INTEL_GAP_NOTES: string = 'notes';
 
 /**
- * notes 原文节选长度（AI 不可用时卡片渲染的降级文本上限）。notes 提取本身仍是
- * 4KB（喂 AI 用）,节选只截头部——原文长说明的细节走「查看原文」外跳。
+ * notes 原文节选长度（v1.3.3 用户定调：约 4 行——App Store 更新日志卡是「摘要」
+ * 不是全文）。notes 提取本身仍是 4KB（喂 AI 用）,全文走「查看全文」半模态
+ * （snapshot.notesFull）,外跳发布页兜底。
  */
-export const RELEASE_INTEL_NOTES_PREVIEW_CHARS: number = 700;
+export const RELEASE_INTEL_NOTES_PREVIEW_CHARS: number = 160;

@@ -145,6 +145,18 @@ export class ReleaseIntelSnapshot {
    * 能给原文就不只给一句「AI 不可用」）。card 非 null 时 UI 不渲染该组。
    */
   public notesPreview: string = '';
+
+  /**
+   * notes 全文（extract 输出，≤4KB；v1.3.3）。卡片正文只渲染 `notesPreview`
+   * （4 行口径），「查看全文」半模态渲染这里——只放内存，不落盘档案。
+   */
+  public notesFull: string = '';
+
+  /**
+   * 占位快照（v1.3.3）：情报获取期间 VM 先落的「版本号 + spinner」卡，
+   * assemble 完成后整体替换。仅 VM 构造，service 产物恒为 false。
+   */
+  public loading: boolean = false;
   /** 本次快照完成时间（F7 的「数据截至 HH:mm」用它） */
   public fetchedAt: number = 0;
   /** true = 展示的是过期缓存且后台刷新也失败了（F7） */

@@ -85,9 +85,12 @@ export class ReleaseIntelService {
    * atom 拉取内置一次重试（F1）；AI 失败只落 `aiFailed`，结构化区照常（G5）。
    * `force` 仅透传给 AI 任务（「重新生成」= 旁路 AI 缓存强制取数，G8；与 D1 同口径），
    * atom 每次都是现拉的，不受 force 影响。
+   * `manualAi`（v1.3.3）：用户显式点「AI 解析 / 重新生成」时为 true——绕开
+   * 「自动解析更新日志」开关（那是自动流的闸），但无 Key 仍走 E1 → aiFailed。
    */
   public static async assemble(rawDoc: Object, oldRawJson: string, token: string,
-    kind: string, fromVersion: string, force: boolean = false): Promise<ReleaseIntelSnapshot> {
+    kind: string, fromVersion: string, force: boolean = false, manualAi: boolean = false):
+    Promise<ReleaseIntelSnapshot> {
     const snapshot: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
     snapshot.token = token;
     snapshot.kind = kind;
@@ -144,13 +147,16 @@ export class ReleaseIntelService {
       snapshot.gapCode = RELEASE_INTEL_GAP_NOTES;
       return snapshot;
     }
-    // notes 原文节选（AI 不可用时的降级渲染数据;card 非 null 时 UI 不展示）
+    // notes 原文节选（约 4 行,v1.3.3 用户定调）与全文（「查看全文」半模态用,
+    // ≤4KB 只放内存不落盘档案）;card 非 null 时正文默认仍是原文视图。
+    snapshot.notesFull = notes.text;
     snapshot.notesPreview = notes.text.length > RELEASE_INTEL_NOTES_PREVIEW_CHARS ?
       notes.text.substring(0, RELEASE_INTEL_NOTES_PREVIEW_CHARS) : notes.text;
 
     // AI 卡（G5/G8：无 Key → 静默;失败 → aiFailed,UI 给重试）
-    // 闸用「自动解析更新日志」独立开关（设置页可单独关掉情报摘要，不影响 D1 讲解）
-    if (!AiSettingsStore.autoReleaseIntel()) {
+    // 闸用「自动解析更新日志」独立开关（设置页可单独关掉情报摘要，不影响 D1 讲解）;
+    // 用户显式触发（手动按钮/重新生成）经 manualAi 绕开此闸。
+    if (!manualAi && !AiSettingsStore.autoReleaseIntel()) {
       return snapshot; // card=null 静默（UI 落 notes 原文节选）
     }
     const input: ReleaseIntelInput = new ReleaseIntelInput();

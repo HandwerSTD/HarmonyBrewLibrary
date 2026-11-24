@@ -392,6 +392,8 @@ export struct BrewDetailView {
             snapshot: this.detailState.releaseIntel,
             pinCommand: this.detailState.releaseIntelPinCommand,
             ignored: this.detailState.releaseIntelIgnored,
+            // 手动「AI 解析」按钮的可见性判据（v1.3.3）：快照判据含冷启探针
+            hasKey: AiSettingsStore.snapshot().hasKey,
             onToggleIgnore: (): void => {
               this.handleIntelToggleIgnore();
             },
@@ -400,6 +402,9 @@ export struct BrewDetailView {
             },
             onRegenerate: (): void => {
               this.handleIntelRegenerate();
+            },
+            onManualAi: (): Promise<void> => {
+              return this.viewModel.requestReleaseIntelAi(this.detailState);
             },
           })
         }

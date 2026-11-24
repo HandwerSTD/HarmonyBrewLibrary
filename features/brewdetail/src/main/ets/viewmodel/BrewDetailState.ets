@@ -95,4 +95,15 @@ export class BrewDetailState {
    * 只装当前 token 的条目；独立异步加载、失败保持为空（档案是增益记录，不提示错误）。
    */
   public releaseArchive: ReleaseIntelArchiveEntry[] = [];
+
+  /**
+   * 手动「AI 解析」的装配输入 stash（v1.3.3）：loadReleaseIntel 跑闸时顺手记下
+   * assemble 四元组，「AI 解析」按钮（自动解析关闭时的显式入口）用它只补跑 AI 段。
+   * **放 state 不放 VM**——VM 是单例而详情页可叠页（点同分类包会 push 新详情页）,
+   * 挂 VM 会让叠层旧页的按钮拿到新页的包。非 UI 字段,不参与渲染观察。
+   */
+  public intelRawDoc: Object | null = null;
+  public intelOldJson: string = '';
+  public intelToken: string = '';
+  public intelFrom: string = '';
 }

@@ -30,6 +30,8 @@ import {
   ReleaseIntelBaselineStore,
   ReleaseIntelPrefs,
   ReleaseIntelService,
+  ReleaseIntelSnapshot,
+  SemverJudge,
   TldrService,
 } from '@ohos/brewcommon';
 import type {
@@ -40,7 +42,6 @@ import type {
   BrewInstalledPackage,
   BrewPackageItem,
   ReleaseIntelArchiveEntry,
-  ReleaseIntelSnapshot,
   TldrPage,
 } from '@ohos/brewcommon';
 import { BrewDetailState, BrewInstallState } from './BrewDetailState';
@@ -353,11 +354,16 @@ export class BrewDetailViewModel {
    * - 仅 formula（cask v1 不渲染情报卡，spec §10）；
    * - 本机已装且 OUTDATED（H 负责发现更新，Y 只理解「这一组更新」）。
    *
+   * **先落占位卡（v1.3.3 用户定调）**：更新是主打功能，情报获取期间就渲染
+   * 「版本号 + spinner」的 loading 快照（toVersion 用 installed.latestVersion,
+   * verdict 本地 SemverJudge 就能算），assemble 完成后整体替换——不等数据。
+   *
    * baseline 缺失 → F5（diff 区降级）；上游通道失败 → 对应缺口码；
    * AI 失败 / 无 Key → 结构化区照常渲染（G5）。
-   * public：情报卡操作行（重新生成）需要从视图层重新触发（force 旁路 AI 缓存）。
+   * `force` 旁路 AI 缓存；`manualAi` 绕开自动解析开关（用户显式触发）。
    */
-  public loadReleaseIntel(param: BrewDetailParams, state: BrewDetailState, force: boolean = false): void {
+  public loadReleaseIntel(param: BrewDetailParams, state: BrewDetailState, force: boolean = false,
+    manualAi: boolean = false): void {
     if (!BrewCli.isEnabled() || param.kind === BrewKind.CASK || param.token.trim().length === 0) {
       return;
     }
@@ -382,11 +388,31 @@ export class BrewDetailViewModel {
       return;
     }
     const oldRawJson: string = ReleaseIntelBaselineStore.read(param.token, installed.version);
-    ReleaseIntelService.assemble(rawDoc, oldRawJson, param.token, 'formula', installed.version, force)
+    // 手动 AI 通道的装配输入（v1.3.3）：「AI 解析」按钮在 auto 关时也要能补跑 AI 段。
+    // **必须 stash 进 state（每页实例）而不是 VM**——VM 是单例而详情页可叠页,
+    // 挂 VM 会让叠层旧页的按钮拿到新页的包。
+    state.intelRawDoc = rawDoc;
+    state.intelOldJson = oldRawJson;
+    state.intelToken = param.token;
+    state.intelFrom = installed.version;
+    // 占位快照（loading=true）：立即上卡,版本行已知,正文区只有 spinner
+    const loading: ReleaseIntelSnapshot = new ReleaseIntelSnapshot();
+    loading.token = param.token;
+    loading.kind = 'formula';
+    loading.fromVersion = installed.version;
+    loading.toVersion = installed.latestVersion;
+    loading.verdict = SemverJudge.judge(installed.version, installed.latestVersion).kind;
+    loading.fetchedAt = Date.now();
+    loading.loading = true;
+    state.releaseIntel = loading;
+    BrewDetailViewModel.applyIntelWithTransition(state);
+    ReleaseIntelService.assemble(rawDoc, oldRawJson, param.token, 'formula', installed.version,
+      force, manualAi)
       .then((snapshot: ReleaseIntelSnapshot) => {
-        // 版本无增量（快照同步偏差：brew 说 outdated 但源还没更新）→ 不渲染情报卡
+        // 版本无增量（快照同步偏差：brew 说 outdated 但源还没更新）→ 收掉占位卡
         if (snapshot.toVersion.length === 0 || snapshot.toVersion === snapshot.fromVersion) {
           Logger.info(TAG, `release intel skip: no version delta, token=${param.token}`);
+          state.hasReleaseIntel = false;
           return;
         }
         state.releaseIntel = snapshot;
@@ -400,8 +426,38 @@ export class BrewDetailViewModel {
           `card=${snapshot.card !== null} aiFailed=${snapshot.aiFailed}`);
       })
       .catch((error: Error) => {
-        // assemble 内部不抛（缺口都收敛进 gapCode）；这里的 catch 只兜非预期异常
+        // assemble 内部不抛（缺口都收敛进 gapCode）；这里的 catch 只兜非预期异常。
+        // 占位卡收掉,别让 spinner 永转
+        state.hasReleaseIntel = false;
         Logger.warn(TAG, `release intel load failed. reason=${error.message}`);
+      });
+  }
+
+  /**
+   * 手动「AI 解析」（v1.3.3 用户定调）：自动解析开关关闭时,操作行末尾仍有
+   * 显式按钮——用 loadReleaseIntel stash 的装配输入只补跑 AI 段（结构化区/atom
+   * 重算零成本,note 亦复取）。完成前卡片正文保持原文,完成后由卡片的 @Watch
+   * 把正文切到 AI 视图。Promise 交给按钮做 spinner/禁用。
+   */
+  public requestReleaseIntelAi(state: BrewDetailState): Promise<void> {
+    const rawDoc: Object | null = state.intelRawDoc;
+    if (rawDoc === null || state.intelToken.length === 0 || state.intelFrom.length === 0) {
+      return Promise.resolve();
+    }
+    const token: string = state.intelToken;
+    return ReleaseIntelService.assemble(rawDoc, state.intelOldJson, token, 'formula',
+      state.intelFrom, false, true)
+      .then((snapshot: ReleaseIntelSnapshot) => {
+        if (snapshot.toVersion.length === 0 || snapshot.toVersion === snapshot.fromVersion) {
+          return;
+        }
+        state.releaseIntel = snapshot;
+        state.releaseIntelIgnored =
+          ReleaseIntelPrefs.ignoredVersion(token) === snapshot.toVersion;
+        BrewDetailViewModel.applyIntelWithTransition(state);
+      })
+      .catch((error: Error) => {
+        Logger.warn(TAG, `release intel manual ai failed. reason=${error.message}`);
       });
   }
 
@@ -421,9 +477,10 @@ export class BrewDetailViewModel {
   /**
    * 「重新生成」（G8）：旁路 AI 缓存强制取数，与 D1 的 force 同口径。
    * atom 每次都现拉，AI 缓存被旁路后新值写回同键；结构化区同步重算（零成本）。
+   * 用户显式触发 → manualAi=true（v1.3.3）：auto 解析关着时也能拿到 AI 结果。
    */
   public regenerateReleaseIntel(param: BrewDetailParams, state: BrewDetailState): void {
-    this.loadReleaseIntel(param, state, true);
+    this.loadReleaseIntel(param, state, true, true);
   }
 
   /**

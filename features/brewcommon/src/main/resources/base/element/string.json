@@ -604,10 +604,7 @@
       "name": "brew_tldr_copied",
       "value": "Copied"
     },
-    {
-      "name": "brew_tldr_run",
-      "value": "Run"
-    },
+
     {
       "name": "brew_tldr_attribution",
       "value": "Examples from tldr-pages (CC BY 4.0)"
@@ -951,6 +948,14 @@
     {
       "name": "release_intel_truncated",
       "value": "上游说明过长，已截断归纳"
+    },
+    {
+      "name": "release_intel_view_full",
+      "value": "查看全文"
+    },
+    {
+      "name": "release_intel_fetching",
+      "value": "正在获取更新情报…"
     },
     {
       "name": "release_intel_ignored_bar",

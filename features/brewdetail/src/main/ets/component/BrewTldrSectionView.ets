@@ -3,12 +3,8 @@
  */
 
 import { common } from '@kit.AbilityKit';
-import { Logger, PasteboardUtil, Toast } from '@ohos/common';
+import { Logger, PasteboardUtil } from '@ohos/common';
 import {
-  BrewCli,
-  BrewCommandRequest,
-  BrewCommandRunner,
-  BrewCommandStartResult,
   TldrParser,
   TLDR_REPO_URL,
 } from '@ohos/brewcommon';
@@ -33,8 +29,8 @@ const COPIED_RESET_MS: number = 2500;
  * 无数据不是错误态），因此 build 里假定 `page.examples` 非空 —— 由 VM 的装配条件保证。
  *
  * 结构（spec §4.1）：分区标题 → 说明段（可选）→ 扁平示例列表 → 署名行。
- * 「执行」把示例原文送进既有的执行 Sheet（BrewCommandRunner 单例承载，
- * 流式输出 / 中断 / 退出码全部复用），不做任何改写或参数猜测。
+ * 行尾操作只有「复制」（v1.3.3 用户定调：执行按钮移除——命令的执行入口
+ * 统一收敛在安装/升级主操作与执行 Sheet,示例命令不提供一键执行）。
  */
 @Component
 export struct BrewTldrSectionView {
@@ -125,8 +121,8 @@ export struct BrewTldrSectionView {
  * 说明行 + 等宽命令灰条（占位符高亮）+ 行尾操作。
  *
  * 占位符高亮是**展示层唯一**的加工：`Span` 序列来自 `TldrParser.splitCodeSegments`，
- * 全部段拼接与 `code` 逐字一致 —— 所以「渲染的命令文本」就是原文，复制（G3）与
- * 执行送进 Sheet 的都是同一段字符串。
+ * 全部段拼接与 `code` 逐字一致 —— 所以「渲染的命令文本」就是原文，复制（G3）
+ * 的就是同一段字符串。
  */
 @Component
 struct BrewTldrExampleCard {
@@ -175,16 +171,6 @@ struct BrewTldrExampleCard {
             .onClick(() => {
               this.copyCommand();
             })
-          if (this.canRun()) {
-            Button($r('app.string.brew_tldr_run'))
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_on_primary'))
-              .backgroundColor($r('sys.color.ohos_id_color_emphasize'))
-              .height($r('app.float.brew_detail_copy_button_height'))
-              .onClick(() => {
-                this.runExample();
-              })
-          }
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
@@ -204,11 +190,6 @@ struct BrewTldrExampleCard {
     .width('100%')
   }
 
-  /** 「执行」的显示条件（G4 + G10）：无占位符，且本版本开了执行通道 */
-  private canRun(): boolean {
-    return !this.example.hasPlaceholder && BrewCli.isEnabled();
-  }
-
   /** 复制命令原文。内容与渲染文本逐字一致（G3）——两者同源于 `example.code` */
   private copyCommand(): void {
     // PasteboardUtil 自带成功/失败 Toast；按钮文案再回显一次「已复制」
@@ -221,35 +202,5 @@ struct BrewTldrExampleCard {
       this.copyResetTimer = 0;
       this.copied = false;
     }, COPIED_RESET_MS);
-  }
-
-  /**
-   * 一键执行：示例原文直接进既有执行 Sheet。
-   *
-   * `rawCommand` 模式下 runner 用 `TldrParser.isExecutable` 复核一次（G4 的通道侧兜底），
-   * 提示沿用 brew 命令的同款文案（busy / unavailable / bad name 的用户语义完全相同）。
-   * 本条示例正在执行时点击只重新打开 Sheet —— 与详情页安装按钮同一行为。
-   */
-  private runExample(): void {
-    const runner: BrewCommandRunner = BrewCommandRunner.getInstance();
-    if (runner.isRunningArgs(this.example.code)) {
-      runner.openSheet();
-      return;
-    }
-    const request: BrewCommandRequest = new BrewCommandRequest(
-      $r('app.string.brew_cmd_title_tldr', this.token), this.example.code, this.example.code);
-    request.rawCommand = this.example.code;
-    const result: BrewCommandStartResult = runner.start(request);
-    if (result === BrewCommandStartResult.STARTED) {
-      runner.openSheet();
-      return;
-    }
-    if (result === BrewCommandStartResult.BUSY) {
-      Toast.showToast($r('app.string.brew_cmd_busy'));
-    } else if (result === BrewCommandStartResult.UNAVAILABLE) {
-      Toast.showToast($r('app.string.brew_cmd_unavailable'));
-    } else {
-      Toast.showToast($r('app.string.brew_cmd_bad_name'));
-    }
   }
 }

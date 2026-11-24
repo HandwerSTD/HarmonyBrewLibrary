@@ -220,3 +220,16 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 7. 「查看原文」并入操作行。
 
 文案:删 title/major/security/fixes/new/diff_title/deps_repack/gap_diff 8 键,增 version_of/bullet_breaking/bullet_security/bullet_fix/bullet_new 5 键(三份 string.json 均 245 键,ConvertFrom-Json 校验通过);模型/服务层零改动,仅 BrewReleaseIntelCard.ets 重写 + spec §4/§7 重写。
+
+## 14. v1.3.1–v1.3.3 增补(2026-11-24):卡片交互打磨
+
+**v1.3.1(用户)**:情报来源声明行删除(release_intel_source/ai_badge 两键删);verdict 标签挪到版本号同行(major 警示色)。
+
+**v1.3.2(用户)**:①正文视图切换——默认原文,「AI 解析」按钮点按后展示 AI 摘要、按钮变「展示原文」;②「查看原文」文案改「发布页」(行为不变,外跳 releases/tag);③「忽略此版本」与「暂停提醒」合为一个菜单(首项忽略/撤销,后接暂停三档)。
+
+**v1.3.3(用户,本节)**:
+- **占位卡**:更新是主打功能,情报获取期间就渲染「版本号 + spinner」卡——`ReleaseIntelSnapshot.loading=true` 占位快照(toVersion=installed.latestVersion,verdict 本地 SemverJudge 预算),VM 在 assemble 发起前先落卡、完成后整体替换;assemble 抛错/无版本增量时收卡(`hasReleaseIntel=false`),防 spinner 永转。
+- **节选 4 行 + 查看全文**:`RELEASE_INTEL_NOTES_PREVIEW_CHARS` 700→160(约 4 行);快照增 `notesFull`(extract 全文 ≤4KB,只放内存不落盘);正文截断时节选尾部给「查看全文」,点开**半模态**(bindSheet,SheetSize.MEDIUM/CENTER,hero=包名+版本行+verdict,正文=notesFull 滚动)。
+- **手动 AI 解析**:自动解析开关关闭时操作行下最后一行右对齐仍有「AI 解析」按钮——`assemble` 增 `manualAi` 参数绕开 autoReleaseIntel 闸(无 Key 仍 E1→aiFailed);装配输入四元组 stash 进 **state**(VM 是单例而详情页可叠页,挂 VM 会串页);解析中按钮禁用+spinner,完成前正文保持原文,完成后由卡片 `@Watch` 捕获 card 落地自动切 AI 视图;「重新生成」同口径 manualAi=true。
+- **tldr 执行按钮移除**:示例命令行尾只留「复制」——命令执行入口统一收敛在安装/升级主操作与执行 Sheet,示例不提供一键执行(brew_tldr_run 键删)。
+- 文案:增 release_intel_view_full/release_intel_fetching,删 brew_tldr_run(三份 248 键);审计与双构建口径不变。

@@ -600,10 +600,7 @@
       "name": "brew_tldr_copied",
       "value": "Copied"
     },
-    {
-      "name": "brew_tldr_run",
-      "value": "Run"
-    },
+
     {
       "name": "brew_tldr_attribution",
       "value": "Examples from tldr-pages (CC BY 4.0)"
@@ -951,6 +948,14 @@
     {
       "name": "release_intel_truncated",
       "value": "Upstream notes were truncated before summarizing"
+    },
+    {
+      "name": "release_intel_view_full",
+      "value": "View full notes"
+    },
+    {
+      "name": "release_intel_fetching",
+      "value": "Fetching release intel…"
     },
     {
       "name": "release_intel_ignored_bar",
