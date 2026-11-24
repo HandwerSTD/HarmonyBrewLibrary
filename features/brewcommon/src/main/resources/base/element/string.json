@@ -907,7 +907,7 @@
     },
     {
       "name": "release_intel_ignore_menu",
-      "value": "更多"
+      "value": "忽略"
     },
     {
       "name": "release_intel_toggle_ai",
