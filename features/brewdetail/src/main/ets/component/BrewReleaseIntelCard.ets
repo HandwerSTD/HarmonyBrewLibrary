@@ -48,8 +48,10 @@ import { common } from '@kit.AbilityKit';
  *
  * ## 缺口行（spec §5）
  *
- * gapCode 非空时渲染对应缺口文案（F1/F2/F3/F4），视觉弱化（secondary 色，非红非报错）：
- * 「没拿到上游情报」是数据状态，不是故障。
+ * gapCode 非空时渲染对应缺口文案,视觉弱化（secondary 色,非红非报错）：
+ * 「没拿到上游情报」是数据状态,不是故障。**F2（上游不在 GitHub）例外不渲染**——
+ * v1.3.6 用户定调:非 GitHub 上游没有通用情报通道,卡片只展示版本与操作字,
+ * 空着比一句「抓不到」更干净。F1/F3/F4 照常渲染。
  */
 @Component
 export struct BrewReleaseIntelCard {
@@ -329,8 +331,11 @@ export struct BrewReleaseIntelCard {
           }
         }
 
-        // 通道缺口行（F1/F2/F3/F4；视觉弱化：secondary 色，非红非报错）
-        if (this.snapshot.gapCode.length > 0) {
+        // 通道缺口行（F1/F3/F4;视觉弱化：secondary 色，非红非报错）。
+        // F2（上游不在 GitHub）不渲染——v1.3.6 用户定调:该类包本来就无通用情报
+        // 通道（GitLab/SourceForge 等是 v2 多通道课题），卡片只展示版本与操作字。
+        if (this.snapshot.gapCode.length > 0 &&
+          this.snapshot.gapCode !== RELEASE_INTEL_GAP_REPO) {
           Text(this.gapText())
             .fontSize($r('sys.float.Body_S'))
             .fontColor($r('sys.color.font_secondary'))
