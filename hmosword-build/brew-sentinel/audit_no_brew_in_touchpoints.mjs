@@ -2,8 +2,10 @@
  * 更新哨兵触达点「零执行」审计（G5，spec §6）。
  *
  * 哨兵全链路（卡片页、FormExtensionAbility、WorkScheduler 回调、SentinelBootstrap、
- * 哨兵服务）必须只做三件事：读盘上快照、推卡片数据、发通知。它**不允许出现任何 brew
+ * 哨兵服务）必须只做两件事：读盘上快照、推卡片数据。它**不允许出现任何 brew
  * 命令拼装/执行符号**——「替用户按回车」的红线在本功能里没有例外路径。
+ * 二期（spec 2026-11-24 §3）起通知链路整体移除：触达点再出现通知/跳转代理符号，
+ * 就是 N 线删漏，同样算违例。
  *
  * 扫描对象（触达点集合）：
  *   - products/pc_acl/src/main/ets/sentinel/ 下全部 .ets（递归）；
@@ -15,7 +17,9 @@
  *   2. 命令字面量：引号后紧跟 `brew ` 的字符串（含 --dry-run 拼装），以及孤立的 --dry-run；
  *   3. AppStorage：触达点一个都不能碰（跨进程纯度——扩展进程没有 AppStorage，
  *      任何触达点引用它都意味着这条路径只能跑在宿主进程，是设计漂移）；
- *   4. 数据来源单一：BrewSentinelService 必须 import BrewInstalledLoader（只读快照）。
+ *   4. 数据来源单一：BrewSentinelService 必须 import BrewInstalledLoader（只读快照）；
+ *   5. 通知残留（二期 N 线）：notificationManager / requestEnableNotification /
+ *      openNotificationSettings / NotificationRequest / wantAgent 一个都不能出现。
  *
  * 允许的 brewcommon 内部 import：BrewInstalledLoader / BrewInstalledPackage（只读快照）。
  * 其余 brewcommon 命令相关符号由规则 1 的负向清单拦住。
@@ -44,6 +48,8 @@ const FORBIDDEN_SYMBOLS = [
 const BREW_LITERAL_RE = /(['"`])brew[\s'"`]/;
 const DRY_RUN_RE = /--dry-run/;
 const APP_STORAGE_RE = /\bAppStorage\b/;
+/** 通知链路残留（二期 N 线整体移除后必须为零：notificationManager / wantAgent 等） */
+const NOTIFY_RESIDUE_RE = /\b(notificationManager|requestEnableNotification|openNotificationSettings|NotificationRequest|wantAgent|WantAgent)\b/;
 /** 哨兵服务的数据来源必须且只能是 BrewInstalledLoader 的只读快照 */
 const LOADER_IMPORT_RE = /import\s*\{[^}]*BrewInstalledLoader[^}]*\}\s*from/;
 
@@ -131,6 +137,9 @@ export function scanContent(content) {
     if (APP_STORAGE_RE.test(line)) {
       violations.push({ line: idx + 1, rule: 'AppStorage', snippet: line.trim().slice(0, 120) });
     }
+    if (NOTIFY_RESIDUE_RE.test(line)) {
+      violations.push({ line: idx + 1, rule: 'notify-residue', snippet: line.trim().slice(0, 120) });
+    }
   });
   return violations;
 }
@@ -153,13 +162,12 @@ function collectEtsFiles(dir) {
 
 const NEGATIVE_CASES = [
   {
-    name: '干净的服务片段（只读快照 + 推卡 + 发通知）',
+    name: '干净的服务片段（只读快照 + 推卡，通知链路已移除）',
     code: `
 import { preferences } from '@kit.ArkData';
 import { BrewInstalledLoader } from './BrewInstalledLoader';
 const snap = BrewInstalledLoader.snapshot();
 formProvider.updateForm(formId, binding);
-notificationManager.publish(request);
 `,
   },
   {
@@ -194,6 +202,8 @@ const POSITIVE_CASES = [
   { name: '--dry-run 拼装', code: `const cmd = commandLine + ' --dry-run';\n` },
   { name: '使用 AppStorage', code: `const v = AppStorage.get<boolean>('x') ?? false;\n` },
   { name: 'import AppStorage', code: `import { AppStorage } from '@ohos/arkui';\n` },
+  { name: 'import notificationManager（N 线残留）', code: `import { notificationManager } from '@kit.NotificationKit';\n` },
+  { name: 'wantAgent 跳转代理（N 线残留）', code: `const agent = await wantAgent.getWantAgent(wantAgent.WantAgentInfo);\n` },
 ];
 
 function runSelfTests() {
@@ -256,7 +266,7 @@ function main() {
     console.error(`audit failed: ${violations} violation(s) in ${files.length} touchpoint file(s)`);
     process.exit(1);
   }
-  console.log(`audit passed: ${files.length} touchpoint file(s), zero command/exec references`);
+  console.log(`audit passed: ${files.length} touchpoint file(s), zero command/exec/notification references`);
 }
 
 main();

@@ -9,8 +9,8 @@
 
 1. 构建：`devecocli build --product default`（pc_acl 是唯一带哨兵代码路径的 product；pc_normal 应构建通过且无任何哨兵路径，见 G10）。
 2. 安装并启动应用，先在「我的 - 本机包」完成一次成功读取（确保盘上快照 `brew_installed_snapshot` 存在）。
-3. 桌面长按 → 添加卡片「更新哨兵」（2*2）。
-4. 日志过滤关键字：`[sentinel]`。哨兵日志覆盖五类事件（spec §9.5）：登记/注销（`form registered` / `form unregistered`）、哈希比对（`evaluate outdated=… `）、频控判定（`notify skip: …`）、通知发布（`notify published`）、卡片推送（`push ok` / `push failed`）。
+3. 桌面长按 → 添加卡片「更新哨兵」，三规格（2*2 / 2*4 / 4*4）各添加一张；2*4 与 4*4 之间再拖拽 resize 一轮（官方口径二者规格连续可拖拽，spec 2026-11-24 §6.3）。
+4. 日志过滤关键字：`[sentinel]`。哨兵日志覆盖三类事件（二期 N 线起，通知/频控日志已随链路移除）：登记/注销（`form registered` / `form unregistered`）、快照评估（`evaluate …`）、卡片推送（`push ok` / `push failed`）。
 
 ## 1. §3.2 四问
 
@@ -18,19 +18,21 @@
 
 **探测步骤**：
 
-1. form_config 当前只声明 `supportDimensions: ["2*2"]`。先确认 2*2 能否正常添加到桌面并渲染（G1）。
-2. 临时把 `products/pc_acl/src/main/resources/base/profile/form_config.json` 的 `supportDimensions` 扩为 `["1*2","2*2","2*4"]`（`defaultDimension` 保持 `2*2`）重新构建安装，逐个添加记录：哪些规格在添加器里可见、渲染是否正常、添加后 `onAddForm` 是否回调。
-3. 记录 `resizable: true` 在 2in1 上是否允许拖拽切换规格。
+1. 二期起 form_config 已声明 `supportDimensions: ["2*2","2*4","4*4"]`（spec 2026-11-24 §6.3）。逐个添加三规格，记录：添加器里是否全部可见、各规格渲染是否正常（对齐 spec §5 状态矩阵）、`onAddForm` 是否回调。
+2. 记录 `want.parameters[FormParam.DIMENSION_KEY]` 的**实际值格式**（FormDimension 数字枚举 2/3/4 还是别的口径）——`BrewFormAbility.dimensionOfParams` 按数字枚举映射，实测不同就回改。
+3. 记录 `resizable: true` 在 2in1 上的拖拽行为：2*4↔4*4 应可拖拽（规格连续），2*2↔4*4 预期不可；拖拽后 `onUpdateForm` 是否携带新 `DIMENSION_KEY`（卡片侧 onAreaChange 已被编译器证实不支持——11706006——规格唯一来源是 onUpdateForm）。
+4. 记录三规格在 2in1 桌面的**实际渲染宽高（vp）**，校准 `BrewSentinelCard.guessDimension` 的兜底阈值（当前 高≥240→4*4、宽≥260→2*4）。
 
 **结论（待真机填写）**：
 
-| 规格 | 添加器可见 | 渲染正常 | onAddForm 回调 | 备注 |
-| --- | --- | --- | --- | --- |
-| 1*2 | 待填 | 待填 | 待填 | |
-| 2*2 | 待填 | 待填 | 待填 | |
-| 2*4 | 待填 | 待填 | 待填 | |
+| 规格 | 添加器可见 | 渲染正常 | onAddForm 回调 | 实际宽高(vp) | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 2*2 | 待填 | 待填 | 待填 | 待填 | |
+| 2*4 | 待填 | 待填 | 待填 | 待填 | 与 4*4 规格连续，应可拖拽互换 |
+| 4*4 | 待填 | 待填 | 待填 | 待填 | 6 行版本对列表是否溢出（裁切策略见卡片注释） |
+| 1*2 | 未声明 | — | — | — | 二期未纳入，结论供后续参考 |
 
-**回改**：最终支持的规格集合写回 `supportDimensions`（探针 Q1 结论）。若 2*2 不可用，改用可见的最小规格，并同步调整 `BrewSentinelCard.ets` 的排版。
+**回改**：若某规格在添加器不可见/渲染异常，从 `supportDimensions` 与 `SENTINEL_DIMENSION_*` 白名单同步摘除；`DIMENSION_KEY` 实测格式与数字枚举不符时回改 `BrewFormAbility.dimensionOfParams`；实测宽高回填 `BrewSentinelCard.ets` 的 `AREA_HEIGHT_44` / `AREA_WIDTH_24` 阈值。
 
 ### Q2 · `updateEnabled + updateDuration` 在 PC 桌面的真实触发边界？
 
@@ -87,10 +89,10 @@
 
 ## 2. 实施中发现的新问题（Q5，补充进本轮探针）
 
-**扩展进程读不到盘上快照 → GSKV 镜像方案**：`BrewInstalledLoader.snapshot()` 先过能力开关注入项（AppStorage 按进程隔离，扩展进程不存在），盘上快照所在 store（`HMosWorldStoreWithNet`，XML 模式）官方明确**不支持多进程并发**（preferences 文档「XML模式约束限制」）。因此宿主每次评估把展示三字段（count / topNames / readAt）以 JSON 写进 GSKV `sentinel_last_card`（`SentinelCardBase` 镜像），扩展进程读镜像渲染：
+**扩展进程读不到盘上快照 → GSKV 镜像方案**：`BrewInstalledLoader.snapshot()` 先过能力开关注入项（AppStorage 按进程隔离，扩展进程不存在），盘上快照所在 store（`HMosWorldStoreWithNet`，XML 模式）官方明确**不支持多进程并发**（preferences 文档「XML模式约束限制」）。因此宿主每次评估把展示字段（count / readAt / items 版本对数组 ≤6 条）以 JSON 写进 GSKV `sentinel_last_card`（`SentinelCardBase` 镜像 v2，spec 2026-11-24 §6.1；一期 topNames 旧格式按 miss 自愈），扩展进程读镜像渲染：
 
-- 宿主路径（P3，有快照）：写镜像 → 推卡 → 通知路径；
-- 扩展路径（P1/P2 定时触发，无快照）：读镜像命中 → **只推卡**（`evaluate(extension)` 日志），不通知；miss → 不动卡片（不把引导态盖到宿主数据上）；
+- 宿主路径（P3，有快照）：写镜像 → 推卡（二期 N 线起通知路径已整体移除）；
+- 扩展路径（P1/P2 定时触发，无快照）：读镜像命中 → **只推卡**（`evaluate(extension)` 日志）；miss → 不动卡片（不把引导态盖到宿主数据上）；
 - `onAddForm` 首渲染 / G13 重添加：读镜像命中 → 立即按宿主上次写入的数据 + 「截至 HH:mm」渲染；miss → 引导态；
 - 镜像随时间自然变陈旧：`Date.now() - readAt > 24h` 时卡片降显「打开应用刷新」（G9 诚实口径）。
 
@@ -101,17 +103,27 @@
 3. 镜像陈旧降显：把宿主快照时间人为放旧（或等 24h）后触发扩展刷新，卡片是否降显「打开应用刷新」；
 4. G13：移除卡片重添加，首渲染是否直接显示镜像数据（不再先闪引导态）。
 
+### Q6 · 二期 W 线新增：三规格渲染与规格双通道（spec 2026-11-24 §6.3/§9）
+
+**要探的**（并入 Q1 步骤 2-4 一并记录）：
+
+1. 三规格实际渲染宽高（vp）与 4*4 六行版本对列表是否溢出/裁切（溢出策略=裁切，见 `BrewSentinelCard.ets` 注释）；
+2. `DIMENSION_KEY` 实测值格式与 `BrewFormAbility.dimensionOfParams` 的数字枚举映射是否一致；
+3. 拖拽 resize（2*4↔4*4）后登记规格是否随 `onUpdateForm` 幂等刷新（日志 `form registered` 携带规格）；
+4. ~~onAreaChange 兜底阈值~~：编译器证实卡片不支持 onAreaChange（11706006），兜底通道作废；改为验证 resize 后 onUpdateForm 是否可靠携带新 DIMENSION_KEY（Q1 步骤 3）；
+5. 一期升级用户自愈（W9）：老镜像（topNames 无 items）首渲染应显示引导态，宿主一次评估后恢复数据（日志 `card mirror is legacy v1`）。
+
 ## 3. 功能验证清单（G 门 · 真机）
 
 | 判据 | 操作 | 预期 | 结果 |
 | --- | --- | --- | --- |
-| G1 | 添加卡片 | 显示数量/前 3 包名/截至 HH:mm；无快照显示引导态 | 待填 |
+| G1 | 添加三规格卡片各一张 | 2*2/2*4/4*4 各自按 spec §5 状态矩阵渲染；无快照显示引导态；零更新显示绿 ✓「全部为最新版本」 | 待填 |
 | G2 | 点卡片 | 直达「我的-待更新」（MinePackagesView, mode=outdated） | 待填 |
-| G3 | 装一个已知有新版本的包（如 jq）→ 应用内刷新 | 收到通知：数量+top 包名+两个按钮 | 待填 |
-| G4 | 点「全部升级」/「稍后」 | 前者直达队列、后者撤通知；两条路径都不执行命令（审计脚本把关） | 待填 |
-| G6 | 不改集合重复触发评估 | 同集合只通知一次（`notify skip: same set`） | 待填 |
-| G7 | 频控切「关」 | 通知停、卡片照常更新 | 待填 |
-| G8 | 拒绝通知授权 | 不崩、不反复弹窗；设置页「去开启」可再引导 | 待填 |
+| G3 | ~~通知发布~~ | **二期废止**（N1：通知功能整体移除，用户裁定无意义） | 废止 |
+| G4 | ~~通知按钮~~ | **二期废止**（N1） | 废止 |
+| G6 | 不改集合重复触发评估 | 卡片数据稳定不抖动（原通知幂等判据随 N1 失效） | 待填 |
+| G7 | ~~频控~~ | **二期废止**（N1：频控只服务通知） | 废止 |
+| G8 | ~~通知授权~~ | **二期废止**（N1：无通知即无授权请求） | 废止 |
 | G9 | 快照 >24h（改系统时间或等） | 卡片降显「打开应用刷新」 | 待填 |
 | G13 | 移除卡片再重添加 | 移除后快照仍归应用；重添加立即按镜像数据渲染（宿主上次写入 + 截至 HH:mm） | 待填 |
 
