@@ -38,6 +38,7 @@ import { FormulaDiffer } from '../util/FormulaDiffer';
 import { ReleaseIntelRepoResolver, ReleaseIntelTagFilter } from '../util/ReleaseIntelRepoResolver';
 import { SemverJudge } from '../util/SemverJudge';
 import { AiSettingsStore } from './AiSettingsStore';
+import { AiError } from '../model/AiTypes';
 import { AiTasks } from './AiTasks';
 import { BrewHttp } from './BrewHttp';
 import { ReleaseIntelBaselineStore } from './ReleaseIntelBaselineStore';
@@ -208,7 +209,10 @@ export class ReleaseIntelService {
     try {
       snapshot.card = await AiTasks.releaseIntel(input, undefined, force);
     } catch (err) {
-      Logger.warn(TAG, `release intel ai failed, token=${token}`);
+      // v1.3.7b:日志带 kind+message（AiError.message 已含 ri reason=/http status 等
+      // 归因,Body 截 120 字节且脱敏过）——此前只记 token,真机上失败无从诊断
+      const aiErr: AiError = err as AiError;
+      Logger.warn(TAG, `release intel ai failed, token=${token}, kind=${aiErr.kind}, msg=${aiErr.message}`);
       snapshot.aiFailed = true;
     }
     return snapshot;

@@ -910,6 +910,10 @@
       "value": "忽略"
     },
     {
+      "name": "release_intel_ai_loading",
+      "value": "AI 解析中"
+    },
+    {
       "name": "release_intel_toggle_ai",
       "value": "AI 解析"
     },

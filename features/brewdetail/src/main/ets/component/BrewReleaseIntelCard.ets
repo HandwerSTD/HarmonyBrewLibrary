@@ -408,11 +408,20 @@ export struct BrewReleaseIntelCard {
           // （防重入由 handleManualAi 兜底）,完成前正文保持原文,完成后 @Watch 切视图
           if (this.manualAiVisible()) {
             if (this.aiRequesting) {
-              LoadingProgress()
-                .width(16)
-                .height(16)
-                .color($r('sys.color.font_emphasize'))
-                .padding({ right: 16 })
+              // v1.3.7b:此前只有 16px 裸 spinner(用户实测「原地消失,空字符串」),
+              // 改为 [spinner] AI 解析中 文字组合,状态始终可读
+              Row() {
+                LoadingProgress()
+                  .width(14)
+                  .height(14)
+                  .color($r('sys.color.font_emphasize'))
+                Text($r('app.string.release_intel_ai_loading'))
+                  .fontSize($r('sys.float.Body_S'))
+                  .fontColor($r('sys.color.font_emphasize'))
+                  .margin({ left: 6 })
+              }
+              .alignItems(VerticalAlign.Center)
+              .padding({ right: 16 })
             } else {
               Text($r('app.string.release_intel_toggle_ai'))
                 .fontSize($r('sys.float.Body_S'))

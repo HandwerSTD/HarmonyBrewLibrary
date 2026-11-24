@@ -633,14 +633,12 @@ export class AiTasks {
       card.newFeatures = stringArrayOf(obj['new_features'], 3);
       card.fixes = stringArrayOf(obj['fixes'], 3);
       card.gaps = stringArrayOf(obj['gaps'], 3);
-      // breaking_changes 逐条 cast：缺 title 的条目跳过（不整页拒绝，与 D2 单条 drop 同精神）
+      // breaking_changes 逐条 cast：缺 title 的条目跳过;超上限**截断**不整页拒绝
+      // （v1.3.7b 修:此前 >3 整页 null→E4,cups 7 条 CVE 实证必炸;与 snapshotFromJson 同口径）
       const breaking: Object | undefined = obj['breaking_changes'];
       if (breaking !== undefined && Array.isArray(breaking)) {
         const list: Array<Object> = breaking as Array<Object>;
-        if (list.length > 3) {
-          return null;
-        }
-        for (let i: number = 0; i < list.length; i++) {
+        for (let i: number = 0; i < list.length && card.breakingChanges.length < 3; i++) {
           const rec: Object | undefined = list[i];
           if (rec === undefined || rec === null) {
             continue;
@@ -657,14 +655,12 @@ export class AiTasks {
           card.breakingChanges.push(item);
         }
       }
-      // security_claims 容两种元素形态：纯字符串（自述原文）或 {claim} 对象
+      // security_claims 容两种元素形态：纯字符串（自述原文）或 {claim} 对象;超 2 条**截断**
+      // （v1.3.7b 修:此前 >2 整页 null→E4,cups 7 条 CVE 实证必炸）
       const security: Object | undefined = obj['security_claims'];
       if (security !== undefined && Array.isArray(security)) {
         const list: Array<Object> = security as Array<Object>;
-        if (list.length > 2) {
-          return null;
-        }
-        for (let i: number = 0; i < list.length; i++) {
+        for (let i: number = 0; i < list.length && card.securityClaims.length < 2; i++) {
           const rec: Object | undefined = list[i];
           if (rec === undefined || rec === null) {
             continue;

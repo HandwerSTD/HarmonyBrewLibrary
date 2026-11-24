@@ -910,6 +910,10 @@
       "value": "Ignore"
     },
     {
+      "name": "release_intel_ai_loading",
+      "value": "AI analyzing…"
+    },
+    {
       "name": "release_intel_toggle_ai",
       "value": "AI summary"
     },
