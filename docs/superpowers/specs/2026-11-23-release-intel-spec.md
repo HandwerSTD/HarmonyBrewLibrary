@@ -245,3 +245,14 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - LRU cap 40 条(单条 ~8–15KB,≈600KB 封顶);随 BrewCacheAdmin.clear 一并清空(换源=口径失效)。
 - 与 AI 缓存分工:AI 缓存管「摘要生成贵」;快照缓存管「装配整体重复」。TTL 过期后重装配,card 段大概率仍命中 AI 24h 缓存,不会重复烧 token。
 - 改动:ReleaseIntelConstants(3 常量)/ReleaseIntelSnapshotStore(新)/ReleaseIntelService(assemble 包缓存层+snapshotFromJson)/Index.ets 导出/审计清单 7→8;VM 与 UI 零改动(缓存对装配层外部透明)。
+## 16. v1.3.5 增补(2026-11-24):缓存 TTL 7 天 + 操作行形态修正
+
+**用户反馈(截图 cups 2.4.20)**:①快照缓存 1h 太短——「他总不能发版本之后再改更新日志?」;②手动「AI 解析」是蓝色强调按钮悬浮在卡片右下角,应与操作行文字平齐、不强调;③节选没有 ellipsis 截断;④「查看全文」入口不在。
+
+**处置**:
+- **TTL 1h→7 天**(`RELEASE_INTEL_SNAPSHOT_TTL_MS`):同版本的 release notes 视为不变,长缓存无信息损失;作者补日志的兜底=「重新生成」(force 绕开读缓存)或清缓存。F1 瞬态失败不缓存、AI card 独立 24h 缓存等 v1.3.4 语义不变。
+- **手动 AI 解析并入操作行**:删独立行蓝色按钮,改操作行同款文字链(font_emphasize);解析中用 16px spinner 占位替代文字(防重入 handleManualAi 兜底),完成后 @Watch 切 AI 视图的 v1.3.3 语义不变。
+- **「查看全文」并入操作行**,位置在手动 AI 解析右侧(用户定调);节选尾部独立入口删除。
+- **节选展示封顶 4 行**:`maxLines(4) + TextOverflow.Ellipsis`(数据层节选仍 160 字符不变)。
+- 操作行顺序:固定版本 → 忽略 → 发布页 → 手动 AI 解析(条件) → 查看全文(条件) → 重新生成(条件;与手动解析互斥)。
+- 零文案/零模型改动;spec §15 的 TTL 表述以本节为准。

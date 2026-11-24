@@ -33,17 +33,18 @@ import { common } from '@kit.AbilityKit';
  *
  * - **占位卡**：`snapshot.loading=true` 时只渲染「版本号 + spinner」——情报获取
  *   期间卡就上屏（更新是主打功能），assemble 完成后 VM 整体替换快照；
- * - **查看全文**：原文截断时节选尾部给「查看全文」按钮，点开**半模态**
- *   （bindSheet，hero + notes 全文，`snapshot.notesFull`，只放内存）；
- * - **手动 AI 解析**：自动解析关闭时操作行末尾右对齐给「AI 解析」按钮——
- *   解析中按钮禁用 + spinner，完成前正文一直是原文，完成后自动切到 AI 视图
+ * - **查看全文**：原文截断时操作行给「查看全文」（半模态,hero + notes 全文,
+ *   `snapshot.notesFull`,只放内存）;节选正文封顶 4 行 ellipsis（v1.3.5）。
+ * - **手动 AI 解析**：自动解析关闭时操作行给「AI 解析」入口(v1.3.5 并入操作行
+ *   文字链)——解析中 spinner,完成前正文一直是原文,完成后自动切到 AI 视图
  *   （@Watch 捕获 card 落地）。
  *
- * ## 操作行
+ * ## 操作行（v1.3.5:单行文字链,全部同款不强调）
  *
  * 固定版本（复制 `brew pin <token>`，只有复制永不执行 G13）/「忽略」合并菜单
  * （忽略此版本或撤销 + 暂停 7 天 / 30 天 / 无限期三档）/ 发布页外跳
- * `{repo}/releases/tag/{tag}` / 重新生成（AI 失败时才有，G8 force）/ 手动 AI 解析。
+ * `{repo}/releases/tag/{tag}` / 手动 AI 解析（自动解析关闭时;解析中 spinner）/
+ * 查看全文（截断且全文在手,半模态）/ 重新生成（AI 失败时才有,G8 force）。
  *
  * ## 缺口行（spec §5）
  *
@@ -280,22 +281,16 @@ export struct BrewReleaseIntelCard {
             })
         }
 
-        // 正文：原文（默认，零编造）/ AI 解析（点按切换；card 缺席时恒为原文）
+        // 正文：原文（默认，零编造）/ AI 解析（点按切换；card 缺席时恒为原文）。
+        // 节选展示封顶 4 行 + ellipsis（v1.3.5 用户定调;数据层仍是 160 字符节选）
         if (this.showOriginal || this.snapshot.card === null) {
           if (this.snapshot.notesPreview.length > 0) {
             Text(this.snapshot.notesPreview)
               .fontSize($r('sys.float.Body_S'))
               .fontColor($r('sys.color.font_secondary'))
               .width('100%')
-          }
-          // 截断收口：节选尾部给「查看全文」（半模态全文，零编造口径不变）
-          if (this.viewFullVisible()) {
-            Text($r('app.string.release_intel_view_full'))
-              .fontSize($r('sys.float.Body_S'))
-              .fontColor($r('sys.color.font_emphasize'))
-              .onClick(() => {
-                this.sheetShown = true;
-              })
+              .maxLines(4)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
         }
         if (this.showAiBody()) {
@@ -373,7 +368,9 @@ export struct BrewReleaseIntelCard {
             .width('100%')
         }
 
-        // 操作行（G6：全部是策略与复制，没有任何执行入口）
+        // 操作行（G6：全部是策略与复制，没有任何执行入口）。
+        // v1.3.5 用户定调:「AI 解析」与「查看全文」并入本行、同款文字链不强调
+        // （手动解析与查看全文条件互不重叠,「重新生成」与手动解析互斥渲染）。
         Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
           if (this.pinCommand.length > 0) {
             Text($r('app.string.release_intel_pin'))
@@ -398,6 +395,35 @@ export struct BrewReleaseIntelCard {
               })
               .padding({ right: 16 })
           }
+          // 手动「AI 解析」（v1.3.5 并入操作行）:解析中 spinner 占位替代文字
+          // （防重入由 handleManualAi 兜底）,完成前正文保持原文,完成后 @Watch 切视图
+          if (this.manualAiVisible()) {
+            if (this.aiRequesting) {
+              LoadingProgress()
+                .width(16)
+                .height(16)
+                .color($r('sys.color.font_emphasize'))
+                .padding({ right: 16 })
+            } else {
+              Text($r('app.string.release_intel_toggle_ai'))
+                .fontSize($r('sys.float.Body_S'))
+                .fontColor($r('sys.color.font_emphasize'))
+                .onClick(() => {
+                  this.handleManualAi();
+                })
+                .padding({ right: 16 })
+            }
+          }
+          // 「查看全文」:在手动 AI 解析右侧（v1.3.5 用户定调）,半模态全文零编造
+          if (this.viewFullVisible()) {
+            Text($r('app.string.release_intel_view_full'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_emphasize'))
+              .onClick(() => {
+                this.sheetShown = true;
+              })
+              .padding({ right: 16 })
+          }
           // 重新生成只在有 AI 产物或 AI 失败待重试时有意义;结构化-only(无 Key/调试期)
           // 不渲染,避免点了没反应的「假按钮」。
           if (this.snapshot.card !== null || this.snapshot.aiFailed) {
@@ -411,37 +437,6 @@ export struct BrewReleaseIntelCard {
           }
         }
         .width('100%')
-
-        // 手动「AI 解析」（v1.3.3）：操作行下最后一行右对齐;解析中禁用 + spinner,
-        // 完成前正文保持原文（showOriginal 不动）,完成后 @Watch 切到 AI 视图
-        if (this.manualAiVisible()) {
-          Row() {
-            Blank()
-            Button() {
-              Row({ space: 6 }) {
-                if (this.aiRequesting) {
-                  LoadingProgress()
-                    .width(14)
-                    .height(14)
-                    .color($r('sys.color.font_on_primary'))
-                }
-                Text($r('app.string.release_intel_toggle_ai'))
-                  .fontSize($r('sys.float.Body_S'))
-                  .fontColor($r('sys.color.font_on_primary'))
-              }
-              .alignItems(VerticalAlign.Center)
-            }
-            .height(28)
-            .borderRadius($r('sys.float.corner_radius_level4'))
-            .backgroundColor($r('sys.color.ohos_id_color_emphasize'))
-            .enabled(!this.aiRequesting)
-            .onClick(() => {
-              this.handleManualAi();
-            })
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-        }
       }
     }
     .width('100%')

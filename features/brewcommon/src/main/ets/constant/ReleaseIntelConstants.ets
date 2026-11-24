@@ -99,12 +99,14 @@ export const RELEASE_INTEL_GAP_NOTES: string = 'notes';
 export const RELEASE_INTEL_NOTES_PREVIEW_CHARS: number = 160;
 
 /**
- * 整卡快照缓存（v1.3.4）：assemble 产物按 (token, toVersion) 落盘,1h 内同版本
- * 重复进详情页**零网络**直接复用（atom 抓取是装配里唯一网络步,重复进页重拉纯属浪费）。
+ * 整卡快照缓存（v1.3.4）：assemble 产物按 (token, toVersion) 落盘,同版本重复进
+ * 详情页**零网络**直接复用（atom 抓取是装配里唯一网络步,重复进页重拉纯属浪费）。
  * F1（net）瞬态失败不缓存；F2/F3/F4 是稳定事实照常缓存。AI 摘要另有自身 24h 缓存,
  * 两者独立:TTL 过期后重装配,card 段大概率仍命中 AI 缓存。
  * 布局：`<root>/<token>/<toVersion>.json`,全局 LRU cap 40 条；随 BrewCacheAdmin 清。
+ * TTL 7 天（v1.3.5 用户定调,1h→7d）:「他总不能发版本之后再改更新日志」——同版本
+ * 的 release notes 视为不变;作者补日志的兜底=「重新生成」(force 绕开读缓存)/清缓存。
  */
 export const RELEASE_INTEL_SNAPSHOT_SEGMENT: string = 'brew_live/ai/release_intel_snapshot';
 export const RELEASE_INTEL_SNAPSHOT_CAP: number = 40;
-export const RELEASE_INTEL_SNAPSHOT_TTL_MS: number = 60 * 60 * 1000;
+export const RELEASE_INTEL_SNAPSHOT_TTL_MS: number = 7 * 24 * 60 * 60 * 1000;
