@@ -68,12 +68,24 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - 更新成功事件(BrewCommandRunner upgrade 成功回调)→ append `{token, from, to, at, intelRef}` 至 `filesDir/brew_live/ai/release_intel/<token>/archive.json`(cap 20 条,超出淘汰最旧)。
 - 详情页「版本档案」区:有档案才渲染;每行 from→to/时间,点击展开当时的情报快照(若缓存仍在)。为 L 版本时光机预留数据接口(字段对齐,不实现恢复)。
 
-## 4. 交互与视觉
+## 4. 交互与视觉(v1.3 重写:App Store「What's New」形态)
 
-- 卡片位置:详情页 outdated 时,Hero → 生命周期 banner → **更新情报卡** → 安装命令卡 → 元信息条 → D1 讲解卡 → sections → caveats → **版本档案** → 同分类。情报卡与讲解卡视觉同族(卡片+分组标题),徽章用结构徽章样式(大版本=主题色描边、安全=警示色,均带「结构化判定/上游自述」小字区分)。
-- 卡片结构:徽章行(大版本/安全声明数/依赖增删数)→ one_liner → 三分组(重大变更(含 impact/action)→ 修复 → 新功能;空组不渲染)→ 依赖变化行(直述:新增 n 个依赖(x/y…)、移除 m 个)→ caveats 变化行(若有,diff 文本折叠)→ 信息缺口行(三级文案)→ 来源行 + 操作行(固定此版本 ▾ / 忽略本次版本 / 暂停提醒 ▾ / 查看原文(外跳 `github.com/{owner}/{repo}/releases/tag/{tag}`))。
+> **定调(用户 2026-11-24)**:情报卡必须是真正的 App Store 风格更新日志卡片——**卡内只放版本号、有用的信息、若干操作按钮**。v1/v1.2 的「情报报表」形态(卡片标题+双徽章+from→to 行+四个分区标题+AI gaps+完整 diff 表)信息过载,v1.3 全部拆除。
+
+- 卡片位置:详情页 outdated 时,Hero → 生命周期 banner → **更新情报卡** → 安装命令卡 → 元信息条 → D1 讲解卡 → sections → caveats → **版本档案** → 同分类。
+- 卡片结构(自上而下,皆有才显示):
+  1. **版本号主行**「版本 {to}」(App Store 语义:第一行就是版本,不渲染卡片标题);
+  2. **verdict 副行**(大版本升级/功能更新/修复更新/重打包/版本更新;major 用警示色,其余 tertiary);
+  3. **正文**:AI one_liner;AI 缺席(无 Key/失败/调试关)时渲染 `notesPreview` 原文节选(**aiFailed 也降级渲染**——正文缺席才是最伤用户的形态);
+  4. **要点列表**:breaking → security → fixes → new 扁平成带前缀 bullet(「重大变更:{title}：{impact}（{action}）」等四类前缀键),**总数封顶 6 条**(克制:摘要卡不是全文,全文点「查看原文」);
+  5. **结构化 diff 压成小字行**(无分区标题):新增依赖/新增构建依赖/移除依赖/caveats 变化;bottle 重打包这种用户无感口径不渲染;
+  6. **缺口行**(F1–F4 三级文案,secondary 色非红);
+  7. **状态脚注横排一行**(AI 失败/数据过期/原文截断,tertiary 小字);
+  8. **来源声明行**(AI 摘要来源标注 或 无 AI 时来源行;有安全 bullet 时追加「上游自述未经核验」声明);
+  9. **操作行**:固定(复制 pin 命令,G13)/忽略(本次↔撤销)/暂停 ▾(7 天/30 天/无限)/查看原文(外跳 releases/tag)/重新生成(仅 AI 产物存在或 AI 失败时渲染)。
 - 忽略/暂停的次级确认:暂停提供 7 天/30 天/无限 三档;被忽略版本在详情页顶部显示一行弱化条「已忽略 {version} 的更新提醒 · 撤销」。
-- 「重新生成」入口放摘要区右上(与 D1 一致);无 Key 时整卡仅结构化区,不出现任何 AI 引导(对齐一期「无 Key 恒不自动也不引导」)。
+- 无 Key 时整卡仅结构化区+原文节选,不出现任何 AI 引导(对齐一期「无 Key 恒不自动也不引导」)。
+- AI gaps 字段保留收集(prompt 引导 AI 诚实)但 **UI 不渲染**——「notes 没讲什么」是内部元信息,不是用户要的信息。
 
 ## 5. 失败态分级
 
@@ -97,27 +109,25 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - OSV/漏洞库不接入(v1):安全识别仅「上游自述 + 来源标注」,不得表述为核验结论。
 - pc_normal 编译门:情报卡代码置于 brewcommon/brewdetail 时须以 product 条件隔离入口(pc_normal 不注册详情页情报区,路由不注册)。
 
-## 7. 文案表(中文)
+## 7. 文案表(中文;v1.3 按盘上 string.json 实况为准——分区标题类键已删,bullet 前缀/版本号键已增,以 `features/brewcommon/src/main/resources/*/element/string.json` 为权威)
 
-| key | 文案 |
+| key | 文案(节选) |
 |---|---|
-| release_intel_title | 更新情报 |
-| release_intel_major | 大版本升级 |
-| release_intel_security | 安全修复(上游自述,非漏洞库核验) |
-| release_intel_deps_add | 新增 {n} 个依赖:{list} |
-| release_intel_deps_remove | 移除 {n} 个依赖:{list} |
-| release_intel_gap_repo | 暂无可靠发布情报源(上游非 GitHub 托管) |
-| release_intel_gap_tag | 上游未发布对应版本的说明 |
-| release_intel_gap_empty | 上游未附文字说明,仅有版本发布 |
-| release_intel_gap_net | 情报通道不可达(网络无法直连 GitHub) |
-| release_intel_gap_diff | 未保留旧版本对照数据 |
-| release_intel_source | 来自 {repo} release notes · 数据截至 {HH:mm} |
-| release_intel_pin | 固定此版本 |
-| release_intel_ignore | 忽略本次版本 |
-| release_intel_pause | 暂停提醒 |
+| release_intel_version_of | 版本 %s |
+| release_intel_bullet_breaking | 重大变更:%s |
+| release_intel_bullet_security | 安全:%s |
+| release_intel_bullet_fix | 修复:%s |
+| release_intel_bullet_new | 新功能:%s |
+| release_intel_verdict_major/minor/patch/revision/unknown | 大版本升级 / 功能更新 / 修复更新 / 重打包 / 版本更新 |
+| release_intel_deps_add / deps_build_add / deps_remove / caveats_changed | 新增依赖 / 新增构建依赖 / 移除依赖 / 安装注意事项有更新 |
+| release_intel_gap_repo/tag/net/empty | 缺口四级文案(上游非 GitHub / 无对应发布页 / 通道不可达 / 无正文) |
+| release_intel_notes_preview | 原始发布说明(节选) |
+| release_intel_source / ai_badge / security_note | 来源与声明行 |
+| release_intel_pin / ignore / unignore / pause(+_7/_30/_forever) / view_source | 操作行 |
+| release_intel_ai_failed / stale / truncated | 状态脚注 |
 | release_intel_archive | 版本档案 |
-| release_intel_truncated | (上游说明过长,已截断) |
 | release_intel_ignored_bar | 已忽略 {version} 的更新提醒 · 撤销 |
+| release_intel_privacy_note | StatementView 隐私披露行 |
 
 ## 8. 改动清单
 
@@ -196,3 +206,17 @@ H 哨兵回答「**有**更新」;Y 回答「这次更新**发生了什么、差
 - 「重新生成」按钮改为只在 `card !== null || aiFailed` 时渲染(结构化-only 视图不再有假按钮)。
 - 单测:shard path 两例删,`notes_github_no_content_placeholder` 增(占位符→空;真实正文不受影响)。
 - commits.atom(匿名可用、人类提交质量高,ohos-selfsign 实证)作为「无 release notes 仓库的候选通道」**暂不实施**——与打包通道同属提交列表形态,先看打包通道的教训;若要接,只接「notes 为空时」的兜底且须过滤 bot 作者,P2 议题。
+
+## 13. v1.3 增补(2026-11-24):App Store 风格重构
+
+**定调(用户)**:目标是真正的 App Store 风格更新日志卡片——卡内只展示版本号、有用的信息、若干操作按钮。自查发现 v1.2 卡片是「情报报表」形态,自纠清单:
+
+1. 删卡片标题行+双徽章+from→to 行 → 「版本 {to}」主行 + verdict 副行;
+2. 删四个分区标题 → 要点扁平带前缀 bullet(总数封顶 6,顺序 breaking→security→fixes→new);
+3. 删 AI gaps 渲染(内部元信息;字段保留收集);
+4. 删 bottle 重打包行(用户无感);
+5. 三条状态脚注竖排 → 横排一行小字;
+6. aiFailed 时也降级渲染 notesPreview(v1.2 只在 !aiFailed 渲染,自查修正);
+7. 「查看原文」并入操作行。
+
+文案:删 title/major/security/fixes/new/diff_title/deps_repack/gap_diff 8 键,增 version_of/bullet_breaking/bullet_security/bullet_fix/bullet_new 5 键(三份 string.json 均 245 键,ConvertFrom-Json 校验通过);模型/服务层零改动,仅 BrewReleaseIntelCard.ets 重写 + spec §4/§7 重写。

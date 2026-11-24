@@ -837,32 +837,28 @@
       "value": "%s provides the command %s"
     },
     {
-      "name": "release_intel_title",
-      "value": "Release intelligence"
+      "name": "release_intel_version_of",
+      "value": "Version %s"
     },
     {
-      "name": "release_intel_major",
-      "value": "Breaking changes"
+      "name": "release_intel_bullet_breaking",
+      "value": "Breaking: %s"
     },
     {
-      "name": "release_intel_security",
-      "value": "Security"
+      "name": "release_intel_bullet_security",
+      "value": "Security: %s"
+    },
+    {
+      "name": "release_intel_bullet_fix",
+      "value": "Fix: %s"
+    },
+    {
+      "name": "release_intel_bullet_new",
+      "value": "New: %s"
     },
     {
       "name": "release_intel_security_note",
       "value": "Quoted verbatim from upstream release notes; not verified against any vulnerability database."
-    },
-    {
-      "name": "release_intel_fixes",
-      "value": "Fixes"
-    },
-    {
-      "name": "release_intel_new",
-      "value": "New features"
-    },
-    {
-      "name": "release_intel_diff_title",
-      "value": "Dependency and config changes"
     },
     {
       "name": "release_intel_deps_add",
@@ -875,10 +871,6 @@
     {
       "name": "release_intel_deps_remove",
       "value": "Removed dependencies"
-    },
-    {
-      "name": "release_intel_deps_repack",
-      "value": "Bottle repacked (code unchanged; usually routine fixes)"
     },
     {
       "name": "release_intel_caveats_changed",
@@ -899,10 +891,6 @@
     {
       "name": "release_intel_gap_empty",
       "value": "This release provides no release notes"
-    },
-    {
-      "name": "release_intel_gap_diff",
-      "value": "Not covered by upstream notes"
     },
     {
       "name": "release_intel_source",

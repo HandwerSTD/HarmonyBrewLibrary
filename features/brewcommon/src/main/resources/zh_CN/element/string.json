@@ -837,32 +837,28 @@
       "value": "%s 提供的命令是 %s"
     },
     {
-      "name": "release_intel_title",
-      "value": "更新情报"
+      "name": "release_intel_version_of",
+      "value": "版本 %s"
     },
     {
-      "name": "release_intel_major",
-      "value": "重大变更"
+      "name": "release_intel_bullet_breaking",
+      "value": "重大变更：%s"
     },
     {
-      "name": "release_intel_security",
-      "value": "安全相关"
+      "name": "release_intel_bullet_security",
+      "value": "安全：%s"
+    },
+    {
+      "name": "release_intel_bullet_fix",
+      "value": "修复：%s"
+    },
+    {
+      "name": "release_intel_bullet_new",
+      "value": "新功能：%s"
     },
     {
       "name": "release_intel_security_note",
       "value": "以上为上游发布说明的原文转述，未经漏洞库核验。"
-    },
-    {
-      "name": "release_intel_fixes",
-      "value": "修复"
-    },
-    {
-      "name": "release_intel_new",
-      "value": "新功能"
-    },
-    {
-      "name": "release_intel_diff_title",
-      "value": "依赖与配置变化"
     },
     {
       "name": "release_intel_deps_add",
@@ -875,10 +871,6 @@
     {
       "name": "release_intel_deps_remove",
       "value": "移除依赖"
-    },
-    {
-      "name": "release_intel_deps_repack",
-      "value": "安装包重打包（代码未变，通常是例行修复）"
     },
     {
       "name": "release_intel_caveats_changed",
@@ -899,10 +891,6 @@
     {
       "name": "release_intel_gap_empty",
       "value": "该发布没有提供正文说明"
-    },
-    {
-      "name": "release_intel_gap_diff",
-      "value": "上游说明未覆盖的方面"
     },
     {
       "name": "release_intel_source",

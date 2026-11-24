@@ -13,38 +13,35 @@ import {
   RELEASE_INTEL_PAUSE_FOREVER_MS,
   ReleaseIntelSnapshot,
 } from '@ohos/brewcommon';
-import type {
-  ReleaseIntelBreakingChange,
-  ReleaseIntelSecurityClaim,
-} from '@ohos/brewcommon';
+import type { ReleaseIntelCard } from '@ohos/brewcommon';
 import { common } from '@kit.AbilityKit';
 
 /**
- * Y · 更新情报卡（release intel spec §4）。
+ * Y · 更新情报卡（release intel spec §4；v1.3 起为 App Store「What's New」形态）。
  *
- * 与 D1 讲解卡（`BrewAiExplainCard`）同一条视觉基调：像一段归纳，不是一张表——
- * 分区标题弱化、分区从属靠字重与留白表达；**空数组分区整体不渲染**（G5）。
+ * **定调（用户 2026-11-24）：真正的 App Store 风格更新日志卡片——卡内只放
+ * 版本号、有用的信息、若干操作按钮。**因此本卡刻意做减法：
  *
- * 与 D1 的两点结构差异：
- * - **数据驱动直渲**：本卡没有 D1 式的入口按钮——出现时机由装配层决定
- *   （`BrewDetailState.hasReleaseIntel` 开关：本机已装且 OUTDATED 的 formula 才装配）；
- * - **结构化区先行（G1/G3）**：verdict / diff 零 AI 同步可得，AI 卡（`snapshot.card`）
- *   缺席时结构化区照常渲染，AI 失败只落脚注（F6 一期降级）。
+ * - 第一行就是「版本 X」（App Store 语义：用户关心的是升到哪，不是卡片标题）；
+ * - verdict（大版本升级 / 功能更新…）做副行，major 用警示色；
+ * - 正文是 AI 一句话摘要（或 AI 缺席时的 notes 原文节选，零编造降级）；
+ * - 重大变更 / 安全 / 修复 / 新功能全部扁平成带前缀的要点列表（总数封顶），
+ *   不再有分区标题——摘要卡不是报表；
+ * - 结构化 diff 压成几行小字（依赖增减 / caveats 变化），bottle 重打包这种
+ *   用户无感的口径不渲染；
+ * - AI 报告的 gaps（「notes 没讲什么」）是内部元信息，不渲染；
+ * - 状态脚注（AI 失败 / 数据过期 / 原文截断）横排一行小字，不再三条竖排。
  *
  * ## 操作行（spec §4 / G6）
  *
- * - 固定版本：复制 `brew pin <token>` 命令文本，**只有复制，永不执行**（G13；
- *   brew pin 仅 formula 有语义，cask 的 pinCommand 恒空串、入口不渲染）；
- * - 忽略此版本 / 撤销忽略：精确到 to 版本的忽略，H 通知计数随之变化（G6）；
- * - 暂停提醒：7 天 / 30 天 / 无限期三档菜单；
- * - 重新生成：旁路 AI 缓存强制取数（G8，与 D1 的 force 同口径）；
- * - 查看原文：外跳 `{repo}/releases/tag/{tag}`。
+ * 固定版本（复制 `brew pin <token>`，只有复制永不执行 G13）/ 忽略此版本 /
+ * 暂停提醒（7 天 / 30 天 / 无限期菜单）/ 重新生成（AI 失败时才有，G8 force）/
+ * 查看原文（外跳 `{repo}/releases/tag/{tag}`）。
  *
  * ## 缺口行（spec §5）
  *
  * gapCode 非空时渲染对应缺口文案（F1/F2/F3/F4），视觉弱化（secondary 色，非红非报错）：
- * 「没拿到上游情报」是数据状态，不是故障。F2–F4 不提供重试语义（重试解决不了
- * 「上游不是 GitHub」「没有匹配 tag」这类事实性缺口），F1（网络）由「重新生成」覆盖。
+ * 「没拿到上游情报」是数据状态，不是故障。F2–F4 不提供重试语义，F1（网络）由「重新生成」覆盖。
  */
 @Component
 export struct BrewReleaseIntelCard {
@@ -72,7 +69,7 @@ export struct BrewReleaseIntelCard {
     this.openUrl(this.snapshot.sourceUrl);
   }
 
-  /** 通用外跳：来源页 / 打包提交页共用（harmonybrew 打包记录行也用，v1.1 G14）。 */
+  /** 通用外跳：来源页外跳共用。 */
   private openUrl(url: string): void {
     const host: Context | undefined = this.getUIContext().getHostContext();
     if (host === undefined) {
@@ -85,7 +82,7 @@ export struct BrewReleaseIntelCard {
     });
   }
 
-  /** 版本跨度徽章文案（verdict.kind → 资源键；unknown 也给词，徽章淡化处理） */
+  /** verdict 词（major 警示色；unknown 也给词，淡化处理） */
   private verdictLabel(): ResourceStr {
     const kind: string = this.snapshot.verdict;
     if (kind === 'major') {
@@ -103,11 +100,46 @@ export struct BrewReleaseIntelCard {
     return $r('app.string.release_intel_verdict_unknown');
   }
 
-  /** 结构化 diff 是否有可展示内容（baselineAvailable=false 时不渲染依赖对比区，F5） */
+  /**
+   * 正文要点（v1.3 App Store 形态）：breaking → security → fixes → new 扁平成
+   * 带前缀的 bullet，总数封顶 RELEASE_INTEL_BULLET_MAX（克制：摘要卡不是全文）。
+   * 每条是 `$r(前缀键, 文本)` ——类别前缀走资源，正文是字符串拼接（合法：
+   * 只有「资源嵌资源」才渲染不出）。
+   */
+  private bulletItems(): ResourceStr[] {
+    const card: ReleaseIntelCard | null = this.snapshot.card;
+    const items: ResourceStr[] = [];
+    if (card === null) {
+      return items;
+    }
+    for (let i: number = 0; i < card.breakingChanges.length && items.length < RELEASE_INTEL_BULLET_MAX; i++) {
+      const one = card.breakingChanges[i];
+      let text: string = one.title;
+      if (one.impact.length > 0) {
+        text += `：${one.impact}`;
+      }
+      if (one.action.length > 0) {
+        text += `（${one.action}）`;
+      }
+      items.push($r('app.string.release_intel_bullet_breaking', text));
+    }
+    for (let i: number = 0; i < card.securityClaims.length && items.length < RELEASE_INTEL_BULLET_MAX; i++) {
+      items.push($r('app.string.release_intel_bullet_security', card.securityClaims[i].claim));
+    }
+    for (let i: number = 0; i < card.fixes.length && items.length < RELEASE_INTEL_BULLET_MAX; i++) {
+      items.push($r('app.string.release_intel_bullet_fix', card.fixes[i]));
+    }
+    for (let i: number = 0; i < card.newFeatures.length && items.length < RELEASE_INTEL_BULLET_MAX; i++) {
+      items.push($r('app.string.release_intel_bullet_new', card.newFeatures[i]));
+    }
+    return items;
+  }
+
+  /** 结构化 diff 是否有可展示内容（baselineAvailable=false 时整区不渲染，F5） */
   private diffHasContent(): boolean {
     const diff = this.snapshot.diff;
     return diff.baselineAvailable && (diff.depsAdded.length > 0 || diff.depsRemoved.length > 0 ||
-      diff.buildDepsAdded.length > 0 || diff.caveatsChanged || diff.bottleRepacked);
+      diff.buildDepsAdded.length > 0 || diff.caveatsChanged);
   }
 
   /** 依赖名称列表的展示串：去空、去重、逗号连接；全空返回空串（调用方判空跳过） */
@@ -126,114 +158,44 @@ export struct BrewReleaseIntelCard {
 
   build() {
     Column({ space: 12 }) {
-      // ---------- 标题行：标题 + 跨度/安全徽章 ----------
-      Row() {
-        Text($r('app.string.release_intel_title'))
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .layoutWeight(1)
-        if (this.snapshot.card !== null && this.snapshot.card.securityClaims.length > 0) {
-          Text($r('app.string.release_intel_security'))
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor($r('sys.color.warning'))
-            .margin({ right: $r('sys.float.padding_level2') })
-        }
-        Text(this.verdictLabel())
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor(this.snapshot.verdict === 'major' ? $r('sys.color.warning') :
-          $r('sys.color.font_tertiary'))
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      // 版本区间（from/to 都是本地事实：已装版本 → 源上最新版本）
-      Text(`${this.snapshot.fromVersion} → ${this.snapshot.toVersion}`)
+      // ---------- 头部：版本号（App Store 语义） + verdict 副行 ----------
+      Text($r('app.string.release_intel_version_of', this.snapshot.toVersion))
+        .fontSize($r('sys.float.Body_M'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+        .width('100%')
+      Text(this.verdictLabel())
         .fontSize($r('sys.float.Body_S'))
-        .fontColor($r('sys.color.font_secondary'))
+        .fontColor(this.snapshot.verdict === 'major' ? $r('sys.color.warning') :
+        $r('sys.color.font_tertiary'))
         .width('100%')
 
-      // ---------- AI 一句话（G1：card 缺席时整区不渲染，不渲染占位） ----------
+      // ---------- 正文：AI 摘要 / AI 缺席时的 notes 原文节选（零编造降级） ----------
       if (this.snapshot.card !== null && this.snapshot.card.oneLiner.length > 0) {
         Text(this.snapshot.card.oneLiner)
           .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+      }
+      // AI 失败（aiFailed）也降级渲染原文——正文缺席才是最伤用户的形态（v1.3 自查修正）
+      if (this.snapshot.card === null && this.snapshot.notesPreview.length > 0) {
+        Text(this.snapshot.notesPreview)
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+      }
+
+      // ---------- 要点列表（扁平带前缀，空卡整体不渲染，G5） ----------
+      ForEach(this.bulletItems(), (item: ResourceStr) => {
+        Text(item)
+          .fontSize($r('sys.float.Body_M'))
           .fontColor($r('sys.color.font_primary'))
           .width('100%')
-      }
+          .padding({ left: 10 })
+      }, (item: ResourceStr, index: number) => `bullet_${index}`)
 
-      // ---------- 重大变更（AI 区；空数组整体不渲染，G5） ----------
-      if (this.snapshot.card !== null && this.snapshot.card.breakingChanges.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_major'))
-        ForEach(this.snapshot.card.breakingChanges, (item: ReleaseIntelBreakingChange) => {
-          Column({ space: 2 }) {
-            Text(item.title)
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_primary'))
-              .width('100%')
-              .padding({ left: 10 })
-            if (item.impact.length > 0) {
-              Text(item.impact)
-                .fontSize($r('sys.float.Body_S'))
-                .fontColor($r('sys.color.font_secondary'))
-                .width('100%')
-                .padding({ left: 10 })
-            }
-            if (item.action.length > 0) {
-              // 建议动作只是文本提示；执行入口不存在（G13）
-              Text(item.action)
-                .fontSize($r('sys.float.Body_S'))
-                .fontColor($r('sys.color.font_emphasize'))
-                .width('100%')
-                .padding({ left: 10 })
-            }
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-        }, (item: ReleaseIntelBreakingChange, index: number) => `brk_${index}`)
-      }
-
-      // ---------- 安全相关（上游自述 + 未经核验标注，spec §6） ----------
-      if (this.snapshot.card !== null && this.snapshot.card.securityClaims.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_security'))
-        ForEach(this.snapshot.card.securityClaims, (item: ReleaseIntelSecurityClaim) => {
-          Text(item.claim)
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
-            .padding({ left: 10 })
-        }, (item: ReleaseIntelSecurityClaim, index: number) => `sec_${index}`)
-        Text($r('app.string.release_intel_security_note'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-      }
-
-      // ---------- 修复 / 新功能（空数组整体不渲染） ----------
-      if (this.snapshot.card !== null && this.snapshot.card.fixes.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_fixes'))
-        ForEach(this.snapshot.card.fixes, (item: string) => {
-          this.Bullet(item)
-        }, (item: string, index: number) => `fix_${index}`)
-      }
-      if (this.snapshot.card !== null && this.snapshot.card.newFeatures.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_new'))
-        ForEach(this.snapshot.card.newFeatures, (item: string) => {
-          this.Bullet(item)
-        }, (item: string, index: number) => `new_${index}`)
-      }
-
-      // ---------- AI 报告的信息缺口（notes 没覆盖的方面） ----------
-      if (this.snapshot.card !== null && this.snapshot.card.gaps.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_gap_diff'))
-        ForEach(this.snapshot.card.gaps, (item: string) => {
-          this.Bullet(item)
-        }, (item: string, index: number) => `agap_${index}`)
-      }
-
-      // ---------- 结构化依赖对比（G3：零 AI；baseline 缺失整区不渲染，F5） ----------
+      // ---------- 结构化 diff（G3 零 AI）：压成几行小字，无分区标题 ----------
       if (this.diffHasContent()) {
-        this.SectionTitle($r('app.string.release_intel_diff_title'))
         if (this.snapshot.diff.depsAdded.length > 0) {
           this.DiffLine($r('app.string.release_intel_deps_add'),
             this.namesLabel(this.snapshot.diff.depsAdded))
@@ -246,22 +208,9 @@ export struct BrewReleaseIntelCard {
           this.DiffLine($r('app.string.release_intel_deps_remove'),
             this.namesLabel(this.snapshot.diff.depsRemoved))
         }
-        if (this.snapshot.diff.bottleRepacked) {
-          this.DiffLine($r('app.string.release_intel_deps_repack'), '')
-        }
         if (this.snapshot.diff.caveatsChanged) {
           this.DiffLine($r('app.string.release_intel_caveats_changed'), '')
         }
-      }
-
-      // ---------- 原始发布说明（AI 不可用时的降级：上游 notes 原文节选,零编造） ----------
-      if (this.snapshot.card === null && !this.snapshot.aiFailed &&
-        this.snapshot.notesPreview.length > 0) {
-        this.SectionTitle($r('app.string.release_intel_notes_preview'))
-        Text(this.snapshot.notesPreview)
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
       }
 
       // ---------- 通道缺口行（F1/F2/F3/F4；视觉弱化：secondary 色，非红非报错） ----------
@@ -272,45 +221,41 @@ export struct BrewReleaseIntelCard {
           .width('100%')
       }
 
-      // ---------- 底部状态脚注（F6 AI 失败 / F7 缓存过期 / notes 截断） ----------
-      if (this.snapshot.aiFailed) {
-        Text($r('app.string.release_intel_ai_failed'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-      }
-      if (this.snapshot.stale) {
-        Text($r('app.string.release_intel_stale'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-      }
-      if (this.snapshot.notesTruncated) {
-        Text($r('app.string.release_intel_truncated'))
-          .fontSize($r('sys.float.Body_S'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
+      // ---------- 状态脚注（横排一行小字：AI 失败 / 数据过期 / 原文截断） ----------
+      if (this.snapshot.aiFailed || this.snapshot.stale || this.snapshot.notesTruncated) {
+        Row({ space: 8 }) {
+          if (this.snapshot.aiFailed) {
+            Text($r('app.string.release_intel_ai_failed'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+          if (this.snapshot.stale) {
+            Text($r('app.string.release_intel_stale'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+          if (this.snapshot.notesTruncated) {
+            Text($r('app.string.release_intel_truncated'))
+              .fontSize($r('sys.float.Body_S'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
 
-      // ---------- 来源与声明行（G13 隐私口径：说清楚归纳依据） ----------
-      Row() {
-        Text(this.snapshot.card === null ? $r('app.string.release_intel_source') :
-        $r('app.string.release_intel_ai_badge'))
+      // ---------- 来源声明行（G13 隐私口径：说清楚归纳依据） ----------
+      Text(this.snapshot.card === null ? $r('app.string.release_intel_source') :
+      $r('app.string.release_intel_ai_badge'))
+        .fontSize($r('sys.float.Body_S'))
+        .fontColor($r('sys.color.font_tertiary'))
+        .width('100%')
+      if (this.snapshot.card !== null && this.snapshot.card.securityClaims.length > 0) {
+        Text($r('app.string.release_intel_security_note'))
           .fontSize($r('sys.float.Body_S'))
           .fontColor($r('sys.color.font_tertiary'))
-          .layoutWeight(1)
-        if (this.snapshot.sourceUrl.length > 0) {
-          Text($r('app.string.release_intel_view_source'))
-            .fontSize($r('sys.float.Body_S'))
-            .fontColor($r('sys.color.font_emphasize'))
-            .onClick(() => {
-              this.openSource();
-            })
-            .padding({ left: 8 })
-        }
+          .width('100%')
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
 
       // ---------- 操作行（G6：全部是策略与复制，没有任何执行入口） ----------
       Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
@@ -336,6 +281,15 @@ export struct BrewReleaseIntelCard {
           .fontColor($r('sys.color.font_emphasize'))
           .bindMenu(this.pauseMenuItems())
           .padding({ right: 16 })
+        if (this.snapshot.sourceUrl.length > 0) {
+          Text($r('app.string.release_intel_view_source'))
+            .fontSize($r('sys.float.Body_S'))
+            .fontColor($r('sys.color.font_emphasize'))
+            .onClick(() => {
+              this.openSource();
+            })
+            .padding({ right: 16 })
+        }
         // 重新生成只在有 AI 产物或 AI 失败待重试时有意义;结构化-only(无 Key/调试期)
         // 不渲染,避免点了没反应的「假按钮」。
         if (this.snapshot.card !== null || this.snapshot.aiFailed) {
@@ -400,26 +354,6 @@ export struct BrewReleaseIntelCard {
     return items;
   }
 
-  /** 分区标题：弱化的引导词（与 D1 同款，spec §4 视觉基调） */
-  @Builder
-  SectionTitle(label: ResourceStr) {
-    Text(label)
-      .fontSize($r('sys.float.Body_S'))
-      .fontWeight(FontWeight.Normal)
-      .fontColor($r('sys.color.font_tertiary'))
-      .width('100%')
-  }
-
-  /** 要点行：缩进无符号（D1 同款） */
-  @Builder
-  Bullet(text: string) {
-    Text(text)
-      .fontSize($r('sys.float.Body_M'))
-      .fontColor($r('sys.color.font_primary'))
-      .width('100%')
-      .padding({ left: 10 })
-  }
-
   /**
    * 结构化 diff 行：标签与内容分列渲染。**不做字符串拼接**——ResourceStr 嵌进
    * 模板串只会渲染出 Resource 对象而不是本地化文案，这是 ArkUI 的硬约束。
@@ -446,3 +380,6 @@ export struct BrewReleaseIntelCard {
 
 /** 打点 tag（与 sentinel/ai 的文件级常量同规） */
 const TAG: string = '[release-intel]';
+
+/** 要点列表封顶（App Store 摘要克制口径：重大变更/安全/修复/新功能合计不超过 6 条） */
+const RELEASE_INTEL_BULLET_MAX: number = 6;
