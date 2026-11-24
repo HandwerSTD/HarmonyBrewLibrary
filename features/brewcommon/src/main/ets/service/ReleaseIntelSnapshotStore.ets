@@ -13,7 +13,7 @@ import {
 
 const TAG: string = '[release-intel]';
 
-/** 快照缓存条目的盘上形态：{ts, pv, dataJson}（pv=AI promptVersion,换提示词即失效）。 */
+/** 快照缓存条目的盘上形态：{ts, pv, dataJson}（pv 仅观察记录,不作失效判据,见 read）。 */
 class SnapshotEnvelope {
   public ts: number = 0;
   public pv: number = 0;
@@ -63,7 +63,17 @@ export class ReleaseIntelSnapshotStore {
     let file: fileIo.File | undefined = undefined;
     const tempPath: string = path + '.tmp';
     try {
-      fileIo.mkdirSync(dir, true);
+      try {
+        fileIo.mkdirSync(dir, true);
+      } catch (mkdirError) {
+        const mkdirErr: BusinessError = mkdirError as BusinessError;
+        // 13900015 File exists = 目录已在（同一 token 第二次写是预期路径,v1.3.7 修：
+        // 此前没吞这一条,目录一旦存在 save 就整体失败——真机日志里的
+        // 「file exists」报错即此处,且缓存从此永远刷不进去）
+        if (mkdirErr?.code !== 13900015) {
+          throw mkdirError as Error;
+        }
+      }
       if (fileIo.accessSync(tempPath)) {
         fileIo.unlinkSync(tempPath);
       }
@@ -93,12 +103,17 @@ export class ReleaseIntelSnapshotStore {
 
   /**
    * 读快照缓存（**不判 TTL**——过期判断留给调用方, stale 时返回 null 由装配层重算,
-   * 旧文件留待下次 save 覆盖）。promptVersion 不符 → null（提示词升级,旧卡视为无效,
-   * 与 AiCache 同语义）。无/损坏 → null。
+   * 旧文件留待下次 save 覆盖）。无/损坏 → null。
+   *
+   * v1.3.7 修：信封里的 pv **只作观察记录,不再作失效判据**——pv 门槛曾让旧文件
+   * 整卡 miss,叠加真机 GitHub 直连不稳,变成「每次进详情页都重拉 atom 并超时」
+   * （真机日志 `atom fetch failed, code=2300028` 的放大器）。快照结构由
+   * `snapshotFromJson` 防御式解析兜底;AI 卡的提示词失效由 AiCache 自己的
+   * promptVersion 语义管,不牵连整卡缓存。
    */
-  public static read(token: string, toVersion: string, promptVersion: number): SnapshotCacheRead | null {
+  public static read(token: string, toVersion: string): SnapshotCacheRead | null {
     const path: string = ReleaseIntelSnapshotStore.pathOf(token, toVersion);
-    if (path.length === 0 || promptVersion <= 0) {
+    if (path.length === 0) {
       return null;
     }
     let file: fileIo.File | undefined = undefined;
@@ -125,12 +140,6 @@ export class ReleaseIntelSnapshotStore {
       const data: Object | undefined = rec['dataJson'];
       out.dataJson = typeof data === 'string' ? data as string : '';
       if (out.ts === 0 || out.dataJson.length === 0) {
-        return null;
-      }
-      const pv: Object | undefined = rec['pv'];
-      const envelopeVersion: number = typeof pv === 'number' ? pv as number : 0;
-      if (envelopeVersion !== promptVersion) {
-        // 提示词升级后的旧卡不返回（文件留给下次 save 覆盖,或被 LRU 淘汰）
         return null;
       }
       return out;

@@ -36,10 +36,12 @@ export const AI_MAX_TOKENS_RI: number = 700;
 export const RELEASE_INTEL_NOTES_MAX_CHARS: number = 4096;
 
 /**
- * Stage-0 探针门（spec G9）：`github.com/{repo}/releases.atom` 5s 超时。
- * 超时/网络失败 → 缺口卡（F1），**不尝试任何镜像**（ghfast.top 实测不代理 atom，403）。
+ * atom 抓取超时（spec F1,失败重试一次）。
+ * v1.3.7：5000→10000——真机直连 GitHub 时 5s 内完不成是常态（curl 28 超时,
+ * 真机日志 code=2300028 即此）,两档 10s 是无镜像约束下的最大诚意;
+ * 依旧失败 → 缺口卡（F1）,**不尝试任何镜像**（ghfast.top 实测不代理 atom,403）。
  */
-export const RELEASE_INTEL_ATOM_TIMEOUT_MS: number = 5000;
+export const RELEASE_INTEL_ATOM_TIMEOUT_MS: number = 10000;
 
 /** GitHub Releases atom 的固定路径（与 repo URL 拼接）。 */
 export const RELEASE_INTEL_ATOM_PATH: string = 'releases.atom';

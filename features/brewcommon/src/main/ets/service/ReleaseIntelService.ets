@@ -106,7 +106,7 @@ export class ReleaseIntelService {
     const toVersionHint: string = ReleaseIntelService.rawVersionOf(rawDoc, kind);
     if (!force && !manualAi && toVersionHint.length > 0) {
       const cached: SnapshotCacheRead | null =
-        ReleaseIntelSnapshotStore.read(token, toVersionHint, AI_PROMPT_VERSION_RI);
+        ReleaseIntelSnapshotStore.read(token, toVersionHint);
       if (cached !== null && Date.now() - cached.ts < RELEASE_INTEL_SNAPSHOT_TTL_MS) {
         const parsed: ReleaseIntelSnapshot | null =
           ReleaseIntelService.snapshotFromJson(cached.dataJson);
