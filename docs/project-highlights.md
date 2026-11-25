@@ -7,7 +7,7 @@
 
 ## 1. 项目概述
 
-**BrewLibrary**（bundleName `top.handwer.brewlibrary`）是一个面向 HarmonyOS PC（2in1 设备形态，最小窗口 1080 × 608）的 Homebrew 软件包生态客户端，基于 HarmonyOS 6.1.0（API 23）以纯 ArkTS / ArkUI 原生实现。
+**BrewLibrary**（bundleName `top.handwer.brewlibrary`）是一个面向 HarmonyOS PC（2in1 设备形态，最小窗口 1080 × 608）的 Homebrew 软件包生态客户端，基于 HarmonyOS（compatibleSdkVersion / targetSdkVersion 26.0.0）以纯 ArkTS / ArkUI 原生实现。
 
 Homebrew 是全球最大的开源命令行软件包管理生态（formulae 8,611 + casks 7,745，共 16,356 个软件包），长期服务于 macOS 与 Linux 开发者。**在鸿蒙 PC 之前，这一生态没有任何原生 GUI 客户端**。BrewLibrary 将 Homebrew 生态的目录浏览、离线检索、榜单发现与本机包管理完整迁移到 HarmonyOS 原生体验之上，是**鸿蒙生态首个 Homebrew 软件包浏览器与管理器**，填补了鸿蒙 PC 在开发者基础设施领域的一项空白。
 
@@ -19,7 +19,11 @@ Homebrew 是全球最大的开源命令行软件包管理生态（formulae 8,611
 | 自建分类体系 | 8 + 8 共 16 个分类（Formulae 8 类 + Casks 8 类） |
 | 榜单 | 6 张，全部设备端现算 |
 | 搜索 | 离线全文检索，零网络依赖 |
-| 工程规模 | 13 个模块 + 2 个 entry product；核心新增模块约 6,000 行 ArkTS |
+| 工程规模 | 14 个模块 + 2 个 entry product；ArkTS 全量约 5.5 万行 |
+| AI 能力 | BYOK 三任务（问包 / 问需求 / 问报错）+ 28 词中文词表离线降级 |
+| 系统级 AI 接入 | Agent Skill 14 项能力（只读查询 + 写操作只读预演），exec-cli 真机验证 |
+| 桌面卡片 | 更新哨兵 2×2 / 2×4 / 4×4 三规格，纯卡片推数 |
+| 跨设备同步 | 分布式 KV 工具清单同步（加密 + S4），双机互见、一键跟装（收尾中） |
 | 数据请求 | 全量元数据同步仅 2 次请求 / 7.33 MB（gzip 实测，真机 21.7s） |
 
 ---
@@ -35,13 +39,15 @@ products/pc_acl        entry：PcAbility / 启动页 / 主页面（完整版）
 features/
   pcui                 首页框架：侧边栏 + HdsTabs + 页面容器
   commonbusiness       共享 UX 骨架：BaseHomeView / 模糊标题栏 / 返回键
-  brewcommon           数据层：HTTP、数据源适配、目录同步、搜索引擎、共享 UI 原子
+  brewcommon           数据层与共享业务服务：HTTP、数据源适配、目录同步、搜索引擎、
+                       AI 任务、更新哨兵、更新情报、跨设备清单同步、共享 UI 原子
+  hmkit-ai             AI SDK（@hmkit/ai 2.0.0 以源码形态引入，vendor 流式缺陷已修）
   brewdiscover         发现页（榜单）
   brewformulae         Formulae 页签
   brewcasks            Casks 页签
-  brewdetail           包详情页（formula / cask 共用一路由）
-  brewsearch           搜索页
-  mine                 「我的」页（含本机包管理）
+  brewdetail           包详情页（formula / cask 共用一路由，含 AI 讲解卡 / 情报卡 / tldr 分区）
+  brewsearch           搜索页（含 AI 找包入口与词表降级）
+  mine                 「我的」页（本机包管理 + AI 设置 + 工具清单同步）
   pcnative             本机执行能力（NAPI + Shell 工具链）
 common                 通用原子：Preference / 路由 / 账号 / 事件
 ```
@@ -123,7 +129,58 @@ Discover 是本项目的算法核心，也是**鸿蒙生态内第一个把软件
 
 ### 3.6 「我的」页
 
-华为账号、内容上新、公告等原有能力保留，本机包三块（已安装 / 待更新 / 已更新）与数据源管理、页面区块开关有机融合；所有空态、加载态、失败态齐备。
+华为账号、内容上新、公告等原有能力保留，本机包三块（已安装 / 待更新 / 已更新）与数据源管理、AI 设置（BYOK）、工具清单同步入口、页面区块开关有机融合；所有空态、加载态、失败态齐备。
+
+### 3.7 AI Companion · 终端旁的讲解员
+
+四件能力，一套 BYOK 底座，全部已合入 dev：
+
+- **BYOK 底座**：AI 设置页（provider / baseURL / model / API Key 表单 + 测试连接 + 自动解析开关）；Key 存 Asset Store Kit 系统安全存储（不可用时进程内兜底，经真机排障修复 401 连锁缺陷）；AI 基础设施为 @hmkit/ai 2.0.0，**以源码形态引入工程**（`features/hmkit-ai`）——上游流式 decoder 对 `usage=null` 不判空的崩溃缺陷已在源码层修复；按任务 + token 缓存，清理入口在「我的」页登记；
+- **问包（D1）**：详情页 AI 讲解卡（元信息条之后），中文讲人话——这个工具是干嘛的、装完注意什么；grounding 输入仅包元数据（描述 / caveats / 依赖），不编造；空字段不渲染；
+- **问需求（D2）**：搜索页「AI 帮我找工具」入口卡——「我想批量压缩图片」直接给出候选包；未配 Key / 请求失败时自动降级到 28 词中文任务词表（离线确定可用），Key 未配不发注定失败的请求；
+- **问报错（D3）**：执行 Sheet 失败终态挂 AI 报错解读卡，stderr 翻译成人话；给出的命令只复制不执行；
+- **tldr 用法示例**：详情页 tldr 分区，tldr 社区人工审校的真实用法示例（中文页现成）；双渠道抓取（raw / jsDelivr）+ zh→en 回落 + 候选名链（命名错位修复：ripgrep→rg 类）+ 负缓存 + stale-while-revalidate + 淡入转场；每条可复制、可一键执行；CC BY 4.0 合规署名集中在「声明」页；
+- **隐私口径**：AI 发送内容 = 包元数据 + 错误文本，不含身份信息；披露集中「声明」页。
+
+设计基调：**AI 是增强层，不是依赖层**——没配 Key、断网时，搜索、目录、用法示例照常可用。
+
+### 3.8 更新情报中心
+
+详情页的「新版本情报卡」——包有新版本时回答「这次升级值不值得」，已合入 dev：
+
+- **atom 直连主通道**：拉取 GitHub `releases.atom`（结构稳定、零鉴权），tag 与目标版本精确匹配，失败重试一次后走降级；非 GitHub 上游（如 Harmonybrew 源）只展示版本与操作行，不虚构内容；
+- **零 AI diff**：版本间结构化对比（依赖增减 / caveats 变化）由端侧解析完成，不依赖 AI；AI 不可用时降级渲染 notes 原文节选（含「No content.」占位符识别）；
+- **两阶段装配 + 整卡快照缓存**：快照 7 天有效，同版本 1 小时内零网络复用装配产物；
+- **App Store 风格卡片**：版本号主行、要点扁平封顶、去报表化；支持手动 AI 解析与查看全文半模态。
+
+### 3.9 更新哨兵
+
+「brew 第一次主动说话」——outdated 检测 + PC 桌面卡片，决定权在用户，已合入 dev：
+
+- Work Scheduler 后台触发过期检测，服务层收敛为纯卡片推数；
+- Form Kit 桌面卡片三规格（2×2 / 2×4 / 4×4），卡片随数据镜像刷新，带过期与快照状态自检；
+- 口径收敛：只统计**主动安装**的过期包（`installedOnRequest`，与榜单口径同源），依赖包不产生噪声；卡片文案「X 个软件包推荐升级」；
+- API 26 真机适配（包名走 `BundleInfo.name`、卡片系统 token、SDK 版本对齐）。
+
+### 3.10 Agent Skill · 系统级 AI 接入
+
+**定位反转：BrewLibrary 不只是 AI 的使用者，还是 AI 可调用的技能层。** 小艺 Work（本地 Agent harness）可经 Skill 调用本应用 14 项能力，已合入 dev：
+
+- **只读查询九项**：`searchPackages` / `queryPackage` / `listInstalled` / `listOutdated` / `packageDetail` / `packageUsage` / `listTrending` / `listCategories` / `checkBrew`；
+- **写操作只读预演五项**：`previewInstall` / `requestInstall` / `previewUpgrade` / `previewUpgradeAll` / `previewUninstall`——**绝不直接执行安装**，真正的安装 / 升级 / 卸载只发生在应用内、由用户亲手完成（AI 发起，人类点头）；
+- **防幻觉纪律写进契约**：`ERR_NOT_FOUND` 不重试、不改写、绝不「纠正成相近包名」（slopsquatting 防护）；参数契约 = 单 JSON 字符串 + 双引号转义回退 + 失败自动重试一次；回包带 suggestion 引导纠正；
+- 设备侧 exec-cli（ohos-arktsscript）通道真机验证通过；SKILL.md 契约配套可执行校验脚本（含「技能绝不执行写操作」的审计脚本）。
+
+### 3.11 跨设备工具清单同步（W′，收尾中）
+
+「工具链跟着人走」——两台鸿蒙 PC 组网后，工具清单双机互见、一键跟装：
+
+- **分布式 KV 同步**：ArkData `distributedKVStore`，SINGLE_VERSION 单库、**加密 + S4 安全级**、autoSync；Key 按设备前缀（`device:<id>/manifest`）隔离，天然无写冲突；
+- **只同步主动安装的库**（`installedOnRequest` 口径，与榜单 / 哨兵同源），依赖包不带噪声；
+- **双机互见 + 跟装**：对端新装包进待跟装清单，批量安装队列一键跟装（复用执行通道；队列忙时入队续跑，不与前台命令抢通道）；设备卡显示「已在本机」状态，随清单装载实时重算；
+- **AI 配置随行、Key 显式授权**：provider / model 等配置随库同步；API Key 仅在用户显式打开「同步 API Key」开关（默认关）时才落库，且 clearKey 也走发布链清对端；
+- **入口三处**：侧边栏入口 + 同步 Sheet、常驻页（设备清单前 5 条 + 查看全部二级页）、AI 配置页开关行；
+- **失败态齐备**：未组网 / 未授权 / KV 打开失败优雅降级（入口隐藏、失败行明确归因）；数据链路经全量审查修复（设备列表 networkId 口径、偏好懒打开、队列停摆、防抖吞 PUSH_ONLY 等 20+ 项）。
 
 ---
 
@@ -150,8 +207,24 @@ Discover 是本项目的算法核心，也是**鸿蒙生态内第一个把软件
 ### 4.4 体验创新：桌面原生范式
 
 - 专为 2in1 大屏设计的三栏布局、侧边栏导航与模糊材质标题栏（HDS `ScrollEffect` 规范的逐场景落地，含标题栏让位三写法的对照实测）；
-- 底部悬浮操作栏、终端样式执行 Sheet、chip 筛选等交互均按桌面端习惯设计，最小窗口 1080 × 608 下完整可用；
+- 底部悬浮操作栏、终端样式执行 Sheet（ANSI 终端配色）、chip 筛选等交互均按桌面端习惯设计，最小窗口 1080 × 608 下完整可用；
 - 「发现 — 检索 — 安装」全链路离线可用的降级设计：无网时目录、榜单走空态，搜索能力完整保留。
+
+### 4.5 AI 创新：BYOK 主权 + 确定性降级
+
+- AI 能力以「自带 Key」形态运行，Key 存系统安全存储（Asset Store Kit），应用不经手任何云端账号；AI 基础设施 @hmkit/ai 以源码引入，缺陷在源码层修复并可追溯；
+- **AI 是增强层不是依赖层**：降级链 AI → 中文词表 → 纯端侧逐级兜底，断网 / 未配 Key / 解析失败时基础能力完整保留——同类「AI 功能」普遍把网络与付费 Key 当隐含前提；
+- grounding 纪律：讲解卡只基于包元数据与 tldr 人工审校内容回答，空字段不渲染、错误归因直达 UI（E4 reason 细分文案、响应体摘要脱敏展示）。
+
+### 4.6 定位创新：应用即技能（Agent 时代的护栏层）
+
+- 在「Agent 都能执行命令了」的时代，本应用把自己做成 AI 可调用的技能层：冻结口径（可溯源目录与榜单）+ 适配事实 + 预演护栏 + 防幻觉纪律，形成与裸调 brew 的本质差异（幻觉包名 = slopsquatting 供应链攻击面、会话无状态 = 无回滚锚点）；
+- **AI 发起，人类点头**：小艺 Work 经 Skill 只能只读查询与预演，执行权始终在应用内用户手上——写操作的全部 5 个 Skill 入口都是「预演」，配审计脚本机器验证「技能绝不执行写操作」。
+
+### 4.7 鸿蒙分布式创新：工具链跟着人走
+
+- 开发环境跨设备迁移长期靠 dotfiles 脚本与记忆重装（专家写脚本、新手凭记忆）；本应用以分布式 KV（加密 + S4）承载「工具清单双机互见 + 一键跟装」，把照片 / 通讯录式的同步体验首次落到 CLI 工具链资产上；
+- 隐私边界逐项显式：Key 按设备前缀隔离无冲突、清单只含主动安装的包、API Key 同步独立开关默认关、AI 配置应用绝不回写防回环。
 
 ---
 
@@ -166,19 +239,25 @@ Discover 是本项目的算法核心，也是**鸿蒙生态内第一个把软件
 | `sys.symbol` 系统图标 | 分类、页签、榜卡水印等 20+ 处；全部经编译期探针实测（96 + 89 个候选名逐一验证） |
 | routerMap 路由表 | 二级页（详情 / 榜单 / 本机包列表）HAR 级注册，编译入口即路由 |
 | NAPI | 本机 Shell 执行通道 |
+| 分布式 KV Store（ArkData `distributedKVStore`） | 跨设备工具清单同步：加密 + S4、设备前缀 Key、`dataChange(REMOTE)` 接收链 |
+| 分布式设备管理（DistributedServiceKit） | 组网设备发现、双机互见、设备卡「本机 / 已在本机」状态 |
+| Form Kit 桌面卡片 | 更新哨兵 2×2 / 2×4 / 4×4 三规格卡片与卡片数据镜像 |
+| Work Scheduler | 哨兵后台过期检测触发 |
+| Agent Skill（ohos-arktsscript exec-cli） | 小艺 Work 系统级调用：14 项只读 + 预演能力，防幻觉契约 |
+| Asset Store Kit | BYOK API Key 系统安全存储 |
 | 华为账号 | 「我的」页账号能力 |
 
 ---
 
 ## 6. 质量保障
 
-- **构建期校验**：策展清单校验（`generate.py`，支持联网 / 缓存 / 纯本地三模式）、榜单算法不变量校验（`check_algo.py --fetch`）、搜索引擎可执行检查（`check_engine.mjs`）；
+- **构建期校验**：策展清单校验（`generate.py`，支持联网 / 缓存 / 纯本地三模式）、榜单算法不变量校验（`check_algo.py --fetch`）、搜索引擎可执行检查（`check_engine.mjs`）、Agent Skill 契约校验与「技能绝不执行写操作」审计（`check_skill_contract.mjs` / `audit_skill_no_exec.mjs`）、AI 中文任务词表校验（`check_taskwords.py`）、哨兵卡片触点「不出现 brew 字样」审计（`audit_no_brew_in_touchpoints.mjs`）；
 - **字节码级验证**：符号是否真进 ABC、HAR routerMap 是否合并进 HAP，均有脚本化检查项，不止步于 `BUILD SUCCESSFUL`；
 - **真机闭环**：全部功能在 HUAWEI MateBook Pro（2in1）真机验证，`devecocli` 驱动构建、装机、日志、UI 布局检查的完整工作流；
-- **文档即口径**：算法口径、数据规范、交接说明、踩坑索引均为带实测证据的版本化文档（`docs/` 六篇专项文档），任一结论可回溯到实测数字。
+- **文档即口径**：算法口径、数据规范、交接说明、踩坑索引均为带实测证据的版本化文档（`docs/` 八篇专项文档 + `docs/knowledge/` 实测笔记），任一结论可回溯到实测数字。
 
 ---
 
 ## 7. 一句话总结
 
-**BrewLibrary 把全球最大的开源包管理生态首次带入鸿蒙 PC**：以设备端现算的可解释推荐算法、离线可搜的全文检索、直连 brew 工具链的本机包管理，以及 2 次请求同步 16,356 个包的端侧数据工程，在鸿蒙生态上完成了一套从数据到体验都「原生」的开发者基础设施。
+**BrewLibrary 把全球最大的开源包管理生态首次带入鸿蒙 PC**：以设备端现算的可解释推荐算法、离线可搜的全文检索、直连 brew 工具链的本机包管理，以及 2 次请求同步 16,356 个包的端侧数据工程为底盘；在此之上，AI Companion（BYOK + 确定性降级）、更新哨兵桌面卡片、详情页更新情报、小艺 Work 系统级 Skill 接入，以及分布式 KV 承载的跨设备工具清单同步，让它同时是命令行世界里**被看懂、被解答、被照顾、被带走**的那座桥。
