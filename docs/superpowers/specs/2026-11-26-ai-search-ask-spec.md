@@ -206,6 +206,14 @@ AI on + 有字（提交前）:
 
 ### 4.4 答案混排态（核心）
 
+> **修订（m01422 用户反馈）**：混排改为「**一篇长文，内嵌若干包 Item**」—— 全部内容收进
+> **同一张大卡**（`comp_background_list_card` 底 / level8 圆角 / clip / padding level6），文字
+> 统一正文字体（Body_M，21 行高，只靠颜色深浅分主次），行**透明嵌在文流里**（不再独立成
+> 卡）。读起来是 lead → 介绍段 → 行 → 介绍段 → 行 → 目录中相关 → 行… → footer 的连续文章，
+> 而不是「行旁边放提示文本」。下方 4.4 原图保留为初版设计存档；间距口径以本修订为准：
+> 段落紧行（intro→行 level2）、组间 level4、文字块水平缩进 level4（比行窄一档，段落感）、
+> related 连续行间 1px 分隔线（pick 行之间隔着文字段不加线）、footer 上方发丝线 + 居中落款。
+
 **节奏**：文本段（无底色）与行卡（有底色）交替；「介绍段→行」组内间距 level2，组间距 level8。行 = 标准 `BrewPackageRow`（hideRank=true，独立卡底 `comp_background_list_card`，圆角 level8），点击走现有 openDetail 链路。
 
 ```
@@ -345,13 +353,14 @@ E4/E5 → 错误卡 (AI 模式停留在结果区):
 | AI pill | 高 28，padding 水平 level6，文本 "AI" Body_S Bold；off=tertiary 底/icon_secondary 字；on=90° 渐变 #C4B5FD→#7C3AED/白字（对比 5.70:1，沿用 D4） |
 | hint on | `brew_search_placeholder_ai` = "Ask me anything!"（base/zh_CN/en_US 三语同文） |
 | 搜索图标 | off=magnifyingglass；on=lightbulb（`sys.symbol.lightbulb`，与 D4 'ai' 板/分类同源） |
-| lead 段 | Body_L font_primary，maxLines 3，BREAK_WORD，padding 左右 level6 |
-| pick intro | Body_M font_secondary Regular，maxLines 4，padding 左右 level6 |
-| 行 | `BrewPackageRow(hideRank=true)`，itemHeight=brew_package_row_height，cardBg=comp_background_list_card，radius=level8，独立成卡 |
-| 组内/组间距 | intro→行 level2；组↔组 level8；lead→首组 level6 |
-| 尾行区 | 标题「目录中相关」Body_S font_tertiary；行同上但无 intro |
-| footer | (💡)+文案 Body_S font_tertiary 居中 |
-| 骨架 | D4 范式：灰条 font_secondary@0.18、行壳 list_card、pulse 1.2s 往返 |
+| 答案大卡 | 全文收进一张卡：list_card 底、level8 圆角、clip、padding level6（m01422 修订） |
+| lead 段 | Body_M font_primary，maxLines 3，21 行高，水平缩进 level4 |
+| pick intro | Body_M font_secondary Regular，maxLines 4，21 行高，水平缩进 level4 |
+| 行 | `BrewPackageRow(hideRank=true)`，itemHeight=brew_package_row_height，**透明底嵌入大卡**（不独立成卡） |
+| 垂直节奏 | intro→行 level2；组↔组 level4；lead→首组 level4；文字块缩进 level4（比行窄一档） |
+| 尾行区 | 标题「目录中相关」Body_M font_tertiary；行间 1px 分隔线（comp_background_tertiary） |
+| footer | 上方发丝线 + (💡)+文案 Body_S font_tertiary 居中 |
+| 骨架 | D4 范式：与答案同款大卡外壳，灰条 font_secondary@0.18、行透明嵌入，pulse 1.2s 往返 |
 | 通知条 | 高 36，tertiary 底 level4 圆角，Body_S font_secondary，可点击关闭 |
 | 错误卡 | list_card 底 level8 圆角 padding level8；主按钮紫渐变、次按钮描边 |
 
