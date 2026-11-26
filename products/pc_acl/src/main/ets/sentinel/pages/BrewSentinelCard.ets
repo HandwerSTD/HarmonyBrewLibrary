@@ -3,10 +3,14 @@
  */
 
 /**
- * 更新哨兵的桌面卡片页（二期 W 线整体重写，spec §4/§5）。
+ * 更新哨兵的桌面卡片页（二期 W 线整体重写，spec §4/§5；F 线关注更新改版）。
  *
- * 三规格（2*2 方卡 / 2*4 宽横条 / 4*4 大方卡，语义 = 行*列）× 四态（引导 / 零更新 /
- * 陈旧 / 正常），iOS 设计语言：hero 大数字 + 纯色徽章、系统字色分层、hairline 分隔。
+ * 两规格（2*4 宽横条 / 4*4 大方卡，语义 = 行*列；2*2 已随 F 线下线）× 五态
+ * （引导 / 关注空态 / 零更新 / 陈旧 / 正常），iOS 设计语言：hero 大数字 + 纯色徽章、
+ * 系统字色分层、hairline 分隔。
+ *
+ * **F 线口径**：卡片只展示**关注中的包**（服务侧镜像已过滤）；一个关注都没有时给
+ * 「关注空态」引导，不冒充「全部最新」（G1 的 F 线版本：不给假结论）。
  *
  * **本文件保持零 import**（一期约定）：postCardAction 是全局函数；数据键与服务侧
  * BrewSentinelService 的 SENTINEL_DATA_* 常量一一对应，两边必须成对修改（键名不一致
@@ -25,18 +29,18 @@ let storage = new LocalStorage();
 const KEY_FORM_ID: string = 'sentinelFormId';
 const KEY_DIMENSION: string = 'sentinelDimension';
 const KEY_HAS_SNAPSHOT: string = 'sentinelHasSnapshot';
+const KEY_FOLLOW_EMPTY: string = 'sentinelFollowEmpty';
 const KEY_COUNT: string = 'sentinelCount';
 const KEY_ITEMS: string = 'sentinelItems';
 const KEY_AS_OF: string = 'sentinelAsOfText';
 const KEY_STALE: string = 'sentinelStale';
 
 // ---- 规格口径（与 service 的 SENTINEL_DIMENSION_* 成对维护） ----
-const DIM_2_2: string = '2*2';
 const DIM_2_4: string = '2*4';
 const DIM_4_4: string = '4*4';
 
 // ---- 展示口径（与 service 的 SENTINEL_TOP_NAMES_LIMIT / SENTINEL_CARD_ITEMS_LIMIT 成对维护） ----
-/** 2*2 单行包名与 2*4 右栏版本对的条数上限 */
+/** 2*4 右栏版本对的条数上限 */
 const TOP_LIMIT: number = 3;
 /** 4*4 版本对列表的条数上限（镜像侧最多推 6 条） */
 const LIST_LIMIT: number = 6;
@@ -54,23 +58,24 @@ struct BrewSentinelCard {
   @LocalStorageProp(KEY_FORM_ID) formId: string = '';
   @LocalStorageProp(KEY_DIMENSION) dimension: string = '';
   @LocalStorageProp(KEY_HAS_SNAPSHOT) hasSnapshot: boolean = false;
+  @LocalStorageProp(KEY_FOLLOW_EMPTY) followEmpty: boolean = false;
   @LocalStorageProp(KEY_COUNT) count: number = 0;
   @LocalStorageProp(KEY_ITEMS) itemsJson: string = '[]';
   @LocalStorageProp(KEY_AS_OF) asOfText: string = '';
   @LocalStorageProp(KEY_STALE) stale: boolean = false;
 
   /** 实际生效的规格（binding 单通道归一后的值） */
-  @State effectiveDimension: string = DIM_2_2;
+  @State effectiveDimension: string = DIM_2_4;
 
   aboutToAppear(): void {
     this.effectiveDimension = this.normalizeDimension(this.dimension);
   }
 
   private normalizeDimension(value: string): string {
-    if (value === DIM_2_2 || value === DIM_2_4 || value === DIM_4_4) {
+    if (value === DIM_2_4 || value === DIM_4_4) {
       return value;
     }
-    return DIM_2_2;
+    return DIM_2_4;
   }
 
   /** 镜像版本对解析。坏数据（JSON 坏/字段缺）按空列表处理，卡片退化为纯计数布局 */
@@ -97,7 +102,7 @@ struct BrewSentinelCard {
     }
   }
 
-  /** 当前规格下要渲染的版本对条数：4*4 六行，其余三行 */
+  /** 当前规格下要渲染的版本对条数：4*4 六行，其余（2*4）三行 */
   private displayItems(): CardItem[] {
     const all: CardItem[] = this.parseItems();
     const limit: number = this.effectiveDimension === DIM_4_4 ? LIST_LIMIT : TOP_LIMIT;
@@ -106,16 +111,6 @@ struct BrewSentinelCard {
       out.push(all[i]);
     }
     return out;
-  }
-
-  /** 2*2 单行的包名串：前三个包名「、」连接 */
-  private topNames(): string {
-    const names: string[] = [];
-    const items: CardItem[] = this.parseItems();
-    for (let i = 0; i < items.length && i < TOP_LIMIT; i++) {
-      names.push(items[i].name);
-    }
-    return names.join('、');
   }
 
   /** 页脚：陈旧给降显文案，否则「截至 HH:mm」（G9：诚实口径） */
@@ -226,8 +221,8 @@ struct BrewSentinelCard {
   }
 
   /**
-   * 引导态（宿主从未成功读过本机包 / 镜像 miss / 一期 v1 旧镜像）：不给 0 假数据（G1）。
-   * 2*2/2*4：徽章 + 引导文案单栏居中；4*4 另加标题（spec §5.5 状态矩阵）。
+   * 引导态（宿主从未成功读过本机包 / 镜像 miss / 旧格式镜像）：不给 0 假数据（G1）。
+   * 2*4：徽章 + 引导文案单栏居中；4*4 另加标题（spec §5.5 状态矩阵）。
    */
   @Builder
   GuideBody() {
@@ -252,7 +247,29 @@ struct BrewSentinelCard {
     .alignItems(HorizontalAlign.Center)
   }
 
-  /** 零更新态：绿徽章 ✓ + 全部为最新版本 + 页脚（截至/降显）。三规格同一构图居中 */
+  /**
+   * 关注空态（F 线）：镜像有效但用户一个关注都没有。与引导态分开而不复用，
+   * 是因为文案语义不同——这里用户已经能看到数据了，缺的是「关注」这个动作。
+   * 不冒充零更新态（绿 ✓ 全部最新）：没有关注时那个结论是假的。
+   */
+  @Builder
+  FollowEmptyBody() {
+    Column({ space: 12 }) {
+      this.BadgeGlyph(false)
+      Text($r('app.string.sentinel_card_follow_empty'))
+        .fontSize(13)
+        .fontColor($r('sys.color.font_secondary'))
+        .textAlign(TextAlign.Center)
+        .maxLines(3)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  /** 零更新态（F 线语义：关注中的包都已是最新）：绿徽章 ✓ + 页脚（截至/降显）。两规格同一构图居中 */
   @Builder
   ZeroBody() {
     Column({ space: 12 }) {
@@ -270,8 +287,7 @@ struct BrewSentinelCard {
   }
 
   /**
-   * 正常/陈旧态按规格分三种构图（陈旧只换页脚文案，布局不变——spec §5.5）：
-   *   - 2*2：hero + 单行包名串，页脚收底；
+   * 正常/陈旧态按规格分两种构图（陈旧只换页脚文案，布局不变——spec §5.5）：
    *   - 2*4：宽横条双栏——左 hero（含页脚），hairline 竖隔，右栏 3 行版本对 + 引导句；
    *   - 4*4：大方卡——头部 hero，hairline 横隔，6 行版本对列表，页脚（超出部分截断，
    *     滚动列表不在卡片支持组件面里，溢出策略交给探针结论 Q1+ 校准行高）。
@@ -328,7 +344,8 @@ struct BrewSentinelCard {
       }
       .width('100%')
       .height('100%')
-    } else if (this.effectiveDimension === DIM_2_4) {
+    } else {
+      // 2*4：宽横条双栏——左 hero（含页脚），hairline 竖隔，右栏 3 行版本对 + 引导句
       Row() {
         Column({ space: 4 }) {
           this.HeroRow()
@@ -362,30 +379,6 @@ struct BrewSentinelCard {
       .width('100%')
       .height('100%')
       .alignItems(VerticalAlign.Center)
-    } else {
-      // 2*2：hero + 单行包名串（top3，「等 N 个」后缀由资源格式化），页脚收底
-      Column({ space: 4 }) {
-        this.HeroRow()
-        this.UnitLine()
-        Blank()
-        Row({ space: 4 }) {
-          Text(this.topNames())
-            .fontSize(12)
-            .fontColor($r('sys.color.font_tertiary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          if (this.count > TOP_LIMIT) {
-            Text($r('app.string.sentinel_card_more', this.count - TOP_LIMIT))
-              .fontSize(12)
-              .fontColor($r('sys.color.font_tertiary'))
-          }
-        }
-        .width('100%')
-        this.FooterLine()
-      }
-      .width('100%')
-      .height('100%')
     }
   }
 
@@ -393,6 +386,8 @@ struct BrewSentinelCard {
     Column() {
       if (!this.hasSnapshot) {
         this.GuideBody()
+      } else if (this.followEmpty) {
+        this.FollowEmptyBody()
       } else if (this.count === 0) {
         this.ZeroBody()
       } else {
@@ -401,11 +396,11 @@ struct BrewSentinelCard {
     }
     .width('100%')
     .height('100%')
-    // 外边距：4*4 用 20vp 的大方卡呼吸感，2*2/2*4 用 16vp 保小面积容量（spec §4.1 口径的规格化落地）
+    // 外边距：4*4 用 20vp 的大方卡呼吸感，2*4 用 16vp 保小面积容量（spec §4.1 口径的规格化落地）
     .padding(this.effectiveDimension === DIM_4_4 ? 20 : 16)
     .alignItems(HorizontalAlign.Start)
-    // 引导/零更新态由各自 body 自居中；正常态顶对齐 + Blank 把页脚收底
-    .justifyContent(this.hasSnapshot && this.count > 0 ? FlexAlign.Start : FlexAlign.Center)
+    // 引导/关注空态/零更新态由各自 body 自居中；正常态顶对齐 + Blank 把页脚收底
+    .justifyContent(this.hasSnapshot && this.count > 0 && !this.followEmpty ? FlexAlign.Start : FlexAlign.Center)
     .onClick(() => {
       this.openPackages()
     })

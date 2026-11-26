@@ -30,6 +30,7 @@ import { PackageListMode } from '../model/MinePackagesModels';
 import { MinePackageSets } from '../model/MinePackagesModels';
 import { MinePackagesUtil } from '../util/MinePackagesUtil';
 import { MinePackagePrefs } from '../util/MinePackagePrefs';
+import { UpdateFollowSync } from '@ohos/brewcommon';
 import { MinePackagesState } from './MinePackagesState';
 
 const TAG: string = '[MinePackagesVM]';
@@ -212,8 +213,12 @@ export class MinePackagesVM {
    */
   private applySets(sets: MinePackageSets): void {
     const list: BrewInstalledPackage[] = MinePackagesUtil.pick(sets, this.state.mode);
-    this.state.packages = list;
-    this.state.filteredPackages = this.visibleOf(list);
+    // 关注置顶只对待更新列表生效（F 线：关注语义只存在于更新提醒）。
+    // 写回 packages 而不是只排 filteredPackages —— chips / 隐藏依赖重算都从 packages 出发，
+    // 排序只做一次，两条路径看到同一个顺序。
+    this.state.packages = this.state.mode === PackageListMode.OUTDATED ?
+      MinePackagesUtil.prioritizeFollowed(list) : list;
+    this.state.filteredPackages = this.visibleOf(this.state.packages);
     this.setStatus(LoadingStatus.SUCCESS);
   }
 
@@ -279,5 +284,26 @@ export class MinePackagesVM {
 
   public acknowledgeDependencyUpgradeNotice(): void {
     MinePackagePrefs.acknowledgeUpgradeNotice();
+  }
+
+  /**
+   * 关注表变化后的重排（F 线）。
+   *
+   * 关注的写入/取消在行组件 / 详情页里完成（写入方自己 bump 关注表版本号），
+   * 页面的 @Watch 把版本变化转到本方法，这里只负责「顺序要跟着变」：
+   * 按最新关注表对待更新列表重新置顶。整组替换 packages 与
+   * filteredPackages（状态管理 V1 只观察一级属性，写元素不触发重渲染）；
+   * ForEach 的 key 是包名，同 key 的行复用、只挪位置，不会闪一遍。
+   *
+   * 关注表变化同时影响桌面卡片口径（只展示关注中的包），顺路触发一次卡片重推——
+   * 不等下一次前台评估，用户在列表里点完开关卡片立刻跟上。
+   */
+  public onFollowToggled(): void {
+    if (this.state.mode !== PackageListMode.OUTDATED) {
+      return;
+    }
+    this.state.packages = MinePackagesUtil.prioritizeFollowed(this.state.packages);
+    this.state.filteredPackages = this.visibleOf(this.state.packages);
+    UpdateFollowSync.pushCard();
   }
 }

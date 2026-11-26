@@ -15,7 +15,7 @@
 
 import { BrewFormat, BrewKind } from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewInstalledPackage } from '@ohos/brewcommon';
-import { BrewInstalledLoader } from '@ohos/brewcommon';
+import { BrewInstalledLoader, UpdateFollowPrefs } from '@ohos/brewcommon';
 import type { BrewInstalledSets } from '@ohos/brewcommon';
 import { MinePackageSets, PackageListMode } from '../model/MinePackagesModels';
 
@@ -98,6 +98,28 @@ export class MinePackagesUtil {
       return list;
     }
     return list.filter((pkg: BrewInstalledPackage) => !pkg.installedAsDependency);
+  }
+
+  /**
+   * 关注置顶（F 线）：关注中的包排最前面，**组内保持原顺序**（稳定划分，不整体重排）。
+   *
+   * 为什么不直接 sort：sort 的比较器要「关注比不关注靠前」，比较器返回值语义与原顺序
+   * 无关，写不好会把同组内的相对顺序也搅乱；两段拼接让「未关注段」原封不动。
+   * 调用方约定：只对**待更新**集合使用（关注语义只存在于更新提醒，已安装/已更新
+   * 列表保持字母序现状）。取关注状态现读 `UpdateFollowPrefs`：列表重排的时机
+   * （进页 / 快照到达 / 切关注）都是该 store 刚被写过的时刻，不必额外缓存。
+   */
+  public static prioritizeFollowed(list: BrewInstalledPackage[]): BrewInstalledPackage[] {
+    const followed: BrewInstalledPackage[] = [];
+    const rest: BrewInstalledPackage[] = [];
+    for (const pkg of list) {
+      if (UpdateFollowPrefs.isFollowed(pkg.name)) {
+        followed.push(pkg);
+      } else {
+        rest.push(pkg);
+      }
+    }
+    return followed.concat(rest);
   }
 
   private static byName(list: BrewInstalledPackage[]): BrewInstalledPackage[] {

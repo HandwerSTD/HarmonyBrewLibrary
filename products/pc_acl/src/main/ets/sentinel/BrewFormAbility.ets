@@ -1,7 +1,7 @@
 import { formBindingData, FormExtensionAbility, formInfo } from '@kit.FormKit';
 import type { Want } from '@kit.AbilityKit';
 import { Logger } from '@ohos/common';
-import { BrewSentinelService, SENTINEL_DIMENSION_2_2, SENTINEL_DIMENSION_2_4, SENTINEL_DIMENSION_4_4 } from '@ohos/brewcommon';
+import { BrewSentinelService, SENTINEL_DIMENSION_2_4, SENTINEL_DIMENSION_4_4 } from '@ohos/brewcommon';
 
 const TAG: string = '[sentinel]';
 
@@ -22,12 +22,15 @@ function dimensionOfParams(params?: Record<string, Object>): string | null {
   const raw: Object | undefined = params?.[formInfo.FormParam.DIMENSION_KEY];
   if (typeof raw === 'number') {
     switch (raw) {
-      case formInfo.FormDimension.Dimension_2_2:
-        return SENTINEL_DIMENSION_2_2;
       case formInfo.FormDimension.Dimension_2_4:
         return SENTINEL_DIMENSION_2_4;
       case formInfo.FormDimension.Dimension_4_4:
         return SENTINEL_DIMENSION_4_4;
+      case formInfo.FormDimension.Dimension_2_2:
+        // F 线起 2*2 规格下线：存量 2*2 卡的回调按默认规格 2*4 记账（登记表下次覆写，
+        // 真正的 2*2 卡已不在 form_config 支持面里，推送失败会走既有的注销自愈路径）
+        Logger.warn(TAG, 'legacy 2*2 form callback, bookkeep as default dimension');
+        return SENTINEL_DIMENSION_2_4;
       default:
         Logger.warn(TAG, `unknown form dimension enum value=${raw}, fallback to default`);
         return '';

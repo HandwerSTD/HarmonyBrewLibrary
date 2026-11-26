@@ -42,7 +42,7 @@
     },
     {
       "name": "sentinel_card_zero",
-      "value": "All Packages Up to Date"
+      "value": "Followed Packages Up to Date"
     },
     {
       "name": "sentinel_card_hint",
@@ -50,7 +50,11 @@
     },
     {
       "name": "sentinel_card_unit",
-      "value": "packages recommended for upgrade"
+      "value": "followed packages pending update"
+    },
+    {
+      "name": "sentinel_card_follow_empty",
+      "value": "Star packages in Updates to get reminders here"
     }
   ]
 }

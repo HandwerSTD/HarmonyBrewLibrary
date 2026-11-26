@@ -29,8 +29,9 @@ export const SENTINEL_PREFERENCES_NAME: string = 'brew_sentinel';
 /**
  * formId 登记表：JSON 数组字符串。onAddForm 登记 / onRemoveForm 注销 / 推卡遍历都读它。
  *
- * 二期 v2 格式：`[{"id":"...","dimension":"2*2"}]`（二期 spec §6.2）；一期 v1 格式
- * （纯 formId 字符串数组）仍可解析，规格一律兜底 2*2，下次 onAddForm 按真实规格覆写。
+ * 二期 v2 格式：`[{"id":"...","dimension":"2*4"}]`（二期 spec §6.2）；一期 v1 格式
+ * （纯 formId 字符串数组）仍可解析，规格一律兜底默认规格（F 线起是 2*4，见
+ * SENTINEL_DIMENSION_DEFAULT），下次 onAddForm 按真实规格覆写。
  */
 export const SENTINEL_KEY_FORM_IDS: string = 'sentinel_form_ids';
 
@@ -66,15 +67,18 @@ export const SENTINEL_TOP_NAMES_LIMIT: number = 3;
 
 /**
  * 卡片规格字符串：form_config.supportDimensions 与 DIMENSION_KEY 归一后的统一口径
- * （二期 spec §6.3）。HarmonyOS 规格语义 = 行*列：2*2 方卡 / 2*4 宽横条 / 4*4 大方卡
+ * （二期 spec §6.3）。HarmonyOS 规格语义 = 行*列：2*4 宽横条 / 4*4 大方卡
  * （2*4 与 4*4 之间可拖拽 resize，官方 FAQ faqs-form-18）。
+ *
+ * F 线（关注更新）起 **2*2 规格整体下线**（用户裁定：小方卡装不下「只看关注」的列表语义，
+ * 2*4/4*4 才是更新提醒的正式形态）：form_config 只登记两规格，未知值（含存量 2*2 卡
+ * 的登记残影）一律兜底 2*4。
  */
-export const SENTINEL_DIMENSION_2_2: string = '2*2';
 export const SENTINEL_DIMENSION_2_4: string = '2*4';
 export const SENTINEL_DIMENSION_4_4: string = '4*4';
 
 /** 未知规格的兜底值。DIMENSION_KEY 实测值格式（串/数值枚举）探针 Q1+ 确认后收口 */
-export const SENTINEL_DIMENSION_DEFAULT: string = SENTINEL_DIMENSION_2_2;
+export const SENTINEL_DIMENSION_DEFAULT: string = SENTINEL_DIMENSION_2_4;
 
 // ---------------------------------------------------------------- 卡片数据键
 
@@ -87,6 +91,12 @@ export const SENTINEL_DIMENSION_DEFAULT: string = SENTINEL_DIMENSION_2_2;
 export const SENTINEL_DATA_FORM_ID: string = 'sentinelFormId';
 export const SENTINEL_DATA_DIMENSION: string = 'sentinelDimension';
 export const SENTINEL_DATA_HAS_SNAPSHOT: string = 'sentinelHasSnapshot';
+/**
+ * 用户是否一个关注都没有（F 线）。真 = 卡片给「关注空态」引导，而不是
+ * 把「没有关注」误报成「全部最新」（零更新态的语义在 F 线后收窄为
+ * 「关注中的包都已是最新」）。
+ */
+export const SENTINEL_DATA_FOLLOW_EMPTY: string = 'sentinelFollowEmpty';
 export const SENTINEL_DATA_COUNT: string = 'sentinelCount';
 export const SENTINEL_DATA_ITEMS: string = 'sentinelItems';
 export const SENTINEL_DATA_AS_OF: string = 'sentinelAsOfText';

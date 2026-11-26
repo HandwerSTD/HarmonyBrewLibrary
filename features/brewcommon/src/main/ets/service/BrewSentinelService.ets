@@ -15,11 +15,11 @@ import {
   SENTINEL_DATA_AS_OF,
   SENTINEL_DATA_COUNT,
   SENTINEL_DATA_DIMENSION,
+  SENTINEL_DATA_FOLLOW_EMPTY,
   SENTINEL_DATA_FORM_ID,
   SENTINEL_DATA_HAS_SNAPSHOT,
   SENTINEL_DATA_ITEMS,
   SENTINEL_DATA_STALE,
-  SENTINEL_DIMENSION_2_2,
   SENTINEL_DIMENSION_2_4,
   SENTINEL_DIMENSION_4_4,
   SENTINEL_DIMENSION_DEFAULT,
@@ -28,6 +28,7 @@ import {
   SENTINEL_PREFERENCES_NAME,
   SENTINEL_STALE_MS,
 } from '../constant/SentinelConstants';
+import { UpdateFollowPrefs } from './UpdateFollowPrefs';
 
 const TAG: string = '[sentinel]';
 
@@ -56,14 +57,17 @@ class SentinelFormEntry {
  * 宿主进程每次评估把快照派生结果写进来；扩展进程（P1/P2 定时触发、卡片重添加首渲染）
  * 读它渲染真实数据。为什么要镜像：扩展进程读不到 `BrewInstalledLoader` 的盘上快照——
  * 能力开关注入项在扩展进程不存在（AppStorage 按进程隔离），且快照所在的 XML store
- * 官方明确不支持多进程并发。镜像只存展示所需的最小集（count + ≤6 条版本对），
+ * 官方明确不支持多进程并发。镜像只存展示所需的最小集（count + ≤6 条版本对 + 关注空态），
  * 不搬运集合明细；坏一条就整条丢弃（loadBase 字段防御）。字段加默认值：JSON
- * 反序列化缺字段时得到 0/''/空数组，loadBase 再按 readAt>0 与 items 数组判真伪。
- * 一期 v1 格式（topNames 无 items）按 miss 处理 → 引导态，宿主一次评估后自愈（W9）。
+ * 反序列化缺字段时得到 0/''/false/空数组，loadBase 再按 readAt>0 与 items 数组判真伪。
+ * 一期 v1 格式（topNames 无 items）与二期 v2 格式（无 followEmpty）都按 miss 处理 →
+ * 引导态，宿主一次评估后自愈（W9 同款）。
  */
 class SentinelCardBase {
   public readAt: number = 0;
   public count: number = 0;
+  /** 用户是否一个关注都没有（F 线）。真 = 卡片给关注空态而不是零更新态 */
+  public followEmpty: boolean = false;
   public items: SentinelCardItem[] = [];
 }
 
@@ -71,6 +75,8 @@ class SentinelCardBase {
  * 更新哨兵服务：把「本机包快照」翻译成桌面卡片数据。
  *
  * 二期起**只服务卡片**（通知链路整体移除，用户裁定无意义——二期 spec §3）。
+ * F 线（关注更新）起卡片口径进一步收窄：**只提醒关注中的包**（deriveBase），
+ * 规格只剩 2*4 / 4*4（2*2 下线，normalizeDimension 兜底 2*4）。
  *
  * 设计基线（一期 spec §3.1 / §6 + 二期 spec §3.2/§6）：
  *   - **只读快照，绝不自己跑命令**。宿主侧数据来源只有 `BrewInstalledLoader.snapshot()` 一条；
@@ -358,9 +364,10 @@ export class BrewSentinelService {
     }
   }
 
-  /** 规格归一（二期 spec §6.3）：只认三规格字符串，未知值（含 DIMENSION_KEY 的意外格式）兜底 2*2 */
+  /** 规格归一（二期 spec §6.3）：只认 2*4 / 4*4 两规格，未知值（含 DIMENSION_KEY 的意外格式
+   * 与存量 2*2 卡的登记残影，F 线起 2*2 已下线）兜底 2*4 */
   private normalizeDimension(value: string): string {
-    if (value === SENTINEL_DIMENSION_2_2 || value === SENTINEL_DIMENSION_2_4 || value === SENTINEL_DIMENSION_4_4) {
+    if (value === SENTINEL_DIMENSION_2_4 || value === SENTINEL_DIMENSION_4_4) {
       return value;
     }
     return SENTINEL_DIMENSION_DEFAULT;
@@ -370,16 +377,24 @@ export class BrewSentinelService {
 
   /**
    * 快照 → 镜像（二期 spec §6.1）。镜像只装展示所需的最小集：count + 前
-   * SENTINEL_CARD_ITEMS_LIMIT 条版本对（name/version/latestVersion），集合明细不跨进程搬运。
-   * 口径：只算主动安装（installedOnRequest，cask 一律按主动安装——BrewInstalledParser
-   * 同款口径）的过期包；作为依赖装上的过期随 `brew upgrade` 顺带解决，不占 hero 数字，
-   * 也不进版本对列表（用户裁定：卡片只展示主动安装的）。
+   * SENTINEL_CARD_ITEMS_LIMIT 条版本对（name/version/latestVersion）+ 关注空态，
+   * 集合明细不跨进程搬运。
+   *
+   * 口径（F 线收窄）：**只算关注中**的过期包——
+   *   - 关注过滤（UpdateFollowPrefs）：卡片只提醒用户关注了的包（用户裁定 F 线）；
+   *   - 主动安装（installedOnRequest，cask 一律按主动安装——BrewInstalledParser 同款口径）：
+   *     作为依赖装上的过期随 `brew upgrade` 顺带解决，不占 hero 数字，也不进版本对列表；
+   *   - 发布策略（ReleaseIntelFilter）在 evaluateAndPush 的上游已过滤，这里不再重复。
+   *
+   * followEmpty 用「关注表是否为空」而不是「过滤结果是否为空」区分两态：
+   * 关注表空 = 卡片给关注空态（引导去关注）；表非空且 count=0 = 零更新态（关注的都最新）。
    */
   private deriveBase(snap: BrewInstalledSnapshot): SentinelCardBase {
     const base: SentinelCardBase = new SentinelCardBase();
     base.readAt = snap.readAt;
+    base.followEmpty = UpdateFollowPrefs.followedCount() === 0;
     const onRequest: BrewInstalledPackage[] = snap.sets.outdated.filter(
-      (one: BrewInstalledPackage) => one.installedOnRequest);
+      (one: BrewInstalledPackage) => one.installedOnRequest && UpdateFollowPrefs.isFollowed(one.name));
     base.count = onRequest.length;
     const limit: number = Math.min(SENTINEL_CARD_ITEMS_LIMIT, onRequest.length);
     for (let i = 0; i < limit; i++) {
@@ -418,6 +433,12 @@ export class BrewSentinelService {
       if (!Array.isArray(parsed.items)) {
         // 一期 v1 格式（topNames 字符串，无 items 数组）：按 miss → 引导态，宿主自愈
         Logger.warn(TAG, 'card mirror is legacy v1 (topNames, no items), treat as absent for self-heal');
+        return null;
+      }
+      if (typeof parsed.followEmpty !== 'boolean') {
+        // 二期 v2 格式（无 followEmpty）：无法区分「关注空态」与「零更新态」，按 miss →
+        // 引导态，宿主一次评估写 v3 后自愈（W9 同款，不迁移）
+        Logger.warn(TAG, 'card mirror is legacy v2 (no followEmpty), treat as absent for self-heal');
         return null;
       }
       for (const item of parsed.items) {
@@ -472,6 +493,7 @@ export class BrewSentinelService {
     data[SENTINEL_DATA_FORM_ID] = formId;
     data[SENTINEL_DATA_DIMENSION] = this.normalizeDimension(dimension);
     data[SENTINEL_DATA_HAS_SNAPSHOT] = false;
+    data[SENTINEL_DATA_FOLLOW_EMPTY] = false;
     data[SENTINEL_DATA_COUNT] = 0;
     data[SENTINEL_DATA_ITEMS] = '[]';
     data[SENTINEL_DATA_AS_OF] = '';
@@ -482,6 +504,7 @@ export class BrewSentinelService {
     // 镜像/快照共用同一份派生口径：asOf 用数据自己的 readAt，随时间自然变陈旧（一期 G9 诚实口径）
     const age: number = Date.now() - base.readAt;
     data[SENTINEL_DATA_HAS_SNAPSHOT] = true;
+    data[SENTINEL_DATA_FOLLOW_EMPTY] = base.followEmpty;
     data[SENTINEL_DATA_COUNT] = base.count;
     data[SENTINEL_DATA_ITEMS] = JSON.stringify(base.items);
     data[SENTINEL_DATA_AS_OF] = hhmm(base.readAt);

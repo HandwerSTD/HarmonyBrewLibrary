@@ -930,6 +930,22 @@
       "value": "Unignore"
     },
     {
+      "name": "detail_follow_title",
+      "value": "Follow Updates"
+    },
+    {
+      "name": "detail_follow_desc",
+      "value": "Followed packages stay on top of Updates and appear on the desktop card"
+    },
+    {
+      "name": "detail_follow_on",
+      "value": "Follow"
+    },
+    {
+      "name": "detail_follow_off",
+      "value": "Unfollow"
+    },
+    {
       "name": "release_intel_pause_7",
       "value": "Pause for 7 days"
     },
