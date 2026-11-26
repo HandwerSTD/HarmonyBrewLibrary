@@ -42,7 +42,7 @@
     },
     {
       "name": "sentinel_card_zero",
-      "value": "关注中的包都已是最新"
+      "value": "全部为最新版本"
     },
     {
       "name": "sentinel_card_hint",
@@ -50,11 +50,43 @@
     },
     {
       "name": "sentinel_card_unit",
+      "value": "个软件包推荐升级"
+    },
+    {
+      "name": "sentinel_follow_form_name",
+      "value": "关注更新"
+    },
+    {
+      "name": "sentinel_follow_form_desc",
+      "value": "关注中的软件包更新提醒"
+    },
+    {
+      "name": "follow_card_none",
+      "value": "在「待更新」列表点 ★ 关注应用，更新会在这里优先提醒"
+    },
+    {
+      "name": "follow_card_zero",
+      "value": "关注中的包都已是最新"
+    },
+    {
+      "name": "follow_card_unit",
       "value": "个关注中的待更新"
     },
     {
-      "name": "sentinel_card_follow_empty",
-      "value": "先在「待更新」列表点 ★ 关注应用，更新会在这里优先提醒"
+      "name": "follow_card_more",
+      "value": "等 %d 个"
+    },
+    {
+      "name": "follow_card_asof",
+      "value": "截至 %s"
+    },
+    {
+      "name": "follow_card_stale",
+      "value": "打开应用刷新"
+    },
+    {
+      "name": "follow_card_hint",
+      "value": "点按查看关注列表"
     }
   ]
 }

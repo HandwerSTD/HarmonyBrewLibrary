@@ -1,7 +1,8 @@
 import { formBindingData, FormExtensionAbility, formInfo } from '@kit.FormKit';
 import type { Want } from '@kit.AbilityKit';
 import { Logger } from '@ohos/common';
-import { BrewSentinelService, SENTINEL_DIMENSION_2_4, SENTINEL_DIMENSION_4_4 } from '@ohos/brewcommon';
+import { BrewSentinelService, SENTINEL_DIMENSION_2_2, SENTINEL_DIMENSION_2_4, SENTINEL_DIMENSION_4_4,
+  SENTINEL_FORM_NAME } from '@ohos/brewcommon';
 
 const TAG: string = '[sentinel]';
 
@@ -22,15 +23,12 @@ function dimensionOfParams(params?: Record<string, Object>): string | null {
   const raw: Object | undefined = params?.[formInfo.FormParam.DIMENSION_KEY];
   if (typeof raw === 'number') {
     switch (raw) {
+      case formInfo.FormDimension.Dimension_2_2:
+        return SENTINEL_DIMENSION_2_2;
       case formInfo.FormDimension.Dimension_2_4:
         return SENTINEL_DIMENSION_2_4;
       case formInfo.FormDimension.Dimension_4_4:
         return SENTINEL_DIMENSION_4_4;
-      case formInfo.FormDimension.Dimension_2_2:
-        // F 线起 2*2 规格下线：存量 2*2 卡的回调按默认规格 2*4 记账（登记表下次覆写，
-        // 真正的 2*2 卡已不在 form_config 支持面里，推送失败会走既有的注销自愈路径）
-        Logger.warn(TAG, 'legacy 2*2 form callback, bookkeep as default dimension');
-        return SENTINEL_DIMENSION_2_4;
       default:
         Logger.warn(TAG, `unknown form dimension enum value=${raw}, fallback to default`);
         return '';
@@ -44,14 +42,29 @@ function dimensionOfParams(params?: Record<string, Object>): string | null {
 }
 
 /**
- * 更新哨兵的卡片提供方（FormExtensionAbility，spec §8）。
+ * NAME_KEY → 卡种（F 线双卡）。`FormParam.NAME_KEY`
+ * （'ohos.extra.param.key.form_name'）的值是 form_config.json 里本卡片的 name
+ * （BrewSentinelCard / BrewFollowCard）。取不到（null）时调用方兜底原哨兵卡：
+ * F 线前登记表里只有一种卡，want 缺 name 的场合只可能是存量卡/异常路径。
+ */
+function nameOfParams(params?: Record<string, Object>): string | null {
+  const raw: Object | undefined = params?.[formInfo.FormParam.NAME_KEY];
+  if (typeof raw === 'string' && (raw as string).length > 0) {
+    return raw as string;
+  }
+  return null;
+}
+
+/**
+ * 更新哨兵的卡片提供方（FormExtensionAbility，spec §8；F 线起同时服务两张卡）。
  *
  * 四个回调对应 P2 档的触发面：
- *   - onAddForm：登记 formId + 规格（二期 v2 登记表，spec §6.2）+ 返回首渲染数据；
+ *   - onAddForm：按卡种登记 formId + 规格 + name（F 线 v3 登记表）+ 返回对应口径的首渲染数据；
  *   - onUpdateForm：系统定时刷新（form_config 的 updateDuration）→ 走 evaluateAndPush，
- *     与宿主前台路径（P3）共用同一份代码；resize/系统携带规格的刷新先幂等刷新登记
- *     （同 id 同规格不动，规格变化覆写——同 onAddForm 收敛在一个方法里）；
- *   - onRemoveForm：注销登记（G13：移除后快照仍归应用所有，重添加立即按盘上快照渲染）；
+ *     与宿主前台路径（P3）共用同一份代码，评估对登记表里的**所有**卡（两卡种）生效；
+ *     resize/系统携带规格的刷新先幂等刷新登记（同 id 同规格同卡种不动，变化覆写——
+ *     同 onAddForm 收敛在一个方法里）；
+ *   - onRemoveForm：注销登记（G13：移除后快照仍归应用所有，重添加立即按盘上镜像渲染）；
  *   - onFormEvent：本卡片的唯一交互是 postCardAction 的 router 事件（直达 PcAbility），
  *     不经过这里——保留兜底日志。
  *
@@ -63,25 +76,31 @@ export default class BrewFormAbility extends FormExtensionAbility {
     // 'ohos.extra.param.key.form_identity'（见 faqs-local-database-management-65 示例）
     const formId: string = want.parameters?.[formInfo.FormParam.IDENTITY_KEY] as string;
     const dimension: string | null = dimensionOfParams(want.parameters);
-    Logger.info(TAG, `onAddForm formId=${formId} dimension=${dimension === null ? 'unknown' : dimension}`);
+    // 卡种：取不到（异常路径）兜底原哨兵卡——F 线前登记表里只有它
+    const name: string = nameOfParams(want.parameters) ?? SENTINEL_FORM_NAME;
+    Logger.info(TAG, `onAddForm formId=${formId} dimension=${dimension === null ? 'unknown' : dimension} name=${name}`);
     const service: BrewSentinelService = BrewSentinelService.getInstance();
     // null（无规格信息）时传空串：服务侧 normalizeDimension 兜底默认规格 2*2
-    service.onFormAdded(this.context, formId, dimension === null ? '' : dimension);
-    // 首渲染。扩展进程读不到盘上快照时服务会返回引导态数据（G1：不给 0 假数据）；
-    // 宿主下次前台评估时会把真实数据推过来。
-    return service.buildInitialBindingData(this.context, formId, dimension === null ? '' : dimension);
+    service.onFormAdded(this.context, formId, dimension === null ? '' : dimension, name);
+    // 首渲染（按卡种读对应镜像）。扩展进程读不到盘上快照时服务会返回引导态数据
+    // （G1：不给 0 假数据）；宿主下次前台评估时会把真实数据推过来。
+    return service.buildInitialBindingData(this.context, formId, dimension === null ? '' : dimension, name);
   }
 
   onUpdateForm(formId: string, wantParams?: Record<string, Object>): void {
-    // P2 档的定时触发点（updateEnabled + updateDuration）。评估对登记表里的**所有**卡片生效，
-    // 不只是本 formId——多张卡片天然共享同一份快照派生结果。
+    // P2 档的定时触发点（updateEnabled + updateDuration）。评估对登记表里的**所有**卡生效，
+    // 不只是本 formId——多张卡片（两卡种）天然共享同一份快照派生结果。
     // 系统带规格的刷新（resize 等）先幂等刷新登记再评估；不带规格的刷新**不动登记**，
     // 防止已有规格被默认值覆写（见 dimensionOfParams 的 null 语义）。
     const dimension: string | null = dimensionOfParams(wantParams);
-    Logger.info(TAG, `onUpdateForm formId=${formId} dimension=${dimension === null ? 'absent' : dimension}`);
+    const name: string | null = nameOfParams(wantParams);
+    Logger.info(TAG, `onUpdateForm formId=${formId} dimension=${dimension === null ? 'absent' : dimension} name=${name === null ? 'absent' : name}`);
     const service: BrewSentinelService = BrewSentinelService.getInstance();
-    if (dimension !== null) {
-      service.onFormAdded(this.context, formId, dimension);
+    if (dimension !== null || name !== null) {
+      // 带规格/卡种的刷新才动登记；缺哪一项就传哪一项的既有语义值（规格缺省传空串走
+      // 归一兜底不影响已登记值——onFormAdded 对「同 id 同规格同卡种」是幂等 no-op）
+      service.onFormAdded(this.context, formId, dimension === null ? '' : dimension,
+        name === null ? SENTINEL_FORM_NAME : name);
     }
     service.evaluateAndPush(this.context);
   }

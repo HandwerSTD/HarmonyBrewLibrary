@@ -42,7 +42,7 @@
     },
     {
       "name": "sentinel_card_zero",
-      "value": "Followed Packages Up to Date"
+      "value": "All Packages Up to Date"
     },
     {
       "name": "sentinel_card_hint",
@@ -50,11 +50,43 @@
     },
     {
       "name": "sentinel_card_unit",
+      "value": "packages recommended for upgrade"
+    },
+    {
+      "name": "sentinel_follow_form_name",
+      "value": "Update Watchlist"
+    },
+    {
+      "name": "sentinel_follow_form_desc",
+      "value": "Updates for followed packages"
+    },
+    {
+      "name": "follow_card_none",
+      "value": "Star packages in Updates to get reminders here"
+    },
+    {
+      "name": "follow_card_zero",
+      "value": "Followed Packages Up to Date"
+    },
+    {
+      "name": "follow_card_unit",
       "value": "followed packages pending update"
     },
     {
-      "name": "sentinel_card_follow_empty",
-      "value": "Star packages in Updates to get reminders here"
+      "name": "follow_card_more",
+      "value": "+%d more"
+    },
+    {
+      "name": "follow_card_asof",
+      "value": "As of %s"
+    },
+    {
+      "name": "follow_card_stale",
+      "value": "Open the app to refresh"
+    },
+    {
+      "name": "follow_card_hint",
+      "value": "Tap to view followed packages"
     }
   ]
 }
