@@ -118,8 +118,8 @@ export class AiSearchPick {
 }
 
 /**
- * D2 问答答案：lead 总起段 + picks 推荐对 + related 目录召回尾行 + 丢弃计数。
- * 渲染为「文本段与包行交替」的混排（spec 2026-11-26-ai-search-ask-spec §4.4）。
+ * D2 问答答案：lead 总起段 + picks 推荐对 + related 目录召回尾行 + missed 缺失名单
+ * + 丢弃计数。渲染为「文本段与包行交替」的混排（spec 2026-11-26-ai-search-ask-spec §4.4）。
  */
 export class AiSearchAnswer {
   /** 总起段（一句话概括 + 首选点名），≤ AI_D2_LEAD_MAX_CHARS。 */
@@ -128,7 +128,14 @@ export class AiSearchAnswer {
   public picks: AiSearchPick[] = [];
   /** 目录召回尾行（引擎对意图原文排序的未覆盖条目；intro 空，仅 token）。 */
   public related: AiSearchPick[] = [];
-  /** 目录外被丢弃的名字数（进日志，不展示具体名单——防 slopsquatting 需求就是不给它们曝光）。 */
+  /**
+   * 目录外（本机源里查不到）的 token 名单（m01462：不再静默丢弃）。
+   * 渲染为答案尾部的纯文本披露行——**不可点击、无详情路由、无任何安装入口**：
+   * G5 的本意是防 slopsquatting（诱导装不存在的包），明示「AI 提到但本机源没有」
+   * 恰是这个威胁模型的正确答案。dropped 计数 = missed.length（日志口径不变）。
+   */
+  public missed: string[] = [];
+  /** 目录外被丢弃的名字数（进日志；与 missed.length 等价，保留双写仅为兼容日志口径）。 */
   public dropped: number = 0;
 }
 

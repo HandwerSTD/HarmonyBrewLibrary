@@ -778,6 +778,10 @@
       "value": "Related in the catalog"
     },
     {
+      "name": "ai_search_missed_header",
+      "value": "AI also mentioned these, but they are not in the local catalog"
+    },
+    {
       "name": "ai_search_footer",
       "value": "AI generated · verified against the local catalog"
     },

@@ -290,8 +290,11 @@ export class AiTasks {
       }
       const entry: BrewSearchEntry | undefined = known.get(token);
       if (entry === undefined) {
-        // 目录外名字：计数进日志，**名单不留存、不展示**（G5 防 slopsquatting）
+        // 目录外名字（本机源里查不到）：进 missed 名单在答案尾部披露（m01462——
+        // lead 说 5 个而只匹配 3 个会显得诡异），但不可点击、无详情、无安装入口
+        // （G5 防 slopsquatting 的本质是防诱导，披露缺失恰是反诱导）。
         answer.dropped++;
+        answer.missed.push(token);
         return;
       }
       seen.add(token);

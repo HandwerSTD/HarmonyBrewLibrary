@@ -130,6 +130,39 @@ export struct BrewAiSearchAnswerView {
     }
   }
 
+  /**
+   * 目录外披露（m01462）：AI 提到但本机源里查不到的名字，纯文本列在答案尾部。
+   * 不可点击、无详情路由、无任何安装入口——它存在的意义就是让「lead 说 5 个、
+   * 实际匹配 3 个」对上账，并明示这些名字**不在**本机目录里（反 slopsquatting：
+   * 用户从这里拿不到任何可安装的入口）。
+   */
+  @Builder
+  MissedBuilder() {
+    if (this.answer.missed.length > 0) {
+      Column({ space: $r('sys.float.padding_level1') }) {
+        Text($r('app.string.ai_search_missed_header'))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width(CommonConstants.FULL_PERCENT)
+          .padding({
+            left: $r('sys.float.padding_level4'),
+            right: $r('sys.float.padding_level4'),
+          })
+        Text(this.answer.missed.join('、'))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width(CommonConstants.FULL_PERCENT)
+          .padding({
+            left: $r('sys.float.padding_level4'),
+            right: $r('sys.float.padding_level4'),
+          })
+      }
+      .width(CommonConstants.FULL_PERCENT)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ top: $r('sys.float.padding_level4') })
+    }
+  }
+
   @Builder
   FooterBuilder() {
     // 上方一条发丝线把「AI 生成」落款与正文隔开，落款居中小字
@@ -164,6 +197,7 @@ export struct BrewAiSearchAnswerView {
         this.PackageRowBuilder(this.rowOf(pick))
       }, (pick: AiSearchPick) => `pick_${pick.token}`)
       this.RelatedBuilder()
+      this.MissedBuilder()
       this.FooterBuilder()
     }
     .width(CommonConstants.FULL_PERCENT)

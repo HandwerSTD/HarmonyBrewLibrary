@@ -782,6 +782,10 @@
       "value": "目录中相关"
     },
     {
+      "name": "ai_search_missed_header",
+      "value": "AI 还提到了，但本机目录源里没有"
+    },
+    {
       "name": "ai_search_footer",
       "value": "AI 生成 · 已由本地目录校验"
     },
