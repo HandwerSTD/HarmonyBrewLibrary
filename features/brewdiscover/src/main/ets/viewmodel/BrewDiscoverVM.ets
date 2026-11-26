@@ -25,16 +25,46 @@ import {
   TAB_CONTENT_STATUSES,
 } from '@ohos/commonbusiness';
 import type { TitleBarStyleOptions } from '@kit.UIDesignKit';
-import { BrewDiscoverBoard, BrewDiscoverModel, BREW_TITLEBAR_BLUR_RAMP, brewBlurScrollEffect,
-  brewLogRampForPage, BrewTable } from '@ohos/brewcommon';
-import { BrewDiscoverFeedItem, BrewDiscoverFeedType } from '../model/BrewDiscoverFeedItem';
+import {
+  AI_D4_FEATURED_COUNT,
+  AI_D4_INSTALLED_CAP,
+  AI_D4_MIN_INSTALLED,
+  AI_D4_POOL_CASK,
+  AI_D4_POOL_FORMULA,
+  AI_D4_RECENT_DAYS,
+  AiCandidate,
+  AiError,
+  AiErrorKind,
+  AiInstalledBrief,
+  AiSettingsStore,
+  AiTasks,
+  BrewBrowseBuilder,
+  BrewCacheEpoch,
+  BrewDiscoverAiEntry,
+  BrewDiscoverBoard,
+  BrewDiscoverFeatured,
+  BrewDiscoverModel,
+  BrewInstalledLoader,
+  BrewTable,
+  BrewTaxonomy,
+  BREW_TITLEBAR_BLUR_RAMP,
+  brewBlurScrollEffect,
+  brewLogRampForPage,
+} from '@ohos/brewcommon';
+import { AiDiscoverInput, AiDiscoverResult } from '@ohos/brewcommon';
 import type {
+  AiDiscoverPick,
   BrewDetailParams,
   BrewDiscoverBoardParams,
-  BrewDiscoverFeatured,
+  BrewDiscoverEntry,
   BrewDiscoverPageData,
+  BrewInstalledPackage,
+  BrewInstalledSnapshot,
+  CatalogEntry,
 } from '@ohos/brewcommon';
-import { BrewDiscoverState } from './BrewDiscoverState';
+import { AI_BOARD } from '../model/BrewBoardStyle';
+import { BrewDiscoverFeedItem, BrewDiscoverFeedType } from '../model/BrewDiscoverFeedItem';
+import { BrewDiscoverAiPhase, BrewDiscoverState } from './BrewDiscoverState';
 
 const TAG: string = '[BrewDiscoverVM]';
 
@@ -90,6 +120,11 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
   private static instance: BrewDiscoverHomeViewModel;
   private globalInfoModel: GlobalInfoModel = AppStorage.get(StorageKey.GLOBAL_INFO) ?? new GlobalInfoModel();
   private discoverModel: BrewDiscoverModel = BrewDiscoverModel.getInstance();
+  /** 最近一次 stat 榜原料（loadDiscover 写入，rebuildFeed 消费） */
+  private lastFeatured: BrewDiscoverFeatured[] = [];
+  private lastBoards: BrewDiscoverBoard[] = [];
+  /** 最近一次 D4 候选池快照（buildAiInput 写入，applyAiResult 补全 entry 字段时消费） */
+  private lastAiCandidates: AiCandidate[] = [];
   /**
    * 单 section。**左右内缩由 section 的 margin 提供，视图层不再写 padding.left/right**
    * （两个来源必然重复，见 §9.9 / §9.10）。
@@ -149,6 +184,15 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
     if (eventType === BrewDiscoverEventType.JUMP_BOARD) {
       return this.jumpBoard(eventParam.param as BrewDiscoverBoardParams);
     }
+    if (eventType === BrewDiscoverEventType.LOAD_AI) {
+      return this.loadAiSection();
+    }
+    if (eventType === BrewDiscoverEventType.AI_RETRY) {
+      return this.retryAi();
+    }
+    if (eventType === BrewDiscoverEventType.AI_REGENERATE) {
+      return this.regenerateAi();
+    }
     return super.sendEvent(eventParam as BaseHomeEventParam<T>);
   }
 
@@ -207,13 +251,13 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
         const boards: BrewDiscoverBoard[] = (result.boards ?? [])
           .filter((b: BrewDiscoverBoard) => b.entries.length > 0);
         const featured: BrewDiscoverFeatured[] = result.featured ?? [];
-        // 两类卡混排：每张大图卡排在**它所属那张榜**的前面（规则与理由见 mix 的注释）。
-        // 旧写法是「featured 一段 + boards 一段」的两段拼接 —— 大图卡全挤在首屏，
-        // 与榜卡完全分离（需求方要求改成混排）。
-        const feed: BrewDiscoverFeedItem[] = BrewDiscoverFeedItem.mix(featured, boards);
-        this.state.cardSource.setDataArray(feed);
+        // 记下原料、交给 rebuildFeed 摆：feed 从此只有一个拼装点 —— stat 混排（mix）与
+        // AI 区前缀（D4，见 loadAiSection）在这里合流。AI phase 变化只重建 feed 数组，
+        // 不重新走 getDiscoverPage，两条链路解耦。
+        this.lastFeatured = featured;
+        this.lastBoards = boards;
         this.state.snapshotDate = result.snapshotDate ?? '';
-        this.updateFlowSection();
+        this.rebuildFeed();
         this.state.loadingModel.hasNextPage = false;
         if (tableState !== 'ready') {
           this.state.loadingModel.loadingStatus = tableState === 'building' ?
@@ -224,16 +268,18 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
         }
         this.state.loadingModel.loadingStatus = LoadingStatus.SUCCESS;
         TAB_CONTENT_STATUSES[TabBarType.DISCOVER] = true;
-        // 打出组装后的类型顺序（F=大图卡 B=榜卡）：混排规则唯一可核对的地方，
-        // 期望 `F F B B F B F B B F B`。只打类型不打 token —— 一眼能看出归属是否正确。
-        let order: string = '';
-        feed.forEach((one: BrewDiscoverFeedItem) => {
-          order += one.feedType === BrewDiscoverFeedType.FEATURED ? 'F ' : 'B ';
-        });
+        // 打出组装后的类型顺序（F=大图卡 B=榜卡，a/A=AI 大图/AI 榜，s/S=骨架，X=失败）：
+        // 混排规则唯一可核对的地方，stat 区期望 `F F B B F B F B B F B`，
+        // AI 区前缀由 phase 决定（加载中 `s s s S`、就绪 `a a a A`、失败 `X`）。
+        // 只打类型不打 token —— 一眼能看出归属是否正确。
         Logger.info(TAG,
           `loadDiscover success, ${featured.length} featured + ${boards.length} boards, ` +
-          `order [${order.trim()}], snapshot ${result.snapshotDate} in ${Date.now() - t0}ms | ` +
+          `order [${this.feedOrderLine()}], aiPhase=${this.state.aiPhase}, ` +
+          `snapshot ${result.snapshotDate} in ${Date.now() - t0}ms | ` +
           `${BrewTable.statsLine()}`);
+        // 目录两片都齐了，AI 区的闸门才有得谈（loadAiSection 内部自带
+        // phase 重入/装机数/Key/目录 ready 判定，非 ready 时不会走到这里）
+        this.loadAiSection();
       })
       .catch((error: BusinessError) => {
         WindowUtil.updateStatusBarColor(isDark);
@@ -282,6 +328,308 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
     BrewTable.refresh().then(() => {
       this.loadDiscover();
     });
+  }
+
+  // ------------------------------------------------------------- AI 发现流（D4）
+  // spec docs/superpowers/specs/2026-11-26-ai-discover-feed-spec.md。
+  // 画像 + 推荐一次 LLM 调用生成（AiTasks.discover），VM 只做装配：闸门 → 候选池 →
+  // phase 状态机 → feed 前缀。AI 是增强层：任何闸门不过都是**静默不出现**（G6），
+  // 失败时占位卡 + 重试，主 stat 流不受影响。
+
+  /** D4 prompt 的 locale。演示环境固定中文；接系统语言时只改这一处（spec §3.1） */
+  private static readonly AI_LOCALE: string = 'zh';
+
+  /**
+   * AI 区装配入口（自动路径只认 HIDDEN：LOADING/REFRESHING 在途不重入；READY 已有内容；
+   * FAILED 等用户点重试。tableObserver 落地 → loadDiscover → 这里，所以目录迟到会自动补跑）。
+   *
+   * 前置闸门（任一不过 = HIDDEN 静默，G6：不引导配 Key、不占位、不打 error）：
+   *   1. 本机安装快照缺失（pc_normal 无 CLI / 首启未取）或装机数 < AI_D4_MIN_INSTALLED ——
+   *      画像无从谈起；
+   *   2. 无 API Key（E1）；
+   *   3. 包表未 ready —— 候选池不完整会推荐出错的包（G5 的池子先于 G5 的校验）。
+   */
+  protected loadAiSection(): void {
+    if (this.state.aiPhase !== BrewDiscoverAiPhase.HIDDEN) {
+      return;
+    }
+    const snap: BrewInstalledSnapshot | null = BrewInstalledLoader.snapshot();
+    if (snap === null || snap.sets.installed.length < AI_D4_MIN_INSTALLED) {
+      Logger.debug(TAG, 'd4 hidden: installed snapshot missing or below minimum');
+      return;
+    }
+    if (!AiSettingsStore.hasApiKey()) {
+      Logger.debug(TAG, 'd4 hidden: no api key (G6 silent)');
+      return;
+    }
+    if (BrewTable.state() !== 'ready') {
+      Logger.debug(TAG, 'd4 hidden: catalog not ready yet');
+      return;
+    }
+    const input: AiDiscoverInput = this.buildAiInput(snap, false);
+    this.state.aiPhase = BrewDiscoverAiPhase.LOADING;
+    this.rebuildFeed();
+    Logger.info(TAG,
+      `d4 loading: installed=${input.installed.length} candidates=${input.candidates.length}`);
+    AiTasks.discover(input, false)
+      .then((result: AiDiscoverResult) => {
+        this.applyAiResult(result);
+      })
+      .catch((error: Error) => {
+        this.applyAiError(error);
+      });
+  }
+
+  /** 「换一批」（AI_REGENERATE）：force 旁路缓存读、exclude 当前 picks，照常写回同一 cacheKey */
+  protected regenerateAi(): void {
+    // 没有可换的（还在加载 / 已失败 / 已隐藏）就不响应 —— 按钮在 READY 之外本就不可见
+    if (this.state.aiPhase !== BrewDiscoverAiPhase.READY) {
+      return;
+    }
+    const snap: BrewInstalledSnapshot | null = BrewInstalledLoader.snapshot();
+    if (snap === null) {
+      return;
+    }
+    const input: AiDiscoverInput = this.buildAiInput(snap, true);
+    this.state.aiRound++;
+    this.state.aiPhase = BrewDiscoverAiPhase.REFRESHING;
+    this.rebuildFeed();
+    Logger.info(TAG,
+      `d4 regenerate round=${this.state.aiRound} exclude=${input.exclude.length}`);
+    AiTasks.discover(input, true)
+      .then((result: AiDiscoverResult) => {
+        this.applyAiResult(result);
+      })
+      .catch((error: Error) => {
+        this.applyAiError(error);
+      });
+  }
+
+  /** 失败占位卡上的「重试」（AI_RETRY）：回 HIDDEN 重走闸门。E2-E5 失败不写缓存，
+   *  所以这里没有 force —— MISS 会真重打一次 LLM，不存在「重试秒回同一份失败」 */
+  protected retryAi(): void {
+    if (this.state.aiPhase !== BrewDiscoverAiPhase.FAILED) {
+      return;
+    }
+    this.state.aiPhase = BrewDiscoverAiPhase.HIDDEN;
+    this.loadAiSection();
+  }
+
+  /**
+   * 组装 AiDiscoverInput。installed 按装时间降序（最近的权重最高），截 AI_D4_INSTALLED_CAP；
+   * 候选池 formula top200 + cask top130（vol30d 降序）且**先剔掉已安装**（prompt 里
+   * 不该出现已装包；模型如果仍推已装包，读侧 parseDiscover 还有第二道）。
+   */
+  private buildAiInput(snap: BrewInstalledSnapshot, force: boolean): AiDiscoverInput {
+    const installed: BrewInstalledPackage[] = [...snap.sets.installed];
+    installed.sort((a: BrewInstalledPackage, b: BrewInstalledPackage) => b.installedAt - a.installedAt);
+    const capped: BrewInstalledPackage[] = installed.slice(0, AI_D4_INSTALLED_CAP);
+    const recentLine: number = Date.now() - AI_D4_RECENT_DAYS * 24 * 60 * 60 * 1000;
+    const briefs: AiInstalledBrief[] = [];
+    capped.forEach((p: BrewInstalledPackage) => {
+      const brief: AiInstalledBrief = new AiInstalledBrief();
+      brief.token = p.name;
+      brief.kind = p.kind;
+      brief.recent = p.installedAt >= recentLine;
+      briefs.push(brief);
+    });
+    const installedSet: Set<string> = new Set<string>();
+    briefs.forEach((brief: AiInstalledBrief) => {
+      installedSet.add(brief.token.toLowerCase());
+    });
+    const candidates: AiCandidate[] = [];
+    this.collectCandidates('formula', AI_D4_POOL_FORMULA, installedSet, candidates);
+    this.collectCandidates('cask', AI_D4_POOL_CASK, installedSet, candidates);
+    this.lastAiCandidates = candidates;
+
+    const input: AiDiscoverInput = new AiDiscoverInput();
+    input.locale = BrewDiscoverHomeViewModel.AI_LOCALE;
+    input.installed = briefs;
+    input.candidates = candidates;
+    input.epoch = BrewCacheEpoch.current();
+    input.exclude = force ? this.currentPickTokens() : [];
+    return input;
+  }
+
+  private collectCandidates(kind: string, cap: number, installedSet: Set<string>, out: AiCandidate[]): void {
+    const rows: CatalogEntry[] = BrewTable.rows(kind).slice(0, cap);
+    rows.forEach((row: CatalogEntry) => {
+      if (installedSet.has(row.token.toLowerCase())) {
+        return;
+      }
+      const candidate: AiCandidate = new AiCandidate();
+      candidate.token = row.token;
+      candidate.kind = kind;
+      candidate.categoryKey = BrewTaxonomy.categoryOf(kind, row.token, BrewTable.descOf(kind, row.token));
+      candidate.vol30d = row.vol30d;
+      candidate.velocity = row.velocity;
+      out.push(candidate);
+    });
+  }
+
+  /** 换一批时的 exclude：当前 AI 榜上的 token（已安装 + 池内仍是事实，别的都别信） */
+  private currentPickTokens(): string[] {
+    const board: BrewDiscoverBoard | null = this.state.aiBoard;
+    if (board === null) {
+      return [];
+    }
+    return board.entries.map((entry: BrewDiscoverEntry) => entry.token);
+  }
+
+  /**
+   * LLM 结果 → 渲染模型。字段可信度分三档：
+   *   池内事实（kind / categoryKey / installs30d / velocity / desc） > pick 事实（token / why）
+   *   > 占位（name = token，cask 显示名要发网络请求，不在这条链路里引）。
+   * 解析侧（parseDiscover）已保证每个 pick 都在池内，这里查不到的按防御直接跳过。
+   */
+  private applyAiResult(result: AiDiscoverResult): void {
+    const byToken: Map<string, AiCandidate> = new Map<string, AiCandidate>();
+    this.lastAiCandidates.forEach((c: AiCandidate) => {
+      byToken.set(c.token.toLowerCase(), c);
+    });
+    const entries: BrewDiscoverAiEntry[] = [];
+    result.picks.forEach((pick: AiDiscoverPick) => {
+      const candidate: AiCandidate | undefined = byToken.get(pick.token.toLowerCase());
+      if (candidate === undefined) {
+        return;
+      }
+      const entry: BrewDiscoverAiEntry = new BrewDiscoverAiEntry();
+      entry.rank = entries.length + 1;
+      entry.id = BrewBrowseBuilder.tokenId(candidate.token);
+      entry.token = candidate.token;
+      entry.name = candidate.token;
+      entry.desc = pick.why;
+      entry.categoryKey = candidate.categoryKey;
+      entry.installs30d = candidate.vol30d;
+      entry.velocity = candidate.velocity;
+      entry.kind = candidate.kind;
+      entries.push(entry);
+    });
+    // 大图卡取前 AI_D4_FEATURED_COUNT 张；desc 换成目录简介（大字位要的是"这是什么工具"，
+    // 推荐理由留在榜行的副文案位）。id 用池内 token 的稳定 id —— 详情路由与 stat 卡同键。
+    const featured: BrewDiscoverFeatured[] = [];
+    const featuredCount: number = Math.min(entries.length, AI_D4_FEATURED_COUNT);
+    for (let i: number = 0; i < featuredCount; i++) {
+      const entry: BrewDiscoverAiEntry = entries[i];
+      const card: BrewDiscoverFeatured = new BrewDiscoverFeatured();
+      card.rank = i + 1;
+      card.id = entry.id;
+      card.token = entry.token;
+      card.name = entry.name;
+      card.desc = BrewTable.descOf(entry.kind, entry.token);
+      card.categoryKey = entry.categoryKey;
+      card.installs30d = entry.installs30d;
+      card.velocity = entry.velocity;
+      card.kind = entry.kind;
+      card.boardKey = AI_BOARD;
+      featured.push(card);
+    }
+    // AI 虚拟榜：id=0 兜底"根不可点"（'ai' 特判本就吞掉 ViewAll，双保险），
+    // heroTitle = 画像 headline，boardKey='ai' 触发 BoardCard 特判（全显 / 换一批）。
+    const board: BrewDiscoverBoard = new BrewDiscoverBoard();
+    board.id = 0;
+    board.kind = '';
+    board.boardKey = AI_BOARD;
+    board.sequence = 0;
+    board.entryCount = entries.length;
+    board.entries = entries;
+    board.heroTitle = result.profile.headline;
+    this.state.aiFeatured = featured;
+    this.state.aiBoard = board;
+    this.state.aiErrorText = '';
+    this.state.aiPhase = BrewDiscoverAiPhase.READY;
+    this.rebuildFeed();
+    Logger.info(TAG,
+      `d4 ready: ${featured.length} featured + ${entries.length} rows, ` +
+      `headline=${result.profile.headline}, tags=[${result.profile.tags.join(',')}]`);
+  }
+
+  private applyAiError(error: Error): void {
+    let kind: AiErrorKind = AiErrorKind.E2_NETWORK;
+    if (error instanceof AiError) {
+      kind = error.kind;
+    }
+    // E1 = 配置态变化（生成过程中用户删了 Key）→ 回 HIDDEN 静默，与「无 Key 不出 AI 区」同口径
+    if (kind === AiErrorKind.E1_NO_KEY) {
+      this.state.aiPhase = BrewDiscoverAiPhase.HIDDEN;
+      this.rebuildFeed();
+      Logger.info(TAG, 'd4 hidden after failure: no api key');
+      return;
+    }
+    this.state.aiPhase = BrewDiscoverAiPhase.FAILED;
+    this.state.aiErrorText = error.message;
+    this.rebuildFeed();
+    Logger.error(TAG, `d4 failed: kind=${kind} ${error.message}`);
+  }
+
+  /**
+   * 唯一的 feed 拼装点（loadDiscover 与 D4 phase 变化都走这里）：AI 区前缀 + stat 混排。
+   * stat 序列逐位不动的规则在 `BrewDiscoverFeedItem.mix` 内部，这里只做前缀拼接。
+   */
+  private rebuildFeed(): void {
+    const aiFeed: BrewDiscoverFeedItem[] = this.buildAiFeedItems();
+    const statFeed: BrewDiscoverFeedItem[] =
+      BrewDiscoverFeedItem.mix(this.lastFeatured, this.lastBoards);
+    this.state.cardSource.setDataArray(aiFeed.concat(statFeed));
+    this.updateFlowSection();
+  }
+
+  private buildAiFeedItems(): BrewDiscoverFeedItem[] {
+    const phase: BrewDiscoverAiPhase = this.state.aiPhase;
+    if (phase === BrewDiscoverAiPhase.LOADING) {
+      // 首载骨架：3 大图卡形 + 1 榜卡形，占住 AI 区版位防跳动（spec §4.2）
+      return BrewDiscoverFeedItem.aiSkeletonFeed(AI_D4_FEATURED_COUNT);
+    }
+    if (phase === BrewDiscoverAiPhase.REFRESHING) {
+      // 换一批：旧大图卡先留着（别闪成骨架），只把榜卡位换回骨架
+      const items: BrewDiscoverFeedItem[] = [];
+      this.state.aiFeatured.forEach((item: BrewDiscoverFeatured) => {
+        items.push(BrewDiscoverFeedItem.ofAiFeatured(item));
+      });
+      return items.concat(BrewDiscoverFeedItem.aiSkeletonFeed(0));
+    }
+    if (phase === BrewDiscoverAiPhase.READY) {
+      const items: BrewDiscoverFeedItem[] = [];
+      this.state.aiFeatured.forEach((item: BrewDiscoverFeatured) => {
+        items.push(BrewDiscoverFeedItem.ofAiFeatured(item));
+      });
+      const board: BrewDiscoverBoard | null = this.state.aiBoard;
+      if (board !== null) {
+        items.push(BrewDiscoverFeedItem.ofAiBoard(board));
+      }
+      return items;
+    }
+    if (phase === BrewDiscoverAiPhase.FAILED) {
+      return [BrewDiscoverFeedItem.ofAiFailed()];
+    }
+    // HIDDEN：AI 区整段不出现，feed = 纯 stat 序列（老行为）
+    return [];
+  }
+
+  /** feed 的类型序列一行（F/B/a/A/s/S/X），读屏上真实内容，供 loadDiscover 的 order 日志 */
+  private feedOrderLine(): string {
+    const total: number = this.state.cardSource.totalCount();
+    let order: string = '';
+    for (let i: number = 0; i < total; i++) {
+      const one: BrewDiscoverFeedItem = this.state.cardSource.getData(i);
+      const type: number = one.feedType;
+      if (type === BrewDiscoverFeedType.FEATURED) {
+        order += 'F ';
+      } else if (type === BrewDiscoverFeedType.AI_FEATURED) {
+        order += 'a ';
+      } else if (type === BrewDiscoverFeedType.AI_BOARD) {
+        order += 'A ';
+      } else if (type === BrewDiscoverFeedType.AI_SKELETON_FEATURED) {
+        order += 's ';
+      } else if (type === BrewDiscoverFeedType.AI_SKELETON_BOARD) {
+        order += 'S ';
+      } else if (type === BrewDiscoverFeedType.AI_FAILED) {
+        order += 'X ';
+      } else {
+        order += 'B ';
+      }
+    }
+    return order.trim();
   }
 
   /**
@@ -333,6 +681,12 @@ export enum BrewDiscoverEventType {
   UPDATE_FLOW_SECTION = 'updateFlowSection',
   JUMP_DETAIL = 'jumpDetail',
   JUMP_BOARD = 'jumpBoard',
+  /** AI 发现流（D4）：目录 ready 后的自动装配入口（幂等，见 loadAiSection 的闸门） */
+  LOAD_AI = 'loadAiSection',
+  /** AI 失败占位卡上的「重试」（回 HIDDEN 重走闸门，不 force） */
+  AI_RETRY = 'aiRetry',
+  /** AI 榜卡 Hero 右上的「换一批」（force + exclude 当前 picks） */
+  AI_REGENERATE = 'aiRegenerate',
 }
 
 export interface BrewDiscoverEventParam<T> {

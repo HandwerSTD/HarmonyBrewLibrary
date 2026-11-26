@@ -13,6 +13,10 @@
 
 import {
   AI_D2_MAX_CANDIDATES,
+  AI_D4_BASIS_MAX_CHARS,
+  AI_D4_HEADLINE_MAX_CHARS,
+  AI_D4_PROFILE_TAG_MAX_CHARS,
+  AI_D4_PROFILE_TAGS_MAX,
   AI_PROVIDER_CUSTOM,
   AI_PROVIDER_DEEPSEEK,
 } from '../constant/AiConstants';
@@ -158,6 +162,99 @@ export class AiFailureInput {
  */
 export class AiIntentInput {
   public intent: string = '';
+}
+
+// ------------------------------------------------------------ D4 · AI 发现流
+
+/**
+ * D4 的画像对象（AI 发现流 spec §3.2）。
+ *
+ * MVP 只渲染 headline（AI 榜卡 Hero 标题位）；tags / basis 保留在结果里
+ * 供后续画像二级页使用。`isValid()` 与 D1 同纪律：逐字段校验，不把
+ * JSON.parse 的结果直接当响应对象。
+ */
+export class AiDiscoverProfile {
+  /** ≤40 字的画像一句话，第二人称（prompt 约束 30 字，解析留余量） */
+  public headline: string = '';
+  /** 1–4 个，每个 ≤16 字 */
+  public tags: string[] = [];
+  /** ≤60 字，画像依据（引用代表性已安装包） */
+  public basis: string = '';
+
+  public isValid(): boolean {
+    if (this.headline.trim().length === 0 || this.headline.length > AI_D4_HEADLINE_MAX_CHARS) {
+      return false;
+    }
+    if (this.tags.length === 0 || this.tags.length > AI_D4_PROFILE_TAGS_MAX) {
+      return false;
+    }
+    for (const tag of this.tags) {
+      if (tag.trim().length === 0 || tag.length > AI_D4_PROFILE_TAG_MAX_CHARS) {
+        return false;
+      }
+    }
+    return this.basis.trim().length > 0 && this.basis.length <= AI_D4_BASIS_MAX_CHARS;
+  }
+}
+
+/** D4 的一条推荐。token/kind 经候选池校验存活后才出现在这里。 */
+export class AiDiscoverPick {
+  public token: string = '';
+  /** `'formula'` | `'cask'` */
+  public kind: string = '';
+  /** ≤60 字的推荐理由（榜单行副文案位直接显示） */
+  public why: string = '';
+}
+
+/**
+ * D4 的解析结果。`picks` 是过滤后的存活列表；
+ * `dropped` / `droppedInstalled` 是 G5（候选池外）与已安装过滤的丢弃计数，
+ * 只进日志不进 UI（spec G3）。
+ */
+export class AiDiscoverResult {
+  public profile: AiDiscoverProfile = new AiDiscoverProfile();
+  public picks: AiDiscoverPick[] = [];
+  public dropped: number = 0;
+  public droppedInstalled: number = 0;
+}
+
+/** D4 输入里的一条已安装包摘要（token + kind + 近装标记）。 */
+export class AiInstalledBrief {
+  public token: string = '';
+  /** `'formula'` | `'cask'` */
+  public kind: string = '';
+  /** installedAt 在 AI_D4_RECENT_DAYS(30) 天内 */
+  public recent: boolean = false;
+}
+
+/** D4 候选池里的一条（目录子集，G5 校验的唯一依据）。 */
+export class AiCandidate {
+  public token: string = '';
+  /** `'formula'` | `'cask'` */
+  public kind: string = '';
+  /** BrewTaxonomy 分类，prompt 里给模型聚类线索 */
+  public categoryKey: string = '';
+  public vol30d: number = 0;
+  public velocity: number = 0;
+}
+
+/**
+ * D4 的输入（AI 发现流 spec §3.1 装配管线产物）。
+ *
+ * `epoch` 由调用方（VM）取 `BrewCacheEpoch.current()` 填入 —— AiTasks 不 import
+ * 目录层，缓存键的目录世代由输入携带（cacheKey = d4_{安装集哈希}_{epoch}_{locale}）。
+ */
+export class AiDiscoverInput {
+  /** `'zh'` | `'en'`（UI 语言） */
+  public locale: string = 'zh';
+  /** 已安装包摘要，installedAt 降序，≤ AI_D4_INSTALLED_CAP(150) */
+  public installed: AiInstalledBrief[] = [];
+  /** 候选池，vol30d 降序（formula top200 + cask top130 − 已安装） */
+  public candidates: AiCandidate[] = [];
+  /** 换一批时上一次已展示的 token 列表（force 路径才进 prompt） */
+  public exclude: string[] = [];
+  /** 目录世代号（BrewCacheEpoch.current()） */
+  public epoch: number = 0;
 }
 
 /**

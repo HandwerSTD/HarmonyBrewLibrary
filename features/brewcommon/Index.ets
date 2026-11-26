@@ -14,6 +14,7 @@ export {
   BrewCaskCategory,
   BrewCaskPageData,
   BrewDiscoverBoard,
+  BrewDiscoverAiEntry,
   BrewDiscoverEntry,
   BrewDiscoverFeatured,
   BrewDiscoverMeta,
@@ -320,12 +321,20 @@ export {
   AiIntentInput,
   isKnownAiProvider,
   d2CandidateCap,
+  AiDiscoverProfile,
+  AiDiscoverPick,
+  AiDiscoverResult,
+  AiInstalledBrief,
+  AiCandidate,
+  AiDiscoverInput,
 } from './src/main/ets/model/AiTypes';
 export {
   AI_PROMPT_VERSION_D1,
   AI_PROMPT_VERSION_D2,
+  AI_PROMPT_VERSION_D4,
   AI_CACHE_TTL_D1_MS,
   AI_CACHE_TTL_D2_MS,
+  AI_CACHE_TTL_D4_MS,
   AI_PROMPT_MAX_CHARS,
   AI_D3_STDERR_TAIL_CHARS,
   AI_D3_STDOUT_TAIL_CHARS,
@@ -340,8 +349,20 @@ export {
   AI_DEEPSEEK_DEFAULT_MODEL,
   AI_ASSET_ALIAS_API_KEY,
   AI_PREFS_KEY_AUTO_EXPLAIN,
+  AI_D4_MIN_INSTALLED,
+  AI_D4_INSTALLED_CAP,
+  AI_D4_POOL_FORMULA,
+  AI_D4_POOL_CASK,
+  AI_D4_PICKS,
+  AI_D4_PICKS_MIN,
+  AI_D4_FEATURED_COUNT,
+  AI_D4_RECENT_DAYS,
 } from './src/main/ets/constant/AiConstants';
 export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
+// ------------------------------------------------------------------ AI 发现流（D4 · 发现页个性化推荐）
+// spec 2026-11-26-ai-discover-feed-spec.md：画像 + 推荐取数（brewcommon 侧）、
+// 装配与渲染在 brewdiscover。fnv1a32 是 install 集签名（cacheKey 材料）。
+export { fnv1a32 } from './src/main/ets/util/BrewHash';
 
 // ------------------------------------------------------------------ Y · 更新情报中心（Release Intelligence）
 
@@ -398,7 +419,9 @@ export {
 
 // 执行设备上的 `brew info --json=v2 --installed` 并把结果归一成三个集合。
 // 失败分类在抛出的异常的 message 里（`BrewInstalledFailure` 的取值）。
-export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewInstalledSets } from './src/main/ets/service/BrewInstalledLoader';
+export { BrewInstalledLoader, BrewInstalledFailure, BrewInstalledOutcome, BrewInstalledSets,
+  BrewInstalledSnapshot } from './src/main/ets/service/BrewInstalledLoader';
+export { BrewTaxonomy } from './src/main/ets/constant/BrewTaxonomy';
 export { BrewInstalledParser } from './src/main/ets/util/BrewInstalledParser';
 export type { BrewCaskDoc, BrewFormulaDoc, BrewInstalledDoc, BrewInstalledKegDoc } from './src/main/ets/model/BrewInstalledDoc';
 

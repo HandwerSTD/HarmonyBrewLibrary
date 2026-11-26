@@ -9,18 +9,29 @@ import {
   AI_CACHE_TTL_D1_MS,
   AI_PROMPT_MAX_CHARS,
   AI_CACHE_TTL_D2_MS,
+  AI_CACHE_TTL_D4_MS,
   AI_D2_MAX_CANDIDATES,
   AI_D2_RESULT_LIMIT,
   AI_D3_STDERR_TAIL_CHARS,
   AI_D3_STDOUT_TAIL_CHARS,
+  AI_D4_PICKS,
+  AI_D4_PICKS_MIN,
+  AI_D4_POOL_CASK,
+  AI_D4_POOL_FORMULA,
+  AI_D4_PROFILE_TAGS_MAX,
+  AI_D4_WHY_MAX_CHARS,
+  AI_FEATURE_D4,
   AI_MAX_TOKENS_D1,
   AI_MAX_TOKENS_D2,
   AI_MAX_TOKENS_D3,
+  AI_MAX_TOKENS_D4,
   AI_PROMPT_VERSION_D1,
   AI_PROMPT_VERSION_D2,
+  AI_PROMPT_VERSION_D4,
   AI_TEMPERATURE_D1,
   AI_TEMPERATURE_D2,
   AI_TEMPERATURE_D3,
+  AI_TEMPERATURE_D4,
 } from '../constant/AiConstants';
 // RI（更新情报）的常量单独成文件：只被 release intel 一条链路使用，见 ReleaseIntelConstants
 import {
@@ -31,6 +42,11 @@ import {
   RELEASE_INTEL_FEATURE,
 } from '../constant/ReleaseIntelConstants';
 import {
+  AiCandidate,
+  AiDiscoverInput,
+  AiDiscoverPick,
+  AiDiscoverProfile,
+  AiDiscoverResult,
   AiError,
   AiErrorKind,
   AiExplainCard,
@@ -52,6 +68,7 @@ import { AiClient } from './AiClient';
 import type { AiClientTask, AiCompletion as AiCompletion2 } from './AiClient';
 import { AiSettingsStore } from './AiSettingsStore';
 import { AiTaskWords as AiTaskWordsStatic, AiTaskWord } from '../util/AiTaskWords';
+import { fnv1a32 } from '../util/BrewHash';
 
 const TAG: string = '[ai]';
 
@@ -705,6 +722,260 @@ export class AiTasks {
       }
       return card;
     });
+  }
+
+  // ------------------------------------------------------------ D4 · AI 发现流
+
+  /**
+   * AI 发现流取数（spec §3.4）：单次调用同时产出画像 + 10 个推荐。
+   *
+   * cacheKey = `d4_{安装集哈希}_{目录世代}_{locale}`——安装集 / 目录 / 语言任一变化
+   * 都是新 key 自动 MISS；TTL 1 天，stale-while-revalidate；缓存存模型原始输出，
+   * 读回重新走同一套解析 + G5 过滤（cacheKey 含 epoch 保证候选池未变）。
+   *
+   * force（「换一批」）旁路读缓存直接调用，prompt 附 exclude 列表（排除当前已展示
+   * 的 picks），**照常写回同一 key**——安装集没变画像就不该变，换的是推荐不是画像。
+   */
+  public static discover(input: AiDiscoverInput, force: boolean = false): Promise<AiDiscoverResult> {
+    const cacheKey: string = AiTasks.d4CacheKey(input);
+    const providerKey: string = AiTasks.providerModelKey();
+    if (force) {
+      return AiTasks.fetchDiscover(input, providerKey, cacheKey);
+    }
+    const cached: AiCacheLookup = AiTasks.lookup(AI_FEATURE_D4, providerKey, cacheKey,
+      AI_PROMPT_VERSION_D4, AI_CACHE_TTL_D4_MS);
+    if (cached.hit) {
+      const result: AiDiscoverResult | null = AiTasks.parseDiscover(cached.dataJson, input);
+      if (result !== null) {
+        Logger.info(TAG, `d4 cache hit picks=${result.picks.length} age=${cached.age}`);
+        return Promise.resolve(result);
+      }
+    }
+    if (cached.stale) {
+      const staleResult: AiDiscoverResult | null = AiTasks.parseDiscover(cached.dataJson, input);
+      if (staleResult !== null) {
+        Logger.info(TAG, `d4 stale-while-revalidate picks=${staleResult.picks.length}`);
+        // 后台刷新失败只意味着继续用旧值，吞掉 rejection 防 unhandled
+        AiTasks.fetchDiscover(input, providerKey, cacheKey)
+          .catch((err: Error) => {
+            Logger.warn(TAG, `d4 background refresh failed. reason=${err.message}`);
+          });
+        return Promise.resolve(staleResult);
+      }
+    }
+    return AiTasks.fetchDiscover(input, providerKey, cacheKey);
+  }
+
+  private static fetchDiscover(input: AiDiscoverInput, providerKey: string,
+    cacheKey: string): Promise<AiDiscoverResult> {
+    const task: AiClientTask = AiClient.newTask();
+    task.system = AiTasks.d4System(input.locale);
+    task.user = AiTasks.d4UserPrompt(input);
+    task.temperature = AI_TEMPERATURE_D4;
+    task.maxTokens = AI_MAX_TOKENS_D4;
+    return AiClient.complete(task).then((completion) => {
+      const outcome: ParseOutcome = new ParseOutcome();
+      const result: AiDiscoverResult | null = AiTasks.parseDiscover(completion.content, input, outcome);
+      if (result === null) {
+        // 诊断打点（对齐 RI）：finish=length 即 max_tokens 截断；tail 看 JSON 断在哪
+        Logger.warn(TAG, `d4 parse fail finish=${completion.finishReason} ` +
+          `len=${completion.content.length} ` +
+          `tail=${AiClient.sanitize(completion.content.substring(Math.max(0,
+          completion.content.length - 80)))}`);
+        throw new AiError(AiErrorKind.E4_BAD_FORMAT,
+          `d4 reason=${e4ReasonOf(completion, outcome.reason)}`);
+      }
+      // 缓存存模型原始输出，读侧 parseDiscover 同口径（对齐 D2 / RI 的教训）
+      AiCache.write(AI_FEATURE_D4, providerKey, cacheKey, AI_PROMPT_VERSION_D4,
+        completion.model, completion.content);
+      Logger.info(TAG, `d4 ok picks=${result.picks.length} dropped=${result.dropped} ` +
+        `droppedInstalled=${result.droppedInstalled} latency=${completion.latencyMs}`);
+      return result;
+    });
+  }
+
+  /**
+   * cacheKey：`d4_{fnv1a32(安装集签名)}_{epoch}_{locale}`。
+   * 签名 = 排序小写 token 逗号连接（顺序无关）；≤64 chars 满足 AiCache.pathOf 的
+   * sanitize 预算（8 hex + epoch + locale + 两段前缀 ≈ 20+ chars）。
+   */
+  private static d4CacheKey(input: AiDiscoverInput): string {
+    const tokens: string[] = [];
+    for (const one of input.installed) {
+      tokens.push(one.token.toLowerCase().trim());
+    }
+    tokens.sort();
+    const sig: string = fnv1a32(tokens.join(','));
+    return `d4_${sig}_${input.epoch}_${input.locale}`;
+  }
+
+  /**
+   * user prompt（spec §3.2 紧凑格式）。预算超限时的收缩顺序：
+   * 候选池两侧各减 20（保 vol30d 最高的头部），到 40/26 的下限后交给
+   * AiClient 的 8KB 守卫（E4 兜底，正常数据量不可达——7.6K 常态预算见 spec）。
+   */
+  private static d4UserPrompt(input: AiDiscoverInput): string {
+    let formulaCount: number = AI_D4_POOL_FORMULA;
+    let caskCount: number = AI_D4_POOL_CASK;
+    let lines: string[] = AiTasks.d4PromptLines(input, formulaCount, caskCount);
+    while ((AiTasks.d4System(input.locale).length + lines.join('\n').length) > AI_PROMPT_MAX_CHARS &&
+      formulaCount > 40) {
+      formulaCount -= 20;
+      caskCount = Math.max(26, caskCount - 20);
+      lines = AiTasks.d4PromptLines(input, formulaCount, caskCount);
+    }
+    return lines.join('\n') + '\n请按 schema 输出 JSON。';
+  }
+
+  /** prompt 的分段行（installed / candidates / exclude），两处调用保持口径一致 */
+  private static d4PromptLines(input: AiDiscoverInput, formulaCount: number,
+    caskCount: number): string[] {
+    const lines: string[] = [];
+    lines.push(`locale: ${input.locale}`);
+    // installed：kind 前缀 + `*` = 近 30 天安装（画像的新鲜信号）
+    lines.push('installed (f=formula c=cask *=installed within 30d):');
+    let fLine: string = 'f:';
+    let cLine: string = 'c:';
+    for (const one of input.installed) {
+      const entry: string = `${one.token}${one.recent ? '*' : ''}`;
+      if (one.kind === 'cask') {
+        cLine += ` ${entry}`;
+      } else {
+        fLine += ` ${entry}`;
+      }
+    }
+    if (fLine.length > 2) {
+      lines.push(fLine);
+    }
+    if (cLine.length > 2) {
+      lines.push(cLine);
+    }
+    // candidates：kind + token + 分类（模型聚类线索）；候选池已按 vol30d 降序
+    lines.push('candidates (kind: token [category]):');
+    let fLeft: number = formulaCount;
+    let cLeft: number = caskCount;
+    for (const one of input.candidates) {
+      if (one.kind === 'cask') {
+        if (cLeft <= 0) {
+          continue;
+        }
+        cLeft--;
+      } else {
+        if (fLeft <= 0) {
+          continue;
+        }
+        fLeft--;
+      }
+      lines.push(`${one.kind === 'cask' ? 'c' : 'f'}: ${one.token} [${one.categoryKey}]`);
+    }
+    // exclude：仅换一批（force）时出现
+    if (input.exclude.length > 0) {
+      lines.push(`exclude (do not recommend again): ${input.exclude.join(' ')}`);
+    }
+    return lines;
+  }
+
+  /** system prompt（spec §3.2 schema）。locale 插值：画像文本按 UI 语言输出。 */
+  private static d4System(locale: string): string {
+    return '你是 Homebrew 生态的个性化推荐引擎。根据用户已安装的包推断用户画像，' +
+      '并从候选池中推荐最符合画像的包。严格输出 JSON，不要输出其他内容：\n' +
+      '{"profile":{"headline":"画像一句话，第二人称「你」，概括技术角色与偏好",' +
+      '"tags":["画像标签，1-4个"],"basis":"画像依据，引用最具代表性的已安装包"},' +
+      '"picks":[{"token":"候选池里的包名，原样照抄","kind":"formula|cask",' +
+      '"why":"为什么推荐给这个画像，要具体贴合画像，不复述包功能"}]}\n' +
+      '规则：picks 恰好 10 个；token 只能取自候选池，禁止编造；' +
+      '不推荐已安装列表里出现过的包；formula 与 cask 混合，比例贴合画像；' +
+      `headline ≤30 字、tags 每个 ≤8 字、basis ≤40 字、why 每个 ≤40 字；` +
+      `全部文本用 ${locale === 'en' ? '英文' : '简体中文'}。\n` +
+      '输出必须是一个**完整**的 JSON 对象，不得中途截断。\n' +
+      AiTasks.PLATFORM_RULE;
+  }
+
+  /**
+   * D4 解析（spec §3.3）：profile 逐字段校验（isValid）；picks 条数 ∈ [3,10]
+   * （超 10 视为 schema 不符 → E4）；token 规范化小写后过**候选池**（G5 防幻影）
+   * 与**已安装**两道过滤，丢弃计数进结果（只进日志不进 UI）；重复 token 保留首个。
+   *
+   * kind 不信模型输出——候选池命中即取池内的 kind（G5 单一事实源）。
+   */
+  private static parseDiscover(text: string, input: AiDiscoverInput,
+    outcome?: ParseOutcome): AiDiscoverResult | null {
+    // G5 与已安装过滤的查找结构（闭包捕获；parseJsonSafe 最多重试三次，重建成本可忽略）
+    const candidateByToken: Map<string, AiCandidate> = new Map<string, AiCandidate>();
+    for (const one of input.candidates) {
+      candidateByToken.set(one.token.toLowerCase().trim(), one);
+    }
+    const installedSet: Set<string> = new Set<string>();
+    for (const one of input.installed) {
+      installedSet.add(one.token.toLowerCase().trim());
+    }
+    return parseJsonSafe(text, (obj: Record<string, Object>): AiDiscoverResult | null => {
+      // ---- profile ----
+      const profileRaw: Object | undefined = obj['profile'];
+      if (profileRaw === undefined || profileRaw === null || Array.isArray(profileRaw)) {
+        return null;
+      }
+      const profileObj: Record<string, Object> = profileRaw as Record<string, Object>;
+      const profile: AiDiscoverProfile = new AiDiscoverProfile();
+      profile.headline = typeof profileObj['headline'] === 'string' ? profileObj['headline'] as string : '';
+      profile.tags = stringArrayOf(profileObj['tags'], AI_D4_PROFILE_TAGS_MAX);
+      profile.basis = typeof profileObj['basis'] === 'string' ? profileObj['basis'] as string : '';
+      if (!profile.isValid()) {
+        Logger.warn(TAG, `d4 profile invalid headline=${profile.headline.length} ` +
+          `tags=${profile.tags.length} basis=${profile.basis.length}`);
+        return null;
+      }
+      // ---- picks ----
+      const picksRaw: Object | undefined = obj['picks'];
+      if (picksRaw === undefined || !Array.isArray(picksRaw)) {
+        return null;
+      }
+      const list: Array<Object> = picksRaw as Array<Object>;
+      if (list.length < AI_D4_PICKS_MIN || list.length > AI_D4_PICKS) {
+        Logger.warn(TAG, `d4 picks count=${list.length} out of range`);
+        return null;
+      }
+      const result: AiDiscoverResult = new AiDiscoverResult();
+      result.profile = profile;
+      const seen: Set<string> = new Set<string>();
+      for (const rec of list) {
+        if (rec === undefined || rec === null) {
+          continue;
+        }
+        const recObj: Record<string, Object> = rec as Record<string, Object>;
+        const token: string = typeof recObj['token'] === 'string' ?
+          (recObj['token'] as string).toLowerCase().trim() : '';
+        const why: string = typeof recObj['why'] === 'string' ? recObj['why'] as string : '';
+        if (token.length === 0 || why.trim().length === 0 || why.length > AI_D4_WHY_MAX_CHARS) {
+          result.dropped++;
+          continue;
+        }
+        if (seen.has(token)) {
+          continue; // 去重：保留首个，不计 dropped
+        }
+        if (installedSet.has(token)) {
+          result.droppedInstalled++;
+          continue;
+        }
+        const candidate: AiCandidate | undefined = candidateByToken.get(token);
+        if (candidate === undefined) {
+          result.dropped++; // G5：幻影 token（候选池外 = 目录外）
+          continue;
+        }
+        seen.add(token);
+        const pick: AiDiscoverPick = new AiDiscoverPick();
+        pick.token = candidate.token;
+        pick.kind = candidate.kind;
+        pick.why = why.trim();
+        result.picks.push(pick);
+      }
+      if (result.picks.length < AI_D4_PICKS_MIN) {
+        Logger.warn(TAG, `d4 survivors=${result.picks.length} below min, ` +
+          `dropped=${result.dropped} droppedInstalled=${result.droppedInstalled}`);
+        return null;
+      }
+      return result;
+    }, outcome);
   }
 
   // ------------------------------------------------------------ 缓存与工具

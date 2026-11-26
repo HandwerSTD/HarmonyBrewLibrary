@@ -10,15 +10,19 @@ import {
   OffsetParam,
   TabBarType,
 } from '@ohos/commonbusiness';
-import { BrewDiscoverBoard as BrewDiscoverBoardClass, BrewDiscoverFeatured, BrewKind } from '@ohos/brewcommon';
+import { BrewDiscoverAiEntry, BrewDiscoverBoard as BrewDiscoverBoardClass, BrewDiscoverFeatured, BrewKind } from '@ohos/brewcommon';
 import type {
   BrewDetailParams,
   BrewDiscoverBoard,
   BrewDiscoverBoardParams,
   BrewDiscoverEntry,
 } from '@ohos/brewcommon';
+import { BrewDiscoverAiFailedCard } from '../component/BrewDiscoverAiFailedCard';
+import { BrewDiscoverAiSkeletonBoardCard } from '../component/BrewDiscoverAiSkeletonBoardCard';
+import { BrewDiscoverAiSkeletonFeaturedCard } from '../component/BrewDiscoverAiSkeletonFeaturedCard';
 import { BrewDiscoverBoardCard } from '../component/BrewDiscoverBoardCard';
 import { BrewDiscoverFeaturedCard } from '../component/BrewDiscoverFeaturedCard';
+import { AI_BOARD } from '../model/BrewBoardStyle';
 import { BrewDiscoverFeedItem, BrewDiscoverFeedType } from '../model/BrewDiscoverFeedItem';
 import type { BrewDiscoverState } from '../viewmodel/BrewDiscoverState';
 import { BrewDiscoverEventType, BrewDiscoverHomeViewModel } from '../viewmodel/BrewDiscoverVM';
@@ -31,6 +35,10 @@ import { BrewDiscoverEventType, BrewDiscoverHomeViewModel } from '../viewmodel/B
  * 同样没有 banner FlowItem —— Homebrew 无横幅素材，对应 ViewModel 里 banner 高度固定为 0。
  *
  * 差别只在卡的内容：这里一张卡 = 一张榜（趋势/历史/新星 × Formulae/Casks，共 6 张）。
+ *
+ * D4（AI 发现流）：feed 头部前插 AI 区 —— 3 张单包大图卡（复用 FeaturedCard，boardKey='ai'）
+ * + 1 张 AI 榜卡（复用 BoardCard 的 'ai' 特判：全显、无二级页、Hero 右上换一批），
+ * 装载期是同形的骨架卡，失败是占位卡。stat 驱动的六榜逐位不动。
  */
 @Component({ freezeWhenInactive: true })
 export struct BrewDiscoverBaseView {
@@ -81,6 +89,9 @@ export struct BrewDiscoverBaseView {
    *
    * `categoryKey` 取自榜单条目自身（生成器写入），详情页据此查「同分类其他包」；
    * 不要留空，否则从 Discover 点进去的详情页会缺这一段推荐。
+   *
+   * D4：AI 榜的 `kind` 不在 board 上（虚拟榜 kind=''），而在**每行**的
+   * `BrewDiscoverAiEntry.kind`（候选池单一事实源，不信 LLM 输出）。
    */
   jumpDetail(entry: BrewDiscoverEntry, board: BrewDiscoverBoard): void {
     if (!entry.id) {
@@ -93,7 +104,12 @@ export struct BrewDiscoverBaseView {
       token: entry.token,
       categoryKey: entry.categoryKey,
     };
-    param.kind = board.kind === 'cask' ? BrewKind.CASK : BrewKind.FORMULA;
+    if (board.boardKey === AI_BOARD) {
+      const aiEntry = entry as BrewDiscoverAiEntry;
+      param.kind = aiEntry.kind === 'cask' ? BrewKind.CASK : BrewKind.FORMULA;
+    } else {
+      param.kind = board.kind === 'cask' ? BrewKind.CASK : BrewKind.FORMULA;
+    }
     this.viewModel.sendEvent<BrewDetailParams>({
       type: BrewDiscoverEventType.JUMP_DETAIL,
       param: param,
@@ -149,12 +165,38 @@ export struct BrewDiscoverBaseView {
 
       LazyForEach(this.discoverState.cardSource, (feed: BrewDiscoverFeedItem) => {
         FlowItem() {
-          if (feed.feedType === BrewDiscoverFeedType.FEATURED) {
-            // 单 App 大图卡：一张卡 = 一个包
+          if (feed.feedType === BrewDiscoverFeedType.FEATURED
+            || feed.feedType === BrewDiscoverFeedType.AI_FEATURED) {
+            // 单 App 大图卡：一张卡 = 一个包（stat featured 与 AI 大图卡同卡不同 key 前缀）
             BrewDiscoverFeaturedCard({
               item: feed.featured ?? new BrewDiscoverFeatured(),
               handleItemClick: (clicked: BrewDiscoverFeatured) => {
                 this.jumpFeatured(clicked);
+              },
+            })
+          } else if (feed.feedType === BrewDiscoverFeedType.AI_BOARD) {
+            // AI 榜卡：BoardCard 的 'ai' 特判（全显/无二级页/Hero 右上换一批）
+            BrewDiscoverBoardCard({
+              board: feed.board ?? new BrewDiscoverBoardClass(),
+              handleEntryClick: (entry: BrewDiscoverEntry) => {
+                this.jumpDetail(entry, feed.board ?? new BrewDiscoverBoardClass());
+              },
+              handleViewAll: (board: BrewDiscoverBoard) => {
+                this.jumpBoard(board);
+              },
+              handleRegenerate: () => {
+                this.viewModel.sendEvent({ type: BrewDiscoverEventType.AI_REGENERATE, param: null });
+              },
+            })
+          } else if (feed.feedType === BrewDiscoverFeedType.AI_SKELETON_FEATURED) {
+            BrewDiscoverAiSkeletonFeaturedCard()
+          } else if (feed.feedType === BrewDiscoverFeedType.AI_SKELETON_BOARD) {
+            BrewDiscoverAiSkeletonBoardCard()
+          } else if (feed.feedType === BrewDiscoverFeedType.AI_FAILED) {
+            BrewDiscoverAiFailedCard({
+              errorText: this.discoverState.aiErrorText,
+              handleRetry: () => {
+                this.viewModel.sendEvent({ type: BrewDiscoverEventType.AI_RETRY, param: null });
               },
             })
           } else {

@@ -497,6 +497,30 @@
       "value": "新上架与上升"
     },
     {
+      "name": "brew_board_ai",
+      "value": "AI 为你推荐"
+    },
+    {
+      "name": "brew_discover_ai_badge",
+      "value": "AI 推荐"
+    },
+    {
+      "name": "brew_discover_ai_regenerate",
+      "value": "换一批推荐"
+    },
+    {
+      "name": "brew_discover_ai_failed",
+      "value": "AI 推荐暂时不可用"
+    },
+    {
+      "name": "brew_discover_ai_retry",
+      "value": "重试"
+    },
+    {
+      "name": "brew_discover_ai_installed_badge",
+      "value": "已安装"
+    },
+    {
       "name": "brew_discover_velocity_badge",
       "value": "↑%s×"
     },

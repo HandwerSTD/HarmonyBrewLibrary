@@ -493,6 +493,30 @@
       "value": "New & rising"
     },
     {
+      "name": "brew_board_ai",
+      "value": "AI Picks for You"
+    },
+    {
+      "name": "brew_discover_ai_badge",
+      "value": "AI PICKS"
+    },
+    {
+      "name": "brew_discover_ai_regenerate",
+      "value": "Refresh picks"
+    },
+    {
+      "name": "brew_discover_ai_failed",
+      "value": "AI picks are unavailable right now"
+    },
+    {
+      "name": "brew_discover_ai_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "brew_discover_ai_installed_badge",
+      "value": "Installed"
+    },
+    {
       "name": "brew_discover_velocity_badge",
       "value": "↑%s×"
     },

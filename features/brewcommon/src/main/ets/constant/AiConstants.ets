@@ -12,13 +12,16 @@
 /** 每个任务 prompt 的版本号。**变更即该任务的全部落盘缓存失效**（spec G9）。 */
 export const AI_PROMPT_VERSION_D1: number = 2;
 export const AI_PROMPT_VERSION_D2: number = 1;
+export const AI_PROMPT_VERSION_D4: number = 1;
 
 /**
  * 缓存 TTL（spec §3.3）：D1 7 天 / D2 1 天 / D3 不缓存（D3 无目录，也不落盘）。
+ * D4（AI 发现流）1 天：画像由安装集决定，一天内反复进出不重算。
  * 过期不删：先返回旧值再后台刷新（stale-while-revalidate，G10）。
  */
 export const AI_CACHE_TTL_D1_MS: number = 7 * 24 * 60 * 60 * 1000;
 export const AI_CACHE_TTL_D2_MS: number = 24 * 60 * 60 * 1000;
+export const AI_CACHE_TTL_D4_MS: number = 24 * 60 * 60 * 1000;
 
 /**
  * prompt 总长上限（spec §3.2，8KB）。超出按各任务规则先截 caveats（D1）、
@@ -35,6 +38,8 @@ export const AI_D3_STDOUT_TAIL_CHARS: number = 2048;
 export const AI_TEMPERATURE_D1: number = 0.3;
 export const AI_TEMPERATURE_D2: number = 0.2;
 export const AI_TEMPERATURE_D3: number = 0.2;
+/** D4（AI 发现流）：推荐要多样性，高于 D2 的 0.2。 */
+export const AI_TEMPERATURE_D4: number = 0.5;
 
 /** 测试连接的最小 completion 输出上限（spec §3.1：max_tokens=8）。 */
 export const AI_PROBE_MAX_TOKENS: number = 8;
@@ -48,6 +53,11 @@ export const AI_PROBE_MAX_TOKENS: number = 8;
 export const AI_MAX_TOKENS_D1: number = 800;
 export const AI_MAX_TOKENS_D2: number = 600;
 export const AI_MAX_TOKENS_D3: number = 500;
+/**
+ * D4（AI 发现流）：10 picks × 中文 why + profile + JSON 开销。
+ * 截断（finish=length）走 E4-truncated，失败占位卡重试可解。
+ */
+export const AI_MAX_TOKENS_D4: number = 1200;
 
 /**
  * 缓存目录（spec §3.3）：`filesDir/brew_live/ai/<feature>/<providerModelKey>/<cacheKey>.json`。
@@ -57,6 +67,8 @@ export const AI_CACHE_ROOT_SEGMENT: string = 'brew_live/ai';
 /** 功能目录名。 */
 export const AI_FEATURE_D1: string = 'd1';
 export const AI_FEATURE_D2: string = 'd2';
+/** D4（AI 发现流）的功能目录名（第四个 D 系任务）。 */
+export const AI_FEATURE_D4: string = 'd4';
 
 /**
  * Asset Store Kit 的关键资产别名。Key 只存在这里（G1）；
@@ -112,3 +124,33 @@ export const AI_TIMEOUT_MS: number = 15000;
  * 存不进 Asset 的 Key 只活在本进程内存里，设置页会提示用户重启后需重填。
  */
 export const AI_KEY_MEMORY_ONLY_NOTE: boolean = true;
+
+// ------------------------------------------------------------ D4 · AI 发现流
+// spec：docs/superpowers/specs/2026-11-26-ai-discover-feed-spec.md §5
+
+/** 少于 3 个已安装包推不出画像 → AI 区不出现（hidden）。 */
+export const AI_D4_MIN_INSTALLED: number = 3;
+/** prompt 安装清单上限（installedAt 降序截，近装优先）。 */
+export const AI_D4_INSTALLED_CAP: number = 150;
+/** 候选池 formula 条数（vol30d 降序，目录子集 = G5 校验的唯一依据）。 */
+export const AI_D4_POOL_FORMULA: number = 200;
+/** 候选池 cask 条数。 */
+export const AI_D4_POOL_CASK: number = 130;
+/** 期望输出 picks 数（prompt 写死「恰好 10 个」）。 */
+export const AI_D4_PICKS: number = 10;
+/** G5 + 已安装过滤后存活下限，低于判失败（失败占位卡）。 */
+export const AI_D4_PICKS_MIN: number = 3;
+/** 上大图卡的 picks 前缀数（「若干」的落地值，spec §8 评审可调 2–5）。 */
+export const AI_D4_FEATURED_COUNT: number = 3;
+/** 画像标签个数上限。 */
+export const AI_D4_PROFILE_TAGS_MAX: number = 4;
+/** 画像标签单条字数上限（解析校验用；prompt 约束 8 字）。 */
+export const AI_D4_PROFILE_TAG_MAX_CHARS: number = 16;
+/** headline 字数上限（解析校验用；prompt 约束 30 字）。 */
+export const AI_D4_HEADLINE_MAX_CHARS: number = 40;
+/** why 字数上限（解析校验用；prompt 约束 40 字）。 */
+export const AI_D4_WHY_MAX_CHARS: number = 60;
+/** basis 字数上限（解析校验用；prompt 约束 40 字）。 */
+export const AI_D4_BASIS_MAX_CHARS: number = 60;
+/** 「近装」标记窗口（天）：installedAt 在窗口内带 `*` 进 prompt。 */
+export const AI_D4_RECENT_DAYS: number = 30;
