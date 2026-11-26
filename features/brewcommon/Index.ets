@@ -300,7 +300,9 @@ export {
   SENTINEL_WORK_INTERVAL_MS,
   SENTINEL_WORK_SCHEDULER_ENABLED,
 } from './src/main/ets/constant/SentinelConstants';
-// ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3）
+// ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3/D4）
+// D2 已问答化（2026-11-26-ai-search-ask-spec）：AiSearchPick/AiSearchAnswer 替代旧
+// AiToolCandidate/AiToolResult；词表（AiTaskWords）随贴片退役一并删除。
 
 export { AiClient } from './src/main/ets/service/AiClient';
 export { AiErrorDetail } from './src/main/ets/util/AiErrorDetail';
@@ -313,14 +315,13 @@ export {
   AiProviderConfig,
   AiSettingsSnapshot,
   AiExplainCard,
-  AiToolCandidate,
-  AiToolResult,
+  AiSearchPick,
+  AiSearchAnswer,
   AiFailureCard,
   AiExplainInput,
   AiFailureInput,
   AiIntentInput,
   isKnownAiProvider,
-  d2CandidateCap,
   AiDiscoverProfile,
   AiDiscoverPick,
   AiDiscoverResult,
@@ -338,8 +339,9 @@ export {
   AI_PROMPT_MAX_CHARS,
   AI_D3_STDERR_TAIL_CHARS,
   AI_D3_STDOUT_TAIL_CHARS,
-  AI_TASKWORDS_RAWFILE,
-  AI_TASKWORDS_MIN_COUNT,
+  AI_D2_LEAD_MAX_CHARS,
+  AI_D2_INTRO_MAX_CHARS,
+  AI_D2_TAIL_ROWS_MAX,
   AI_D2_MAX_CANDIDATES,
   AI_D2_RESULT_LIMIT,
   AI_TIMEOUT_MS,
@@ -349,6 +351,7 @@ export {
   AI_DEEPSEEK_DEFAULT_MODEL,
   AI_ASSET_ALIAS_API_KEY,
   AI_PREFS_KEY_AUTO_EXPLAIN,
+  AI_PREFS_KEY_AI_SEARCH,
   AI_D4_MIN_INSTALLED,
   AI_D4_INSTALLED_CAP,
   AI_D4_POOL_FORMULA,
@@ -358,7 +361,6 @@ export {
   AI_D4_FEATURED_COUNT,
   AI_D4_RECENT_DAYS,
 } from './src/main/ets/constant/AiConstants';
-export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
 // ------------------------------------------------------------------ AI 发现流（D4 · 发现页个性化推荐）
 // spec 2026-11-26-ai-discover-feed-spec.md：画像 + 推荐取数（brewcommon 侧）、
 // 装配与渲染在 brewdiscover。fnv1a32 是 install 集签名（cacheKey 材料）。

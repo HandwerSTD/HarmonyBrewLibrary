@@ -730,32 +730,56 @@
       "value": "Three steps to start"
     },
     {
-      "name": "ai_d2_entry",
-      "value": "AI Tool Finder"
+      "name": "ai_search_placeholder_ai",
+      "value": "Ask me anything!"
     },
     {
-      "name": "ai_d2_hint",
-      "value": "Describe your task, e.g. batch-compress images"
+      "name": "ai_search_examples_header",
+      "value": "Try asking"
     },
     {
-      "name": "ai_d2_search",
-      "value": "Find tools"
+      "name": "ai_search_example_1",
+      "value": "Help me pick a coding agent"
     },
     {
-      "name": "ai_d2_fallback_notice",
-      "value": "AI not configured; switched to offline word list"
+      "name": "ai_search_example_2",
+      "value": "CLI tool to batch-compress images"
     },
     {
-      "name": "ai_d2_empty",
-      "value": "No matching tools found"
+      "name": "ai_search_example_3",
+      "value": "A CLI that can record the screen"
     },
     {
-      "name": "ai_d2_empty_hint",
-      "value": "Try rephrasing, e.g. \"batch-compress images\""
+      "name": "ai_search_fallback_notice",
+      "value": "AI unavailable; showing local results"
     },
     {
-      "name": "ai_d2_badge",
-      "value": "AI nominated · ranked locally"
+      "name": "ai_search_fallback_no_key",
+      "value": "AI not configured; showing local results"
+    },
+    {
+      "name": "ai_search_failed",
+      "value": "AI answer generation failed"
+    },
+    {
+      "name": "ai_search_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "ai_search_use_local",
+      "value": "Search locally"
+    },
+    {
+      "name": "ai_search_empty",
+      "value": "AI isn't sure about this one; try rephrasing"
+    },
+    {
+      "name": "ai_search_related_header",
+      "value": "Related in the catalog"
+    },
+    {
+      "name": "ai_search_footer",
+      "value": "AI generated · verified against the local catalog"
     },
     {
       "name": "ai_d3_button",
@@ -852,10 +876,6 @@
     {
       "name": "ai_settings_auto_intel_hint",
       "value": "Summarize the release intel card with AI; turn off to show the original notes only"
-    },
-    {
-      "name": "ai_d2_related",
-      "value": "In catalog"
     },
     {
       "name": "brew_cat_formula_lib",

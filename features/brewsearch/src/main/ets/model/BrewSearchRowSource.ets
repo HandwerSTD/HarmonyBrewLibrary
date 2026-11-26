@@ -36,6 +36,14 @@ export class BrewSearchRowSource implements IDataSource {
     });
   }
 
+  /**
+   * 全量行快照（AI fallback 态用 `ForEach` 渲染本地结果行；`LazyForEach` 走
+   * `IDataSource` 协议不经这里）。返回内部数组的浅拷贝，防调用方改动污染数据源。
+   */
+  public all(): BrewSearchRow[] {
+    return this.rows.slice();
+  }
+
   totalCount(): number {
     return this.rows.length;
   }

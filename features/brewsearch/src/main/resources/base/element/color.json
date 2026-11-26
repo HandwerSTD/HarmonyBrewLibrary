@@ -1,0 +1,12 @@
+{
+  "color": [
+    {
+      "name": "brew_ai_pill_start",
+      "value": "#C4B5FD"
+    },
+    {
+      "name": "brew_ai_pill_end",
+      "value": "#7C3AED"
+    }
+  ]
+}

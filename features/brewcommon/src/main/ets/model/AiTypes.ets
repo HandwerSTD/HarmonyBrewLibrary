@@ -3,7 +3,8 @@
  */
 
 /**
- * AI Companion 的类型：三个任务（D1 讲解 / D2 找工具 / D3 报错解读）的请求、响应与错误。
+ * AI Companion 的类型：四个任务（D1 讲解 / D2 AI 搜索问答 / D3 报错解读 / D4 发现流）
+ * 的请求、响应与错误。
  *
  * 全部用 class 而不是 interface：UI 需要构造实例做兜底值（与 `BrewDetailViewData` 同理），
  * 且 `@Prop` / `@State` 传对象时 class 才有运行时形态。解析 provider 返回的 JSON 后
@@ -12,7 +13,6 @@
  */
 
 import {
-  AI_D2_MAX_CANDIDATES,
   AI_D4_BASIS_MAX_CHARS,
   AI_D4_HEADLINE_MAX_CHARS,
   AI_D4_PROFILE_TAG_MAX_CHARS,
@@ -105,18 +105,29 @@ export class AiExplainCard {
   }
 }
 
-/** D2 候选条目：包 token + 推荐理由（AI 只提名，排序交给本地引擎）。 */
-export class AiToolCandidate {
+/**
+ * D2 · AI 搜索问答的推荐条目：包 token + AI 写的介绍段。
+ * 顺序 = LLM 叙事序（首选在前），**不经本地引擎重排**；
+ * token 一律经候选目录校验（G5），kind 由调用侧从目录查（不信模型）。
+ */
+export class AiSearchPick {
   /** 包 token。目录外的一律被过滤器丢弃（G5）。 */
   public token: string = '';
-  /** 一句话推荐理由（渲染在 token 下方）。 */
-  public why: string = '';
+  /** AI 介绍段（渲染在该 pick 的包行上方）。related 尾行 intro 恒空。 */
+  public intro: string = '';
 }
 
-/** D2 结果：过滤与重排之后的候选列表 + 丢弃计数。 */
-export class AiToolResult {
-  /** 存活候选（已按本地引擎排序、已截断）。 */
-  public candidates: AiToolCandidate[] = [];
+/**
+ * D2 问答答案：lead 总起段 + picks 推荐对 + related 目录召回尾行 + 丢弃计数。
+ * 渲染为「文本段与包行交替」的混排（spec 2026-11-26-ai-search-ask-spec §4.4）。
+ */
+export class AiSearchAnswer {
+  /** 总起段（一句话概括 + 首选点名），≤ AI_D2_LEAD_MAX_CHARS。 */
+  public lead: string = '';
+  /** AI 推荐条目（叙事序，1..AI_D2_MAX_CANDIDATES 条）。 */
+  public picks: AiSearchPick[] = [];
+  /** 目录召回尾行（引擎对意图原文排序的未覆盖条目；intro 空，仅 token）。 */
+  public related: AiSearchPick[] = [];
   /** 目录外被丢弃的名字数（进日志，不展示具体名单——防 slopsquatting 需求就是不给它们曝光）。 */
   public dropped: number = 0;
 }
@@ -156,10 +167,7 @@ export class AiFailureInput {
   public token: string = '';
 }
 
-/**
- * D2 的意图查询。wordlist 模式（离线降级）与 AI 模式共用它，
- * 返回侧统一是 `AiToolResult`。
- */
+/** D2 的意图查询。返回侧统一是 `AiSearchAnswer`。 */
 export class AiIntentInput {
   public intent: string = '';
 }
@@ -262,9 +270,4 @@ export class AiDiscoverInput {
  */
 export function isKnownAiProvider(provider: string): boolean {
   return provider === AI_PROVIDER_DEEPSEEK || provider === AI_PROVIDER_CUSTOM;
-}
-
-/** D2 候选数上限的护栏（解析时用它截断并判 E4：超多的响应视为格式不符）。 */
-export function d2CandidateCap(): number {
-  return AI_D2_MAX_CANDIDATES;
 }

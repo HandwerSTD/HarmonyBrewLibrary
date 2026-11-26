@@ -80,6 +80,30 @@ export class AiCatalogIndex {
     }
     return 'formula';
   }
+
+  /** token 的英文描述（AI 答案行的 secondaryText）。未命中返回空串。 */
+  public static descOf(token: string): string {
+    const key: string = token.trim().toLowerCase();
+    const entries: BrewSearchEntry[] = AiCatalogIndex.entries();
+    for (let i: number = 0; i < entries.length; i++) {
+      if (entries[i].token === key) {
+        return entries[i].desc;
+      }
+    }
+    return '';
+  }
+
+  /** token 的 30 天安装量（AI 答案行的热区）。未命中返回 0。 */
+  public static vol30dOf(token: string): number {
+    const key: string = token.trim().toLowerCase();
+    const entries: BrewSearchEntry[] = AiCatalogIndex.entries();
+    for (let i: number = 0; i < entries.length; i++) {
+      if (entries[i].token === key) {
+        return entries[i].vol30d;
+      }
+    }
+    return 0;
+  }
 }
 
 /** CatalogEntry 的本地别名（避免 import type 与 interface 展开的兼容问题）。 */
