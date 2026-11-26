@@ -3,7 +3,8 @@
  */
 
 /**
- * AI Companion 的类型：三个任务（D1 讲解 / D2 找工具 / D3 报错解读）的请求、响应与错误。
+ * AI Companion 的类型：四个任务（D1 讲解 / D2 AI 搜索问答 / D3 报错解读 / D4 发现流）
+ * 的请求、响应与错误。
  *
  * 全部用 class 而不是 interface：UI 需要构造实例做兜底值（与 `BrewDetailViewData` 同理），
  * 且 `@Prop` / `@State` 传对象时 class 才有运行时形态。解析 provider 返回的 JSON 后
@@ -12,7 +13,10 @@
  */
 
 import {
-  AI_D2_MAX_CANDIDATES,
+  AI_D4_BASIS_MAX_CHARS,
+  AI_D4_HEADLINE_MAX_CHARS,
+  AI_D4_PROFILE_TAG_MAX_CHARS,
+  AI_D4_PROFILE_TAGS_MAX,
   AI_PROVIDER_CUSTOM,
   AI_PROVIDER_DEEPSEEK,
 } from '../constant/AiConstants';
@@ -101,19 +105,37 @@ export class AiExplainCard {
   }
 }
 
-/** D2 候选条目：包 token + 推荐理由（AI 只提名，排序交给本地引擎）。 */
-export class AiToolCandidate {
+/**
+ * D2 · AI 搜索问答的推荐条目：包 token + AI 写的介绍段。
+ * 顺序 = LLM 叙事序（首选在前），**不经本地引擎重排**；
+ * token 一律经候选目录校验（G5），kind 由调用侧从目录查（不信模型）。
+ */
+export class AiSearchPick {
   /** 包 token。目录外的一律被过滤器丢弃（G5）。 */
   public token: string = '';
-  /** 一句话推荐理由（渲染在 token 下方）。 */
-  public why: string = '';
+  /** AI 介绍段（渲染在该 pick 的包行上方）。related 尾行 intro 恒空。 */
+  public intro: string = '';
 }
 
-/** D2 结果：过滤与重排之后的候选列表 + 丢弃计数。 */
-export class AiToolResult {
-  /** 存活候选（已按本地引擎排序、已截断）。 */
-  public candidates: AiToolCandidate[] = [];
-  /** 目录外被丢弃的名字数（进日志，不展示具体名单——防 slopsquatting 需求就是不给它们曝光）。 */
+/**
+ * D2 问答答案：lead 总起段 + picks 推荐对 + related 目录召回尾行 + missed 缺失名单
+ * + 丢弃计数。渲染为「文本段与包行交替」的混排（spec 2026-11-26-ai-search-ask-spec §4.4）。
+ */
+export class AiSearchAnswer {
+  /** 总起段（一句话概括 + 首选点名），≤ AI_D2_LEAD_MAX_CHARS。 */
+  public lead: string = '';
+  /** AI 推荐条目（叙事序，1..AI_D2_MAX_CANDIDATES 条）。 */
+  public picks: AiSearchPick[] = [];
+  /** 目录召回尾行（引擎对意图原文排序的未覆盖条目；intro 空，仅 token）。 */
+  public related: AiSearchPick[] = [];
+  /**
+   * 目录外（本机源里查不到）的 token 名单（m01462：不再静默丢弃）。
+   * 渲染为答案尾部的纯文本披露行——**不可点击、无详情路由、无任何安装入口**：
+   * G5 的本意是防 slopsquatting（诱导装不存在的包），明示「AI 提到但本机源没有」
+   * 恰是这个威胁模型的正确答案。dropped 计数 = missed.length（日志口径不变）。
+   */
+  public missed: string[] = [];
+  /** 目录外被丢弃的名字数（进日志；与 missed.length 等价，保留双写仅为兼容日志口径）。 */
   public dropped: number = 0;
 }
 
@@ -152,12 +174,102 @@ export class AiFailureInput {
   public token: string = '';
 }
 
-/**
- * D2 的意图查询。wordlist 模式（离线降级）与 AI 模式共用它，
- * 返回侧统一是 `AiToolResult`。
- */
+/** D2 的意图查询。返回侧统一是 `AiSearchAnswer`。 */
 export class AiIntentInput {
   public intent: string = '';
+}
+
+// ------------------------------------------------------------ D4 · AI 发现流
+
+/**
+ * D4 的画像对象（AI 发现流 spec §3.2）。
+ *
+ * MVP 只渲染 headline（AI 榜卡 Hero 标题位）；tags / basis 保留在结果里
+ * 供后续画像二级页使用。`isValid()` 与 D1 同纪律：逐字段校验，不把
+ * JSON.parse 的结果直接当响应对象。
+ */
+export class AiDiscoverProfile {
+  /** ≤40 字的画像一句话，第二人称（prompt 约束 30 字，解析留余量） */
+  public headline: string = '';
+  /** 1–4 个，每个 ≤16 字 */
+  public tags: string[] = [];
+  /** ≤60 字，画像依据（引用代表性已安装包） */
+  public basis: string = '';
+
+  public isValid(): boolean {
+    if (this.headline.trim().length === 0 || this.headline.length > AI_D4_HEADLINE_MAX_CHARS) {
+      return false;
+    }
+    if (this.tags.length === 0 || this.tags.length > AI_D4_PROFILE_TAGS_MAX) {
+      return false;
+    }
+    for (const tag of this.tags) {
+      if (tag.trim().length === 0 || tag.length > AI_D4_PROFILE_TAG_MAX_CHARS) {
+        return false;
+      }
+    }
+    return this.basis.trim().length > 0 && this.basis.length <= AI_D4_BASIS_MAX_CHARS;
+  }
+}
+
+/** D4 的一条推荐。token/kind 经候选池校验存活后才出现在这里。 */
+export class AiDiscoverPick {
+  public token: string = '';
+  /** `'formula'` | `'cask'` */
+  public kind: string = '';
+  /** ≤60 字的推荐理由（榜单行副文案位直接显示） */
+  public why: string = '';
+}
+
+/**
+ * D4 的解析结果。`picks` 是过滤后的存活列表；
+ * `dropped` / `droppedInstalled` 是 G5（候选池外）与已安装过滤的丢弃计数，
+ * 只进日志不进 UI（spec G3）。
+ */
+export class AiDiscoverResult {
+  public profile: AiDiscoverProfile = new AiDiscoverProfile();
+  public picks: AiDiscoverPick[] = [];
+  public dropped: number = 0;
+  public droppedInstalled: number = 0;
+}
+
+/** D4 输入里的一条已安装包摘要（token + kind + 近装标记）。 */
+export class AiInstalledBrief {
+  public token: string = '';
+  /** `'formula'` | `'cask'` */
+  public kind: string = '';
+  /** installedAt 在 AI_D4_RECENT_DAYS(30) 天内 */
+  public recent: boolean = false;
+}
+
+/** D4 候选池里的一条（目录子集，G5 校验的唯一依据）。 */
+export class AiCandidate {
+  public token: string = '';
+  /** `'formula'` | `'cask'` */
+  public kind: string = '';
+  /** BrewTaxonomy 分类，prompt 里给模型聚类线索 */
+  public categoryKey: string = '';
+  public vol30d: number = 0;
+  public velocity: number = 0;
+}
+
+/**
+ * D4 的输入（AI 发现流 spec §3.1 装配管线产物）。
+ *
+ * `epoch` 由调用方（VM）取 `BrewCacheEpoch.current()` 填入 —— AiTasks 不 import
+ * 目录层，缓存键的目录世代由输入携带（cacheKey = d4_{安装集哈希}_{epoch}_{locale}）。
+ */
+export class AiDiscoverInput {
+  /** `'zh'` | `'en'`（UI 语言） */
+  public locale: string = 'zh';
+  /** 已安装包摘要，installedAt 降序，≤ AI_D4_INSTALLED_CAP(150) */
+  public installed: AiInstalledBrief[] = [];
+  /** 候选池，vol30d 降序（formula top200 + cask top130 − 已安装） */
+  public candidates: AiCandidate[] = [];
+  /** 换一批时上一次已展示的 token 列表（force 路径才进 prompt） */
+  public exclude: string[] = [];
+  /** 目录世代号（BrewCacheEpoch.current()） */
+  public epoch: number = 0;
 }
 
 /**
@@ -165,9 +277,4 @@ export class AiIntentInput {
  */
 export function isKnownAiProvider(provider: string): boolean {
   return provider === AI_PROVIDER_DEEPSEEK || provider === AI_PROVIDER_CUSTOM;
-}
-
-/** D2 候选数上限的护栏（解析时用它截断并判 E4：超多的响应视为格式不符）。 */
-export function d2CandidateCap(): number {
-  return AI_D2_MAX_CANDIDATES;
 }

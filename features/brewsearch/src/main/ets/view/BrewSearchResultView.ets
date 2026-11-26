@@ -26,10 +26,14 @@ import {
   brewTitleBarTotalHeight,
 } from '@ohos/brewcommon';
 import type { BrewDetailParams } from '@ohos/brewcommon';
-// BrewPackageItem 是值导出（AI 找工具的结果行要 new 它）。
-import { BrewPackageItem } from '@ohos/brewcommon';
+// BrewPackageItem 是值导出（AI 答案行要 new 它）。
+import { BrewPackageItem, AiSettingsStore } from '@ohos/brewcommon';
 import { BrewSearchRow, BrewSearchRowSource } from '../model/BrewSearchRowSource';
-import { BrewAiFindCard } from '../component/BrewAiFindCard';
+import { BrewAiSearchExamples } from '../component/BrewAiSearchExamples';
+import { BrewAiSearchAnswerView } from '../component/BrewAiSearchAnswerView';
+import { BrewAiSearchSkeleton } from '../component/BrewAiSearchSkeleton';
+import { BrewAiSearchErrorCard } from '../component/BrewAiSearchErrorCard';
+import { AiAskState, AiFindVM } from '../viewmodel/AiFindVM';
 import { BrewSearchState } from '../viewmodel/BrewSearchState';
 import { BrewSearchVM } from '../viewmodel/BrewSearchVM';
 import { BrewSearchSuggestions } from '../component/BrewSearchSuggestions';
@@ -51,7 +55,7 @@ const TAG: string = '[BrewSearch]';
  * 让位写成首末两个占位 `ListItem` 的 `List`（见 `ResultListBuilder`）；未提交态与无命中两种状态
  * 换成同样占满窗口的 `Scroll`（见 `NoRowsScrollBuilder`）。
  *
- * 四个本页特有的点：
+ * 本页特有的点：
  *   1. **每页实例状态**：`state` 与 `keyword` 都在本页（不从单例 VM / AppStorage 取）。
  *      共享状态会让页面先渲染出上一次的结果（详情页正是这么踩的：handover §10.4.1）。
  *   2. **输入框在标题栏里**（`BrewSearchBar`）：它是本页唯一的搜索入口，而且**显式触发**
@@ -61,6 +65,14 @@ const TAG: string = '[BrewSearch]';
  *      与输入框的变化无关（打字打一半的 `nod` 不进历史）。
  *   4. **返回键**：栈顶有详情页就弹它；否则有字就清空回到历史/发现；否则**不吞**，
  *      交回 `PcMainPage`（与其它页签一致）。
+ *
+ * ## AI 问答模式（2026-11-26-ai-search-ask-spec §3/§4）
+ *
+ * 搜索框内的 AI pill 切换 `aiEnabled`（`AiSettingsStore` 持久化，重启保持）。on 态提交走
+ * `applyAi`（LLM 问答，`AiAskState.kind` 分流混排答案/骨架/错误卡/降级通知条）；off 态
+ * 提交走 `apply`（本地搜索链路零改动，G8）。降级矩阵：E1/E2/E3 自动本地 + 通知条；
+ * E4/E5 错误卡（重试/用本地搜索）。AI 模式下 chips 行隐藏（titleBar `bottomBuilder`
+ * 高度与 `topInset()` 同步收缩——三处同源常量由 `chipsRowVisible()` 统一判定）。
  */
 @Component({ freezeWhenInactive: true })
 export struct BrewSearchResultView {
@@ -87,12 +99,22 @@ export struct BrewSearchResultView {
   @State state: BrewSearchState = new BrewSearchState();
   @State rowSource: BrewSearchRowSource = new BrewSearchRowSource();
   /**
+   * AI 问答模式开关（spec §3）。**初值来自持久化**（AiSettingsStore.aiSearch，重启保持，G2），
+   * 切换由 pill 上报 → `toggleAi()` 落盘 + 处理态迁移。`@State` 是为了 pill/hint 即时换肤。
+   */
+  @State aiEnabled: boolean = AiSettingsStore.aiSearch();
+  /** AI 问答的状态机（spec §4.6：loading → answer/empty/error/fallback）。 */
+  @State aiAsk: AiAskState = new AiAskState();
+  /** E1/E2/E3 降级时页面是否显示通知条（可点击关闭；spec §4.5） */
+  @State aiFallbackNoticeVisible: boolean = false;
+  /**
    * 防重入旗：只护「弹出栈顶详情页」那一支（连点不能把上一页也弹掉）。
    * 栈底那两支不设旗（清空关键字与交回上层都不需要防重入）。**必须是本组件的 @State**
    * （放共享 state 会置位后不复位，handover §10.4.1）。
    */
   @State backPressed: boolean = false;
   private viewModel: BrewSearchVM = BrewSearchVM.getInstance();
+  private aiFinder: AiFindVM = AiFindVM.getInstance();
   /**
    * 本页的页面栈，一律走**搜索壳自己持有的** `PageContext`（`@ohos/common`）。
    *
@@ -122,18 +144,84 @@ export struct BrewSearchResultView {
   /** 回车 / 点「搜索」：执行一次搜索，并把输入框里的值记为「已生效」 */
   searchNow(): void {
     this.appliedKeyword = this.keyword;
-    this.apply(this.keyword);
+    if (this.aiEnabled) {
+      this.applyAi(this.keyword);
+    } else {
+      this.apply(this.keyword);
+    }
   }
 
   /**
    * 点历史/发现里的词：填进输入框并**立刻**搜（等同于用户按了回车）。
    *
    * 两个入口都只做「赋值 + 走 `searchNow`」：关键字只有本页一个写者，
-   * 不需要「值是不是我自己刚设的」那类判断。
+   * 不需要「值是不是我自己刚设的」那类判断。AI 模式下示例 chips 也走这里（= 填入即问）。
    */
   pickWord(word: string): void {
     this.keyword = word;
     this.searchNow();
+  }
+
+  /** AI pill 切换：落盘 + 态迁移（spec §4.6 状态机图）。 */
+  toggleAi(): void {
+    const next: boolean = !this.aiEnabled;
+    this.aiEnabled = next;
+    AiSettingsStore.saveAiSearch(next);
+    Logger.info(TAG, `ai search toggled enabled=${next}`);
+    if (next) {
+      // on：hint/图标已由 @Prop 换肤；若内容区正显示普通结果且词已生效，不自动改写
+      // —— 用户下一次提交才走 AI（保持「显式触发」纪律）。AI 状态机复位到 idle。
+      this.aiAsk = new AiAskState();
+      this.aiFallbackNoticeVisible = false;
+    } else {
+      // off：AI 状态清场；若内容区是 AI 答案（词已生效），重跑本地搜索拿回普通结果。
+      this.aiAsk = new AiAskState();
+      this.aiFallbackNoticeVisible = false;
+      if (this.appliedKeyword.trim().length > 0 && this.keyword.trim() === this.appliedKeyword.trim()) {
+        this.apply(this.appliedKeyword);
+      }
+    }
+  }
+
+  /**
+   * AI 问答提交（spec §3）：栈底化 + 历史照记（历史是「我用过的词」，问 AI 也算），
+   * 然后走 `AiFindVM.ask`。结果回来按 kind 分流渲染；E1/E2/E3 的 fallback 态**不在这里**
+   * 调 `apply` —— 本地结果由 fallback 分支渲染时再算（用户看到的还是「问了一次 AI」）。
+   */
+  private applyAi(keyword: string): void {
+    this.searchPageContext.popPageByIndex(0, false);
+    this.viewModel.recordSearch(keyword);
+    this.state.keyword = keyword;
+    this.aiFallbackNoticeVisible = false;
+    this.aiFinder.ask(keyword, this.aiAsk)
+      .then((outcome) => {
+        // 陈旧守卫：undefined = 结果被丢弃（新提交已接管），什么都不做
+        if (outcome === undefined) {
+          return;
+        }
+        if (outcome.kind === 'fallback') {
+          // E1/E2/E3 → 通知条 + 本地搜索结果（G6：不引导配 Key）
+          this.aiFallbackNoticeVisible = true;
+          this.runLocalSearch(this.keyword);
+        }
+        // 'answer' / 'error' / 'empty' 状态已写进 this.aiAsk，渲染分支直接消费
+      })
+      .catch((error: BusinessError) => {
+        Logger.error(TAG, `ai ask failed, code=${error?.code}, msg=${error?.message}`);
+      });
+  }
+
+  /** fallback 态的本地搜索：只算结果不写历史（applyAi 已记过）。 */
+  private runLocalSearch(keyword: string): void {
+    this.viewModel.search(keyword, this.state)
+      .then((rows: BrewSearchRow[] | undefined) => {
+        if (rows !== undefined) {
+          this.rowSource.setDataArray(rows);
+        }
+      })
+      .catch((error: BusinessError) => {
+        Logger.error(TAG, `local search failed, code=${error?.code}, msg=${error?.message}`);
+      });
   }
 
   /**
@@ -195,7 +283,23 @@ export struct BrewSearchResultView {
   }
 
   /**
-   * 顶部让位的高度：标题行 + **输入框行** + chips 行 + **chips 下方留白**。
+   * AI 模式下 chips 行是否可见（spec §4.1：AI 答案没有 kind 过滤语境，chips 整行隐藏）。
+   *
+   * **三处同源**（titleBar `bottomBuilder.height` / `TitleBarBottomBuilder` / `topInset()`）
+   * 都由这个判定给出：差一档就会出现「chips 盖住内容」或「内容上方多一条空白」。
+   */
+  private chipsRowVisible(): boolean {
+    return !this.aiEnabled;
+  }
+
+  /** titleBar bottomBuilder 的高度（chips 行可见与否两档，与 topInset 同源）。 */
+  private bottomBuilderHeight(): number {
+    const chips: number = this.chipsRowVisible() ? BREW_CHIP_BAR_HEIGHT : 0;
+    return chips + BREW_SEARCH_BAR_ROW_HEIGHT + BREW_SEARCH_CHIP_ROW_GAP;
+  }
+
+  /**
+   * 顶部让位的高度：标题行 + **输入框行** + （chips 行 + **chips 下方留白**，AI 模式隐藏）。
    *
    * 输入框与 chips 都挂在标题栏的 `bottomBuilder` 上（它是浮层，不会把内容顶下去），
    * 所以这里的值必须与 `bottomBuilder.height` 同源 —— 差一档就会出现
@@ -203,8 +307,9 @@ export struct BrewSearchResultView {
    * `brewBlurScrollEffect` 用的是固定的 `BREW_TITLEBAR_BLUR_RAMP`（start=0），与标题栏高度无关。
    */
   private topInset(): number {
+    const chips: number = this.chipsRowVisible() ? BREW_CHIP_BAR_HEIGHT + BREW_SEARCH_CHIP_ROW_GAP : 0;
     return brewTitleBarTotalHeight(this.globalInfoModel.statusBarHeight) +
-      BREW_SEARCH_BAR_ROW_HEIGHT + BREW_SEARCH_CHIP_ROW_GAP;
+      BREW_SEARCH_BAR_ROW_HEIGHT + chips;
   }
 
   /** 底部让位的高度：导航条 + `SPACE_24`（与「我的-本机包」、包详情页同口径） */
@@ -224,6 +329,11 @@ export struct BrewSearchResultView {
     return applied.length === 0 || typed !== applied;
   }
 
+  /** AI 问答内容是否正在前台（提交后词已生效且 AI 态非 idle）。 */
+  private showingAiContent(): boolean {
+    return this.aiEnabled && !this.showingSuggestions() && this.aiAsk.kind !== 'idle';
+  }
+
   private openDetail(row: BrewSearchRow): void {
     const item: BrewPackageItem = row.item;
     this.searchPageContext.openPage({
@@ -239,13 +349,10 @@ export struct BrewSearchResultView {
   }
 
   /**
-   * AI 找工具的结果行 → 详情页。kind 由目录索引判定（AiFindRow 带）。
-   * id 用 tokenId 决定性哈希（与列表页/详情页路由同一套 id 口径）。
+   * AI 答案行 → 详情页（spec §4.4：与普通搜索行同一链路）。kind 由目录索引判定
+   * （AnswerView 的 rowOf 已折算成 BrewKind，这里回传字符串保持 openDetail 的 param 口径）。
    */
-  private openAiFindDetail(token: string, kind: string): void {
-    const item: BrewPackageItem = new BrewPackageItem();
-    item.token = token;
-    item.subTitle = token;
+  private openAiAnswerDetail(token: string, kind: string): void {
     const kindValue: BrewKind = kind === 'cask' ? BrewKind.CASK : BrewKind.FORMULA;
     this.searchPageContext.openPage({
       routerName: PageEnum.BREW_DETAIL_VIEW,
@@ -275,11 +382,15 @@ export struct BrewSearchResultView {
     Row() {
       BrewSearchBar({
         keyword: this.keyword,
+        aiEnabled: this.aiEnabled,
         onInput: (value: string) => {
           this.onInput(value);
         },
         onSearch: () => {
           this.searchNow();
+        },
+        onToggleAi: () => {
+          this.toggleAi();
         },
       })
     }
@@ -296,12 +407,16 @@ export struct BrewSearchResultView {
    *
    * 上下两档留白必须与 `bottomBuilder.height` / `topInset()` 的数学一致（见常量注释）：
    * 这里量到多少、那里就得算多少 —— 不一致要么让内容钻到标题栏底下，要么在下方多一条空白。
+   *
+   * AI 模式：chips 行不渲染（`chipsRowVisible()` 三处同源判定之一）。
    */
   @Builder
   TitleBarBottomBuilder() {
     Column() {
       this.SearchBarBuilder();
-      this.ChipBarBuilder();
+      if (this.chipsRowVisible()) {
+        this.ChipBarBuilder();
+      }
     }
     .width(CommonConstants.FULL_PERCENT)
     .padding({
@@ -330,6 +445,130 @@ export struct BrewSearchResultView {
       .fontColor($r('sys.color.font_tertiary'))
       .width(CommonConstants.FULL_PERCENT)
       .padding({ bottom: $r('sys.float.padding_level4') })
+  }
+
+  /**
+   * E1/E2/E3 降级通知条（spec §4.5）：可点击关闭；文案按 fallbackNoKey 分流。
+   */
+  @Builder
+  AiFallbackNoticeBuilder() {
+    if (this.aiFallbackNoticeVisible) {
+      Row({ space: $r('sys.float.padding_level2') }) {
+        SymbolGlyph($r('sys.symbol.lightbulb'))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor([$r('sys.color.icon_secondary')])
+        Text(this.aiAsk.fallbackNoKey ? $r('app.string.ai_search_fallback_no_key')
+          : $r('app.string.ai_search_fallback_notice'))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        Text('×')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .onClick(() => {
+            this.aiFallbackNoticeVisible = false;
+          })
+      }
+      .width(CommonConstants.FULL_PERCENT)
+      .height(36)
+      .alignItems(VerticalAlign.Center)
+      .padding({
+        left: $r('sys.float.padding_level6'),
+        right: $r('sys.float.padding_level6'),
+      })
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .borderRadius($r('sys.float.corner_radius_level4'))
+      .margin({ bottom: $r('sys.float.padding_level4') })
+    }
+  }
+
+  /**
+   * AI 问答内容区（spec §4.3/4.4/4.5）：按 `AiAskState.kind` 分流。
+   *
+   * 与 `ResultListBuilder` 同一理由：`Scroll` 是滚动根、占满整个窗口，让位写成内层
+   * `Column` 的 `margin`，内缩写在**内层内容**上（容器 padding 会把内容裁掉、模糊失效）。
+   */
+  @Builder
+  AiContentBuilder() {
+    Scroll() {
+      Column() {
+        this.AiFallbackNoticeBuilder();
+        if (this.aiAsk.kind === 'loading') {
+          BrewAiSearchSkeleton()
+        } else if (this.aiAsk.kind === 'answer' && this.aiAsk.answer !== null) {
+          BrewAiSearchAnswerView({
+            answer: this.aiAsk.answer,
+            handleRowClick: (token: string, kind: string) => {
+              this.openAiAnswerDetail(token, kind);
+            },
+          })
+        } else if (this.aiAsk.kind === 'error') {
+          BrewAiSearchErrorCard({
+            errorDetail: this.aiAsk.errorDetail,
+            handleRetry: () => {
+              this.applyAi(this.keyword);
+            },
+            handleUseLocal: () => {
+              this.aiFallbackNoticeVisible = true;
+              this.runLocalSearch(this.appliedKeyword);
+            },
+          })
+        } else if (this.aiAsk.kind === 'empty') {
+          Text($r('app.string.ai_search_empty'))
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width(CommonConstants.FULL_PERCENT)
+            .textAlign(TextAlign.Center)
+            .padding({ top: $r('sys.float.padding_level16') })
+        } else if (this.aiAsk.kind === 'fallback') {
+          // fallback：通知条（已渲染）+ 本地结果行（复用 ResultListBuilder 的行形态，
+          // 但这里直接给 List 也行——本地结果是全量列表，走 List 的 LazyForEach 性能更好）
+          this.FallbackRowsBuilder()
+        }
+      }
+      .width(CommonConstants.FULL_PERCENT)
+      .margin({ top: this.topInset(), bottom: this.bottomInset() })
+      .padding({ left: this.contentInset(), right: this.contentInset() })
+    }
+    .width(CommonConstants.FULL_PERCENT)
+    .height(CommonConstants.FULL_PERCENT)
+    .align(Alignment.Top)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+  }
+
+  /** fallback 态的本地结果行（嵌在 AI 内容区的 Scroll 里）。 */
+  @Builder
+  FallbackRowsBuilder() {
+    Column() {
+      if (this.state.total === 0) {
+        Text($r('app.string.brew_search_no_result'))
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width(CommonConstants.FULL_PERCENT)
+          .textAlign(TextAlign.Center)
+          .padding({ top: $r('sys.float.padding_level16') })
+      } else {
+        ForEach(this.rowSource.all(), (row: BrewSearchRow, index: number) => {
+          BrewPackageRow({
+            packageItem: row.item,
+            kind: row.kind,
+            hideRank: true,
+            itemHeight: $r('app.float.brew_search_row_height'),
+          })
+            .onClick(() => {
+              this.openDetail(row);
+            })
+            .width(CommonConstants.FULL_PERCENT)
+            .backgroundColor($r('sys.color.comp_background_list_card'))
+            .borderRadius($r('sys.float.corner_radius_level8'))
+            .margin({ bottom: $r('sys.float.padding_level2') })
+        }, (row: BrewSearchRow) => `${row.kind}_${row.item.token}`)
+      }
+    }
+    .width(CommonConstants.FULL_PERCENT)
   }
 
   /**
@@ -428,6 +667,9 @@ export struct BrewSearchResultView {
    * 会把内容裁剪掉（内容到不了标题栏下面，模糊失效），容器 `margin` 会把整块推出窗口。
    * 顺带把「窗口很矮时历史/发现被裁掉」也治了：内容一超高就能滚。
    * 这一份与「我的-本机包」`MinePackagesView` 的写法同款。
+   *
+   * AI 模式（spec §4.2）：贴片退役后，示例区挂在历史/发现**之前**；AI off 时示例区
+   * 不渲染，本 builder 与改前逐字节一致（G8）。
    */
   @Builder
   NoRowsScrollBuilder() {
@@ -437,16 +679,17 @@ export struct BrewSearchResultView {
           this.IndexPendingBuilder();
         }
         if (this.showingSuggestions()) {
-          // AI 帮我找工具（spec §5）：挂在历史/发现之前，显式触发、不阻塞主搜索
-          BrewAiFindCard({
-            openDetail: (token: string, kind: string) => {
-              this.openAiFindDetail(token, kind);
-            },
-          })
-            .margin({ bottom: $r('sys.float.padding_level8') })
+          if (this.aiEnabled) {
+            BrewAiSearchExamples({
+              onPickExample: (query: string) => {
+                this.pickWord(query);
+              },
+            })
+              .margin({ bottom: $r('sys.float.padding_level8') })
+          }
           BrewSearchSuggestions({
             pickWord: (word: string) => {
-              // 关键字只有本页一个写者：直接填入并立刻搜
+              // 关键字只有本页一个写者：直接填入并立刻搜（AI 模式=填入即问）
               this.pickWord(word);
             },
           })
@@ -472,7 +715,9 @@ export struct BrewSearchResultView {
 
   @Builder
   ContentBuilder() {
-    if (this.showingSuggestions() || this.state.total === 0) {
+    if (this.showingAiContent()) {
+      this.AiContentBuilder();
+    } else if (this.showingSuggestions() || this.state.total === 0) {
       this.NoRowsScrollBuilder();
     } else {
       this.ResultListBuilder();
@@ -505,8 +750,8 @@ export struct BrewSearchResultView {
           builder: () => {
             this.TitleBarBottomBuilder();
           },
-          // 输入框行 + chips 行 + chips 下方留白；三个常量与 `topInset()` 同源
-          height: BREW_CHIP_BAR_HEIGHT + BREW_SEARCH_BAR_ROW_HEIGHT + BREW_SEARCH_CHIP_ROW_GAP,
+          // 输入框行 +（chips 行 + chips 下方留白）：AI 模式 chips 行隐藏（与 topInset 同源）
+          height: this.bottomBuilderHeight(),
         },
       },
     })
@@ -537,9 +782,12 @@ export struct BrewSearchResultView {
       // 这里**不能**再像搜索态时期那样无条件吞掉：那时「返回」的语义是「退出搜索」，
       // 现在搜索是一个普通页签，吞掉会让返回键在本页变成死键。
       if (this.keyword.length > 0 || this.appliedKeyword.length > 0) {
-        // 清空输入框 + 撤掉「已生效」的关键字：内容区回到历史/发现（`apply('')` 空关键字不写历史）
+        // 清空输入框 + 撤掉「已生效」的关键字：内容区回到历史/发现（`apply('')` 空关键字不写历史）；
+        // AI 状态机一并复位（answer/骨架/错误卡不残留）
         this.keyword = '';
         this.appliedKeyword = '';
+        this.aiAsk = new AiAskState();
+        this.aiFallbackNoticeVisible = false;
         this.apply('');
         return true;
       }

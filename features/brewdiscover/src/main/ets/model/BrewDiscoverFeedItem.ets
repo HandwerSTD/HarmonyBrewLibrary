@@ -8,7 +8,17 @@ export enum BrewDiscoverFeedType {
   /** 单 App 大图卡（一张卡 = 一个包） */
   FEATURED = 0,
   /** 榜单大卡（一张卡 = 一张榜，卡内多行） */
-  BOARD = 1
+  BOARD = 1,
+  /** AI 发现流 · 单包大图卡（复用大图卡组件渲染，数据来自 LLM picks） */
+  AI_FEATURED = 2,
+  /** AI 发现流 · 榜卡（heroTitle = 画像 headline，行全显） */
+  AI_BOARD = 3,
+  /** AI 发现流 · 首载骨架 · 大图卡形 */
+  AI_SKELETON_FEATURED = 4,
+  /** AI 发现流 · 首载骨架 · 榜卡形 */
+  AI_SKELETON_BOARD = 5,
+  /** AI 发现流 · 失败占位卡 */
+  AI_FAILED = 6
 }
 
 /**
@@ -22,6 +32,8 @@ export class BrewDiscoverFeedItem {
   public feedType: number = BrewDiscoverFeedType.BOARD;
   public featured?: BrewDiscoverFeatured = undefined;
   public board?: BrewDiscoverBoard = undefined;
+  /** AI 骨架项的槽位号（同类多张时 key 需要区分）；其余 feedType 恒 0 */
+  public slot: number = 0;
 
   public static ofFeatured(item: BrewDiscoverFeatured): BrewDiscoverFeedItem {
     const feed: BrewDiscoverFeedItem = new BrewDiscoverFeedItem();
@@ -37,10 +49,66 @@ export class BrewDiscoverFeedItem {
     return feed;
   }
 
-  /** ForEach/LazyForEach 的 key 必须跨两类唯一，否则同 id 的包与榜会撞 */
+  /** AI 大图卡。与 stat 大图卡**渲染同款**，但 key 前缀不同：同一个包可能既是
+   * 榜单头名又是 AI pick（候选池不排除 stat-featured），LazyForEach key 撞了会串卡 */
+  public static ofAiFeatured(item: BrewDiscoverFeatured): BrewDiscoverFeedItem {
+    const feed: BrewDiscoverFeedItem = new BrewDiscoverFeedItem();
+    feed.feedType = BrewDiscoverFeedType.AI_FEATURED;
+    feed.featured = item;
+    return feed;
+  }
+
+  /** AI 榜卡。渲染走 BrewDiscoverBoardCard 的 'ai' 特判（heroTitle / 全显 / 换一批） */
+  public static ofAiBoard(board: BrewDiscoverBoard): BrewDiscoverFeedItem {
+    const feed: BrewDiscoverFeedItem = new BrewDiscoverFeedItem();
+    feed.feedType = BrewDiscoverFeedType.AI_BOARD;
+    feed.board = board;
+    return feed;
+  }
+
+  /** AI 首载骨架：featuredCount 张大图卡形 + 1 张榜卡形，占住 AI 区的位置防跳动 */
+  public static aiSkeletonFeed(featuredCount: number): BrewDiscoverFeedItem[] {
+    const feed: BrewDiscoverFeedItem[] = [];
+    for (let i = 0; i < featuredCount; i++) {
+      const one: BrewDiscoverFeedItem = new BrewDiscoverFeedItem();
+      one.feedType = BrewDiscoverFeedType.AI_SKELETON_FEATURED;
+      one.slot = i;
+      feed.push(one);
+    }
+    const boardSkel: BrewDiscoverFeedItem = new BrewDiscoverFeedItem();
+    boardSkel.feedType = BrewDiscoverFeedType.AI_SKELETON_BOARD;
+    feed.push(boardSkel);
+    return feed;
+  }
+
+  /** AI 失败占位卡（E2-E5；E1 无 Key 是 hidden 不占位） */
+  public static ofAiFailed(): BrewDiscoverFeedItem {
+    const feed: BrewDiscoverFeedItem = new BrewDiscoverFeedItem();
+    feed.feedType = BrewDiscoverFeedType.AI_FAILED;
+    return feed;
+  }
+
+  /** ForEach/LazyForEach 的 key 必须跨所有类型唯一，否则同 id 的包与榜会撞 */
   public key(): string {
-    return this.feedType === BrewDiscoverFeedType.FEATURED ?
-      `featured_${this.featured?.id ?? 0}` : `board_${this.board?.id ?? 0}`;
+    if (this.feedType === BrewDiscoverFeedType.FEATURED) {
+      return `featured_${this.featured?.id ?? 0}`;
+    }
+    if (this.feedType === BrewDiscoverFeedType.AI_FEATURED) {
+      return `ai_featured_${this.featured?.id ?? 0}`;
+    }
+    if (this.feedType === BrewDiscoverFeedType.AI_BOARD) {
+      return `ai_board_${this.board?.id ?? 0}`;
+    }
+    if (this.feedType === BrewDiscoverFeedType.AI_SKELETON_FEATURED) {
+      return `ai_skel_f_${this.slot}`;
+    }
+    if (this.feedType === BrewDiscoverFeedType.AI_SKELETON_BOARD) {
+      return 'ai_skel_b';
+    }
+    if (this.feedType === BrewDiscoverFeedType.AI_FAILED) {
+      return 'ai_failed';
+    }
+    return `board_${this.board?.id ?? 0}`;
   }
 
   /**

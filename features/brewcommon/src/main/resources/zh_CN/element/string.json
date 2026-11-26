@@ -497,6 +497,30 @@
       "value": "新上架与上升"
     },
     {
+      "name": "brew_board_ai",
+      "value": "AI 为你推荐"
+    },
+    {
+      "name": "brew_discover_ai_badge",
+      "value": "AI 推荐"
+    },
+    {
+      "name": "brew_discover_ai_regenerate",
+      "value": "换一批推荐"
+    },
+    {
+      "name": "brew_discover_ai_failed",
+      "value": "AI 推荐暂时不可用"
+    },
+    {
+      "name": "brew_discover_ai_retry",
+      "value": "重试"
+    },
+    {
+      "name": "brew_discover_ai_installed_badge",
+      "value": "已安装"
+    },
+    {
       "name": "brew_discover_velocity_badge",
       "value": "↑%s×"
     },
@@ -710,32 +734,60 @@
       "value": "上手三步"
     },
     {
-      "name": "ai_d2_entry",
-      "value": "AI 帮我找工具"
+      "name": "ai_search_placeholder_ai",
+      "value": "Ask me anything!"
     },
     {
-      "name": "ai_d2_hint",
-      "value": "描述你想做的事，例如：批量压缩图片"
+      "name": "ai_search_examples_header",
+      "value": "试试这样问"
     },
     {
-      "name": "ai_d2_search",
-      "value": "找工具"
+      "name": "ai_search_example_1",
+      "value": "帮我找个 coding agent"
     },
     {
-      "name": "ai_d2_fallback_notice",
-      "value": "AI 未配置，已切换离线词表"
+      "name": "ai_search_example_2",
+      "value": "批量压缩图片的命令行工具"
     },
     {
-      "name": "ai_d2_empty",
-      "value": "没有找到匹配的工具"
+      "name": "ai_search_example_3",
+      "value": "能录屏的 CLI"
     },
     {
-      "name": "ai_d2_empty_hint",
-      "value": "换个说法再试，例如「我想批量压缩图片」"
+      "name": "ai_search_fallback_notice",
+      "value": "AI 暂不可用，已用本地搜索"
     },
     {
-      "name": "ai_d2_badge",
-      "value": "AI 提名 · 本地目录排序"
+      "name": "ai_search_fallback_no_key",
+      "value": "AI 未配置，已用本地搜索"
+    },
+    {
+      "name": "ai_search_failed",
+      "value": "AI 回答生成失败"
+    },
+    {
+      "name": "ai_search_retry",
+      "value": "重试"
+    },
+    {
+      "name": "ai_search_use_local",
+      "value": "用本地搜索"
+    },
+    {
+      "name": "ai_search_empty",
+      "value": "AI 对这个说法没有把握，试试换个问法"
+    },
+    {
+      "name": "ai_search_related_header",
+      "value": "目录中相关"
+    },
+    {
+      "name": "ai_search_missed_header",
+      "value": "AI 还提到了，但本机目录源里没有"
+    },
+    {
+      "name": "ai_search_footer",
+      "value": "AI 生成 · 已由本地目录校验"
     },
     {
       "name": "ai_d3_button",
@@ -832,10 +884,6 @@
     {
       "name": "ai_settings_auto_intel_hint",
       "value": "用 AI 归纳更新情报卡的摘要；关闭后仅展示发布说明原文"
-    },
-    {
-      "name": "ai_d2_related",
-      "value": "目录相关"
     },
     {
       "name": "brew_tldr_command_hint",

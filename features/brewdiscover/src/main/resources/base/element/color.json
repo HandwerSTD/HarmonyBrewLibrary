@@ -25,6 +25,14 @@
       "value": "#10874C"
     },
     {
+      "name": "brew_board_color_ai_start",
+      "value": "#C4B5FD"
+    },
+    {
+      "name": "brew_board_color_ai_end",
+      "value": "#7C3AED"
+    },
+    {
       "name": "brew_featured_sym_l_formula",
       "value": "#A60A0C10"
     },

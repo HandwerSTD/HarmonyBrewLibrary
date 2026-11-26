@@ -365,6 +365,12 @@ export class BrewDiscoverBoard {
   public sequence: number = 0;
   public entryCount: number = 0;
   public entries: BrewDiscoverEntry[] = [];
+  /**
+   * AI 榜卡（boardKey='ai'）的 Hero 主标题——LLM 生成的画像 headline。
+   * 普通榜空着走 `BrewBoardStyle.titleOf(boardKey)`；AI 榜画像没了就没意义了，
+   * 所以它是 AI 榜卡存在的先决条件之一（详见 d4 spec §3.5）。
+   */
+  public heroTitle?: string;
 }
 
 /** 快照元信息（窗口、候选数、门槛）。供页面标注「基于最近可用数据」 */
@@ -393,6 +399,18 @@ export class BrewDiscoverFeatured extends BrewDiscoverEntry {
   public kind: string = '';
   /** 来自哪张榜：`'trending'` | `'fresh'` */
   public boardKey: string = '';
+}
+
+/**
+ * AI 榜卡（boardKey='ai'）的一行。
+ *
+ * 普通榜的行类型由所属 `BrewDiscoverBoard.kind` 决定（一榜一类），AI 榜的 10 条
+ * 推荐是 formula + cask 混合，行自带 `kind`（值来自候选池的单一事实源，不是 LLM 输出）。
+ * 与 `BrewDiscoverFeatured` 同样的「extends 加字段」做法，不碰基类。
+ */
+export class BrewDiscoverAiEntry extends BrewDiscoverEntry {
+  /** `'formula'` | `'cask'`，详情路由与图标颜色按它走 */
+  public kind: string = '';
 }
 
 export class BrewDiscoverPageData {

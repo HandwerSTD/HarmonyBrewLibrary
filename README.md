@@ -108,6 +108,8 @@ devecocli check lint                                       # ArkTS 代码检查
 | docs/brew-marketplace-content-plan.md | 内容与分类体系规划                |
 | docs/hds-titlebar-blur.md             | 标题栏模糊效果说明                |
 | docs/brew-handover.md                 | 交接说明：环境、命令、脚本与注意事项       |
+| docs/superpowers/specs/2026-11-26-ai-discover-feed-spec.md | D4 AI 发现流：BYOK 画像推断与推荐卡（发现页 AI 区） |
+| docs/superpowers/specs/2026-11-26-ai-search-ask-spec.md | D5 AI 搜索问答化：贴片退役、框内 AI 开关与混排答案 |
 | docs/knowledge/                       | 散装实测笔记：缓存归属、环境路径、探针做法     |
 
 ## 许可

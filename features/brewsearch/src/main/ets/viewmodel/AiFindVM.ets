@@ -2,50 +2,53 @@
  * Copyright (c) 2026 即刻鸟网络科技（青岛）有限公司. Licensed under the Apache License, Version 2.0.
  */
 
-import { Logger } from '@ohos/common';
 import {
   AiError,
   AiErrorDetail,
   AiErrorKind,
   AiIntentInput,
-  AiTaskWords,
-  AiToolCandidate,
-  AiToolResult,
+  AiSearchAnswer,
   AiTasks,
-  AiSettingsStore,
-  BrewKind,
 } from '@ohos/brewcommon';
-import type { AiTaskWord, BrewSearchEntry } from '@ohos/brewcommon';
+import type { BrewSearchEntry } from '@ohos/brewcommon';
+import { Logger } from '@ohos/common';
 import { AiCatalogIndex } from '../model/AiCatalogIndex';
-import { AiFindRow, AiFindResultSource } from '../model/AiFindRowSource';
 
 const TAG: string = '[ai]';
 
 /**
- * 「AI 帮我找工具」的状态（spec §5）。
+ * AI 搜索问答的结果状态（2026-11-26-ai-search-ask-spec §3）。
  *
- * `mode` 记录**本次结果是谁产的**：AI 模式 / 词表模式。断网或未配 Key 时
- * 自动切词表（G6）并在 UI 顶部提示；两种模式的结果都过目录过滤与引擎排序。
+ * `kind` 是**渲染分流口**：页面按它选 answer 混排 / fallback 本地 / error 卡 /
+ * empty 卡。E1/E2/E3 的降级判断在这里做完，页面只消费结果不重复判错。
  */
-export class AiFindState {
-  /** 'idle' | 'loading' | 'ai' | 'wordlist' | 'empty' | 'error' */
-  public mode: string = 'idle';
-  /** 错误分级（mode=error 时有值）。 */
+export class AiAskState {
+  /** 'idle' | 'loading' | 'answer' | 'fallback' | 'error' | 'empty' */
+  public kind: string = 'idle';
+  /** kind=answer 时的混排答案。 */
+  public answer: AiSearchAnswer | null = null;
+  /** kind=fallback 时的降级原因（决定通知条文案：E1 用 no_key 专用文案）。 */
+  public fallbackNoKey: boolean = false;
+  /** kind=error 时的错误分级。 */
   public errorKind: AiErrorKind | null = null;
-  /** E4/E5 的细节后缀（spec §8 排查记录：诊断信息直达 UI）。空串 = 无细节。 */
+  /** E4/E5 的细节后缀（诊断信息直达 UI，沿用 D2 排查记录）。空串 = 无细节。 */
   public errorDetail: string = '';
-  /** 词表模式的提示显隐（G6 的「AI 未配置，已切换离线词表」）。 */
-  public fallbackNotice: boolean = false;
-  /** 本页最近一次意图（防旧结果覆盖：与搜索页 appliedKeyword 同一思路）。 */
+  /** 本页最近一次意图（防陈旧覆盖：新提交在途时旧结果直接丢弃）。 */
   public appliedIntent: string = '';
 }
 
+/** ask() 的结果包裹：state 已就地更新，answer 供页面取。 */
+export interface AiAskOutcome {
+  kind: string;
+  answer?: AiSearchAnswer;
+}
+
 /**
- * D2 的 VM。「AI 帮我找工具」入口挂在搜索首页（spec §5）。
+ * D2 问答化的 VM。搜索框 AI 模式提交走这里（spec §3）。
  *
- * 流程：意图 →（已配 Key 且在线）AiTasks.findTools → 目录过滤 + 引擎排序；
- * （未配 Key / 网络失败）AiTasks.findToolsOffline → 词表 28 条 + 引擎排序。
- * 两种模式产出的都是 `AiToolResult`，渲染层统一吃一个列表。
+ * 流程：意图 → AiTasks.askSearch（LLM 单次调用产 lead+picks，缓存 24h，
+ * 目录校验 G5）→ 混排答案。E1/E2/E3 自动降级为本地搜索（fallback 态），
+ * E4/E5 给错误卡（重试 / 用本地搜索）。陈旧守卫沿用 D2。
  */
 export class AiFindVM {
   private static instance: AiFindVM | undefined = undefined;
@@ -58,93 +61,60 @@ export class AiFindVM {
   }
 
   /**
-   * 跑一次「找工具」。`state.appliedIntent` 先写入（陈旧结果判定用），
-   * 结果回来时 intent 不一致就不覆盖（返回 undefined）。
+   * 提问一次。`state.appliedIntent` 先写入（陈旧结果判定用），结果回来时
+   * intent 不一致就不覆盖（返回 undefined）。空意图直接 undefined（回建议态）。
    */
-  public find(intent: string, state: AiFindState): Promise<AiFindRow[] | undefined> {
+  public ask(intent: string, state: AiAskState): Promise<AiAskOutcome | undefined> {
     const trimmed: string = intent.trim();
     if (trimmed.length === 0) {
       return Promise.resolve(undefined);
     }
     state.appliedIntent = trimmed;
-    state.mode = 'loading';
+    state.kind = 'loading';
+    state.answer = null;
     state.errorKind = null;
     state.errorDetail = '';
-    state.fallbackNotice = false;
+    state.fallbackNoKey = false;
     const input: AiIntentInput = new AiIntentInput();
     input.intent = trimmed;
     const entries: BrewSearchEntry[] = AiCatalogIndex.entries();
-    return AiTasks.findTools(input, entries)
-      .then((result: AiToolResult) => {
+    return AiTasks.askSearch(input, entries)
+      .then((answer: AiSearchAnswer) => {
         if (state.appliedIntent !== trimmed) {
           return undefined;
         }
-        state.mode = 'ai';
-        state.fallbackNotice = false;
-        return AiFindVM.rowsOf(result);
+        // picks 空 = LLM 没有把握（合法空态，D2_SYSTEM 允许空 picks）→ empty 卡
+        if (answer.picks.length === 0) {
+          state.kind = 'empty';
+          state.answer = null;
+          const emptyOutcome: AiAskOutcome = { kind: 'empty' };
+          return emptyOutcome;
+        }
+        state.kind = 'answer';
+        state.answer = answer;
+        const outcome: AiAskOutcome = { kind: 'answer', answer };
+        return outcome;
       })
       .catch((error: AiError) => {
-        const kind: AiErrorKind = error instanceof AiError ? error.kind : AiErrorKind.E2_NETWORK;
-        // E1（未配 Key）/ E2（网络失败）/ E3（超时）→ 自动切词表模式（G6）
-        if (kind === AiErrorKind.E1_NO_KEY || kind === AiErrorKind.E2_NETWORK ||
-          kind === AiErrorKind.E3_TIMEOUT) {
-          if (state.appliedIntent !== trimmed) {
-            return undefined;
-          }
-          Logger.info(TAG, `d2 fallback wordlist reason=${kind}`);
-          state.mode = 'wordlist';
-          state.fallbackNotice = true;
-          return Promise.resolve(AiFindVM.wordlistRows(trimmed));
-        }
-        // E4（格式不符）/ E5（内容拒绝）：给明确错误态（spec §8 D2 行）
         if (state.appliedIntent !== trimmed) {
           return undefined;
         }
-        state.mode = 'error';
+        const kind: AiErrorKind = error instanceof AiError ? error.kind : AiErrorKind.E2_NETWORK;
+        // E1（未配 Key）/ E2（网络失败）/ E3（超时）→ 自动本地搜索（G6：不引导配 Key）
+        if (kind === AiErrorKind.E1_NO_KEY || kind === AiErrorKind.E2_NETWORK ||
+          kind === AiErrorKind.E3_TIMEOUT) {
+          Logger.info(TAG, `d2 fallback local reason=${kind}`);
+          state.kind = 'fallback';
+          state.fallbackNoKey = kind === AiErrorKind.E1_NO_KEY;
+          const fallbackOutcome: AiAskOutcome = { kind: 'fallback' };
+          return fallbackOutcome;
+        }
+        // E4（格式不符）/ E5（内容拒绝）：错误卡（重试 / 用本地搜索）
+        state.kind = 'error';
         state.errorKind = kind;
         state.errorDetail = error instanceof AiError ? AiErrorDetail.of(error) : '';
-        return Promise.resolve([]);
+        const errorOutcome: AiAskOutcome = { kind: 'error' };
+        return errorOutcome;
       });
   }
-
-  /** 词表模式的同步结果（未配 Key 首次进入时 UI 直接走这条，不发起注定失败的请求）。 */
-  public findOffline(intent: string, state: AiFindState): AiFindRow[] {
-    const trimmed: string = intent.trim();
-    state.appliedIntent = trimmed;
-    state.mode = 'wordlist';
-    state.errorKind = null;
-    state.fallbackNotice = true;
-    Logger.info(TAG, `d2 fallback wordlist reason=pre-check`);
-    return AiFindVM.wordlistRows(trimmed);
-  }
-
-  /** 是否已配置到能发 AI 请求（Key + 配置齐全）。UI 入口的引导文案按它分流。 */
-  public isConfigured(): boolean {
-    if (!AiSettingsStore.hasApiKey()) {
-      return false;
-    }
-    // provider_model 形如 `deepseek_deepseek-chat`；没配置时是 `deepseek_`（model 为空），
-    // 此时发请求也会 E1，直接走词表省一次注定失败的网络等待。
-    const key: string = AiTasks.providerModelKey();
-    return key.indexOf('_') > 0 && !key.endsWith('_');
-  }
-
-  private static wordlistRows(intent: string): AiFindRow[] {
-    const words: AiTaskWord[] = AiTaskWords.load();
-    const result: AiToolResult = AiTasks.findToolsOffline(intent, AiCatalogIndex.entries(), words);
-    return AiFindVM.rowsOf(result);
-  }
-
-  /** 结果 → 渲染行。空结果由 UI 的空态分支处理（mode=empty）。 */
-  private static rowsOf(result: AiToolResult): AiFindRow[] {
-    const source: AiFindResultSource = new AiFindResultSource();
-    return source.rowsOf(result, (token: string): BrewKind => {
-      // kind 判定来自目录索引（条目在组装时带 kind）；未命中默认 formula
-      return AiCatalogIndex.kindOf(token) === 'cask' ? BrewKind.CASK : BrewKind.FORMULA;
-    });
-  }
 }
-
-/** 候选 → 行的转换收在数据源侧（与 BrewSearchRowSource 同构）。 */
-export { AiFindRow } from '../model/AiFindRowSource';
-export { AiToolCandidate as AiFindCandidateRow } from '@ohos/brewcommon';

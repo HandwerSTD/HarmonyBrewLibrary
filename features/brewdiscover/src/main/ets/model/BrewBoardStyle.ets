@@ -8,6 +8,10 @@ import { BrewDiscoverBoardKey } from '@ohos/brewcommon';
 // 比 TS 严，走一层 string 常量既保留枚举作为「合法取值」的声明，又不会引入类型告警。
 const TRENDING: string = BrewDiscoverBoardKey.TRENDING;
 const ALLTIME: string = BrewDiscoverBoardKey.ALLTIME;
+// AI 榜卡不是 BrewDiscoverBoardKey 的成员（它是插进 feed 的虚拟榜，见 d4 spec），
+// 但大图卡的来源徽章与 AI 榜 Hero 都走本类取 title，所以这里也有一个 string 常量。
+// 视图层（BoardCard/BaseView）判「这张榜是不是 AI 榜」也用它，故 export。
+export const AI_BOARD: string = 'ai';
 
 /**
  * 榜单的展示属性（标题 / 符号 / 主题色）。
@@ -21,6 +25,9 @@ const ALLTIME: string = BrewDiscoverBoardKey.ALLTIME;
  */
 export class BrewBoardStyle {
   public static titleOf(boardKey: string): Resource {
+    if (boardKey === AI_BOARD) {
+      return $r('app.string.brew_board_ai');
+    }
     if (boardKey === ALLTIME) {
       return $r('app.string.brew_board_alltime');
     }
@@ -32,6 +39,11 @@ export class BrewBoardStyle {
 
   /** 右上角水印符号。替代真实图片，给纯色块一点纹理 */
   public static symbolOf(boardKey: string): Resource {
+    if (boardKey === AI_BOARD) {
+      // sparkle 在 sys.symbol 里未确认存在（实测有效的名字才进本文件，见类注释），
+      // lightbulb 已被 ai 分类图标使用（BrewFeaturedArtStyle），语义同源
+      return $r('sys.symbol.lightbulb');
+    }
     if (boardKey === ALLTIME) {
       return $r('sys.symbol.list_checkmark');
     }
@@ -43,6 +55,9 @@ export class BrewBoardStyle {
 
   /** 渐变起点（上） */
   public static colorStartOf(boardKey: string): Resource {
+    if (boardKey === AI_BOARD) {
+      return $r('app.color.brew_board_color_ai_start');
+    }
     if (boardKey === ALLTIME) {
       return $r('app.color.brew_board_color_alltime_start');
     }
@@ -67,9 +82,14 @@ export class BrewBoardStyle {
    * 而不是沿同色相硬压暗。三个末端的 HSV 彩度统一锁在 0.88。
    *
    * 现网实测（2026-09）：trending 4.58:1、alltime 4.57:1、fresh 4.57:1。
+   * AI 榜（2026-11）：ai 5.70:1（#C4B5FD → #7C3AED，紫罗兰——不会压成棕/橄榄，
+   * 起点取淡薰衣草保持与其余三套同量级的「亮→深」日落式走向）。
    * **改终点色必须重算这个值**：起点可以随便调亮（它不被文字压），但终点调浅会让字读不出来。
    */
   public static colorEndOf(boardKey: string): Resource {
+    if (boardKey === AI_BOARD) {
+      return $r('app.color.brew_board_color_ai_end');
+    }
     if (boardKey === ALLTIME) {
       return $r('app.color.brew_board_color_alltime_end');
     }
