@@ -930,6 +930,22 @@
       "value": "撤销忽略"
     },
     {
+      "name": "detail_follow_title",
+      "value": "关注更新"
+    },
+    {
+      "name": "detail_follow_desc",
+      "value": "关注后置顶显示在「待更新」列表，并出现在桌面更新卡片上"
+    },
+    {
+      "name": "detail_follow_on",
+      "value": "关注"
+    },
+    {
+      "name": "detail_follow_off",
+      "value": "取消关注"
+    },
+    {
       "name": "release_intel_pause_7",
       "value": "暂停 7 天"
     },

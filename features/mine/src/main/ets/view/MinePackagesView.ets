@@ -50,6 +50,7 @@ import {
   brewLogActionBar,
   brewTitleBarStyle,
   brewTitleBarTotalHeight,
+  UPDATE_FOLLOW_VERSION_KEY,
 } from '@ohos/brewcommon';
 import type { BrewInstalledPackage } from '@ohos/brewcommon';
 import { PackageListMode } from '../model/MinePackagesModels';
@@ -85,6 +86,12 @@ export struct MinePackagesView {
    * （详情页就是这么踩的，见 docs §10.4.1）。
    */
   @State backPressed: boolean = false;
+  /**
+   * 关注表版本号（F 线）。行组件 / 详情页每次写关注表都会 bump 它，
+   * @Watch 在这里把变化转成 VM 的重排 —— 置顶排序跟着最新关注表走，
+   * 从详情页改完关注返回列表时顺序也立即正确（不需要等一次快照刷新）。
+   */
+  @StorageProp(UPDATE_FOLLOW_VERSION_KEY) @Watch('onFollowVersionChanged') followVersion: number = 0;
   viewModel: MinePackagesVM = MinePackagesVM.getInstance();
   @State packagesState: MinePackagesState = this.viewModel.getState();
   /**
@@ -107,6 +114,11 @@ export struct MinePackagesView {
 
   aboutToDisappear(): void {
     this.viewModel.unsubscribeSnapshot();
+  }
+
+  /** 关注表变化（F 线）→ VM 重排待更新列表 + 触发卡片重推。非待更新模式由 VM 内部短路 */
+  private onFollowVersionChanged(): void {
+    this.viewModel.onFollowToggled();
   }
 
   private handleOnReady(ctx: NavDestinationContext): void {
@@ -344,7 +356,13 @@ export struct MinePackagesView {
         if (this.packagesState.filteredPackages.length > 0) {
           Column() {
             ForEach(this.packagesState.filteredPackages, (pkg: BrewInstalledPackage) => {
-              BrewLocalPackageRow({ installedPackage: pkg })
+              BrewLocalPackageRow({
+                installedPackage: pkg,
+                // F 线：关注星标只在待更新列表出现（关注语义只存在于更新提醒）。
+                // 开关点击由行组件就地写偏好并 bump 版本号，本页的 followVersion
+                // @Watch 负责重排 —— 排序归父级，行组件不管顺序。
+                followEnabled: this.packagesState.mode === PackageListMode.OUTDATED,
+              })
                 .onClick(() => {
                   this.openDetail(pkg);
                 })

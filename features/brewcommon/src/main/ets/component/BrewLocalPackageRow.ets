@@ -11,6 +11,7 @@ import {
 import type { BrewInstalledPackage } from '../model/BrewModels';
 import { BrewFormat } from '../util/BrewFormat';
 import { BrewIconSize } from '../constant/BrewIconStyle';
+import { UPDATE_FOLLOW_VERSION_KEY, UpdateFollowPrefs } from '../service/UpdateFollowPrefs';
 import { BrewPackageIcon } from './BrewPackageIcon';
 
 /**
@@ -27,6 +28,15 @@ import { BrewPackageIcon } from './BrewPackageIcon';
  *   尾部槽位（宽度最短）  来源：主动安装 / 作为依赖安装
  * 反过来的话 cask 的长版本号会被尾部槽位截掉，等于没显示。
  *
+ * F 线（关注更新）：`followEnabled` 为真时尾部槽位最左侧多一颗关注星标
+ * （仅「待更新」列表传入）。关注状态**渲染时现读** `UpdateFollowPrefs`（不缓存进
+ * @State）：关注表的变化经 UPDATE_FOLLOW_VERSION_KEY 版本号广播到本组件的
+ * @StorageProp 上，版本一变整行重渲染、星标就重读一次 —— 无论是本行点的开关还是
+ * 别处（详情页）改的，星标都能立刻跟上，不存在「从详情页返回后星标是旧的」。
+ *
+ * 点星标**就地**写偏好（写入方自己 bump 版本号）；行的点击（进详情页）不受影响：
+ * 星标的 onClick 消费掉点击，不会冒泡到行上。
+ *
  * 右侧箭头表示这一行可以点进详情页。导航不在这里做：点击由调用方 `.onClick()` 挂在组件调用上，
  * 与 `BrewPackageRow` 各处调用点相同 —— 参数式的点击回调会被 `HdsListItemCard` 丢掉
  * （无编译错误、无运行时报错，行就是点不动）。
@@ -35,6 +45,24 @@ import { BrewPackageIcon } from './BrewPackageIcon';
 export struct BrewLocalPackageRow {
   @Prop @Require installedPackage: BrewInstalledPackage;
   @Prop itemHeight: Dimension = $r('app.float.brew_package_row_height');
+  /** 是否渲染关注星标。只有「待更新」列表传 true；预览卡等只读场景不传 */
+  @Prop followEnabled: boolean = false;
+  /** 关注表版本号（F 线）。只用于触发重渲染；渲染时现读偏好拿真实状态 */
+  @StorageProp(UPDATE_FOLLOW_VERSION_KEY) followVersion: number = 0;
+
+  /** 本行当前是否关注中。渲染时现读：写入方（本行/详情页）都会先写偏好再 bump 版本 */
+  private isFollowed(): boolean {
+    return UpdateFollowPrefs.isFollowed(this.installedPackage.name);
+  }
+
+  /** 点星标：写偏好（内部 bump 版本号 → 本行与其他行都重渲染）。重排序归父级负责 */
+  private toggleFollow(): void {
+    if (this.isFollowed()) {
+      UpdateFollowPrefs.clearFollowed(this.installedPackage.name);
+    } else {
+      UpdateFollowPrefs.setFollowed(this.installedPackage.name);
+    }
+  }
 
   /** 有新版本时显示版本变化，否则只显示当前版本 */
   private versionText(): ResourceStr {
@@ -55,9 +83,24 @@ export struct BrewLocalPackageRow {
       $r('app.string.brew_mine_as_dependency') : $r('app.string.brew_mine_on_request');
   }
 
+  /** 关注星标（F 线）：未关注空心、已关注实心强调色。onClick 消费点击，行点击（进详情）不触发 */
+  @Builder
+  FollowStarBuilder() {
+    SymbolGlyph(this.isFollowed() ? $r('sys.symbol.star_fill') : $r('sys.symbol.star'))
+      .fontSize($r('sys.float.Title_S'))
+      .fontColor([this.isFollowed() ? $r('sys.color.icon_emphasize') : $r('sys.color.icon_tertiary')])
+      .margin({ right: $r('sys.float.padding_level2') })
+      .onClick(() => {
+        this.toggleFollow();
+      })
+  }
+
   @Builder
   SourceBuilder() {
     Row() {
+      if (this.followEnabled) {
+        this.FollowStarBuilder()
+      }
       Text(this.sourceText())
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_tertiary'))
