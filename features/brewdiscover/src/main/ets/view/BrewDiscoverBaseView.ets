@@ -51,6 +51,9 @@ export struct BrewDiscoverBaseView {
 
   aboutToAppear(): void {
     this.viewModel.subscribeTable();
+    // 安装快照落地比进页晚（冷启首跑 brew list 要 2 秒上下）：订阅落地事件，
+    // AI 区闸门在快照到达时自动补装配，不逼用户切页重进
+    this.viewModel.subscribeInstalled();
     this.viewModel.refreshTable();
     this.viewModel.sendEvent<OffsetParam>({
       type: BaseHomeEventType.HANDLE_BREAKPOINT_CHANGE,
@@ -61,6 +64,7 @@ export struct BrewDiscoverBaseView {
   // 包表落地时的回调靠页面生命周期退订（VM 是单例，不退会累积）
   aboutToDisappear(): void {
     this.viewModel.unsubscribeTable();
+    this.viewModel.unsubscribeInstalled();
   }
 
   handleBreakPointChange(): void {

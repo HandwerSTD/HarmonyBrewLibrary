@@ -34,8 +34,9 @@ export const DISCOVER_PREVIEW_COUNT: number = 5;
  *
  * **AI 榜特判（D4）**：`boardKey === 'ai'` 时行为三处不同 ——
  *   1. Hero 标题 = `heroTitle`（画像 headline，LLM 产出），空则回退 titleOf；
- *   2. 行**全显**（不截 5 条）、不渲染「查看全部」——AI 榜没有二级页；
- *   3. 根节点不可点、Hero 右上角换成「换一批」圆钮（handleRegenerate）。
+ *   2. 行**全显**（不截 5 条）—— 但保留底部「查看全部」行进二级页（boardId=0
+ *      = AI 榜，数据取首页 VM 的 aiBoard），与其他榜卡的操作模型对齐；
+ *   3. Hero 右上角换成「换一批」圆钮（handleRegenerate）。
  */
 @Component
 export struct BrewDiscoverBoardCard {
@@ -151,8 +152,12 @@ export struct BrewDiscoverBoardCard {
     Column() {
       this.HeroBuilder()
       this.RowsBuilder()
-      // 预览装不下才给入口。新星榜常常不足 5 条，那时「查看全部」会指向一个没有增量的页面
+      // 预览装不下才给入口。新星榜常常不足 5 条，那时「查看全部」会指向一个没有增量的页面。
+      // AI 榜卡内已全显，但按用户要求保留「查看全部」行进二级页（与其他榜卡对齐）
       if (!this.isAiBoard() && this.board.entryCount > DISCOVER_PREVIEW_COUNT) {
+        this.ViewAllBuilder()
+      }
+      if (this.isAiBoard() && this.board.entries.length > 0) {
         this.ViewAllBuilder()
       }
     }
@@ -163,10 +168,6 @@ export struct BrewDiscoverBoardCard {
     .clip(true)
     .clickEffect({ level: ClickEffectLevel.MIDDLE })
     .onClick(() => {
-      // AI 榜没有二级页，根节点点击不导航（防误触跳到一个不存在的 boardId=0 页）
-      if (this.isAiBoard()) {
-        return;
-      }
       this.handleViewAll?.(this.board);
     })
   }

@@ -19,7 +19,7 @@ import {
   StorageKey,
 } from '@ohos/common';
 import { BrewFormat, brewTitleBarStyle } from '@ohos/brewcommon';
-import type { BrewDiscoverBoardParams, BrewDiscoverEntry } from '@ohos/brewcommon';
+import type { BrewDiscoverAiEntry, BrewDiscoverBoardParams, BrewDiscoverEntry, BrewKind } from '@ohos/brewcommon';
 import { BrewBoardStyle } from '../model/BrewBoardStyle';
 import { BrewDiscoverRow, BrewDiscoverRowDivider } from '../component/BrewDiscoverRow';
 import { BrewDiscoverBoardState } from '../viewmodel/BrewDiscoverBoardState';
@@ -72,7 +72,8 @@ export struct BrewDiscoverBoardView {
     }).getValue(this.globalInfoModel.widthBreakpoint);
   }
 
-  /** 数据来源说明。榜单是算法产物，用户有权知道它是怎么来的、覆盖什么时间 */
+  /** 数据来源说明。榜单是算法产物，用户有权知道它是怎么来的、覆盖什么时间。
+   * AI 榜（boardId=0）不是 stat 快照产物，这行不显示 */
   @Builder
   ProvenanceBuilder() {
     Text($r('app.string.brew_discover_snapshot', this.boardState.snapshotDate))
@@ -86,19 +87,31 @@ export struct BrewDiscoverBoardView {
       })
   }
 
+  /** 行的类型：AI 榜行自带 kind（逐行 formula/cask 混排），stat 榜用 board.kind */
+  private rowKindOf(entry: BrewDiscoverEntry): BrewKind {
+    const boardKind: string = this.boardState.board?.kind ?? '';
+    if (boardKind.length === 0) {
+      const aiEntry: BrewDiscoverAiEntry = entry as BrewDiscoverAiEntry;
+      return BrewFormat.brewKindOf(aiEntry.kind);
+    }
+    return BrewFormat.brewKindOf(boardKind);
+  }
+
   @Builder
   ContentBuilder() {
     Scroll() {
       Column() {
         if (this.boardState.board) {
-          this.ProvenanceBuilder()
+          if (this.boardState.snapshotDate.length > 0) {
+            this.ProvenanceBuilder()
+          }
           Column() {
             ForEach(this.boardState.board.entries, (entry: BrewDiscoverEntry, index: number) => {
               BrewDiscoverRow({
                 entry: entry,
-                kind: BrewFormat.brewKindOf(this.boardState.board?.kind ?? 'formula'),
+                kind: this.rowKindOf(entry),
                 handleItemClick: (clicked: BrewDiscoverEntry) => {
-                  this.viewModel.jumpDetail(clicked, this.boardState.board?.kind ?? 'formula');
+                  this.viewModel.jumpDetail(clicked, this.boardState.board?.kind ?? '');
                 },
               })
               if (index < (this.boardState.board?.entries.length ?? 0) - 1) {

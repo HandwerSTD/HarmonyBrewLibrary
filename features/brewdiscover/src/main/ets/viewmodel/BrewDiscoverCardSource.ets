@@ -15,6 +15,15 @@ export class BrewDiscoverCardSource implements IDataSource {
 
   public setDataArray(dataArray: BrewDiscoverFeedItem[]): void {
     this.feedList = dataArray;
+    // IDataSource 契约：数据换了必须通知，LazyForEach 才会重取。历史上这里不通知
+    // 也能用，是因为 loadDiscover 设完数据紧跟 loadingStatus 切 SUCCESS，loading→
+    // content 的整页重建连带重建了 LazyForEach；D4 的运行时 phase 重建（骨架→实体、
+    // 换一批）不碰 loadingStatus，不通知时数据源与已渲染节点脱节 —— 表现为 AI 区
+    // 光有骨架不落地、原有六榜卡丢失。
+    const current: DataChangeListener[] = this.listeners.slice();
+    for (const one of current) {
+      one.onDataReloaded();
+    }
   }
 
   public totalCount(): number {
