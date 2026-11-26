@@ -10,8 +10,11 @@ import {
   AI_PROMPT_MAX_CHARS,
   AI_CACHE_TTL_D2_MS,
   AI_CACHE_TTL_D4_MS,
+  AI_D2_INTRO_MAX_CHARS,
+  AI_D2_LEAD_MAX_CHARS,
   AI_D2_MAX_CANDIDATES,
   AI_D2_RESULT_LIMIT,
+  AI_D2_TAIL_ROWS_MAX,
   AI_D3_STDERR_TAIL_CHARS,
   AI_D3_STDOUT_TAIL_CHARS,
   AI_D4_PICKS,
@@ -54,8 +57,8 @@ import {
   AiFailureCard,
   AiFailureInput,
   AiIntentInput,
-  AiToolCandidate,
-  AiToolResult,
+  AiSearchAnswer,
+  AiSearchPick,
 } from '../model/AiTypes';
 import {
   ReleaseIntelBreakingChange,
@@ -67,7 +70,6 @@ import { AiCache, AiCacheReadResult } from './AiCache';
 import { AiClient } from './AiClient';
 import type { AiClientTask, AiCompletion as AiCompletion2 } from './AiClient';
 import { AiSettingsStore } from './AiSettingsStore';
-import { AiTaskWords as AiTaskWordsStatic, AiTaskWord } from '../util/AiTaskWords';
 import { fnv1a32 } from '../util/BrewHash';
 
 const TAG: string = '[ai]';
@@ -218,25 +220,29 @@ export class AiTasks {
     });
   }
 
-  // ------------------------------------------------------------ D2 · 找工具
+  // ------------------------------------------------------------ D2 · AI 搜索问答
 
   /**
-   * AI 找工具（spec §5）：提名 → 目录过滤（G5）→ 引擎排序 → 截断。
+   * AI 搜索问答（2026-11-26-ai-search-ask-spec §3）：单次 LLM 调用产出
+   * lead 总起段 + picks[{token, intro}] 推荐对；本地目录校验（G5）后
+   * 拼上引擎召回的 related 尾行。
    *
+   * 答案顺序 = **LLM 叙事序**（首选在前），不经本地引擎重排——
+   * 引擎只负责 related 尾行的召回排序。
    * `entries` 是本地目录的搜索索引（调用方从 BrewTable 组装，与主搜索同源）。
-   * AI 模式失败（E2/E3/E4）时**不在这里**降级——调用方拿 `AiError.kind` 自己决定
-   * 是否切词表模式（spec §8 的降级矩阵）。
+   * E1–E5 的降级在调用方（搜索页）处理：E1/E2/E3 → 本地搜索 + 通知条；
+   * E4/E5 → 错误卡（重试 / 用本地搜索）。
    */
-  public static findTools(input: AiIntentInput, entries: BrewSearchEntry[]): Promise<AiToolResult> {
+  public static askSearch(input: AiIntentInput, entries: BrewSearchEntry[]): Promise<AiSearchAnswer> {
     const cacheKey: string = slugOf(input.intent);
     const providerKey: string = AiTasks.providerModelKey();
     const cached: AiCacheLookup = AiTasks.lookup('d2', providerKey, cacheKey,
       AI_PROMPT_VERSION_D2, AI_CACHE_TTL_D2_MS);
     if (cached.hit) {
-      const result: AiToolResult | null = AiTasks.filterAndRank(cached.dataJson, entries, input.intent);
-      if (result !== null) {
+      const answer: AiSearchAnswer | null = AiTasks.parseAnswer(cached.dataJson, entries, input.intent);
+      if (answer !== null) {
         Logger.info(TAG, `d2 cache hit key=${cacheKey} age=${cached.age}`);
-        return Promise.resolve(result);
+        return Promise.resolve(answer);
       }
     }
     const task: AiClientTask = AiClient.newTask();
@@ -246,102 +252,80 @@ export class AiTasks {
     task.maxTokens = AI_MAX_TOKENS_D2;
     return AiClient.complete(task).then((completion) => {
       const outcome: ParseOutcome = new ParseOutcome();
-      const result: AiToolResult | null = AiTasks.filterAndRank(completion.content, entries,
+      const answer: AiSearchAnswer | null = AiTasks.parseAnswer(completion.content, entries,
         input.intent, outcome);
-      if (result === null) {
+      if (answer === null) {
         throw new AiError(AiErrorKind.E4_BAD_FORMAT,
           `d2 reason=${e4ReasonOf(completion, outcome.reason)}`);
       }
       AiCache.write('d2', providerKey, cacheKey, AI_PROMPT_VERSION_D2, completion.model,
         JSON.stringify(completion.content));
-      Logger.info(TAG, `d2 ok dropped=${result.dropped} kept=${result.candidates.length} ` +
-        `latency=${completion.latencyMs}`);
-      return result;
+      Logger.info(TAG, `d2 ok picks=${answer.picks.length} related=${answer.related.length} ` +
+        `dropped=${answer.dropped} latency=${completion.latencyMs}`);
+      return answer;
     });
   }
 
   /**
-   * 离线词表模式（G6）：中文意图 → 词表条目 → 候选去重 → 引擎排序。
-   * **不发任何请求**。命中空表的意图由 UI 显示空态。
+   * 解析 + 组装（G5）：LLM 文本 → lead + picks（目录过滤，token 用目录正字）+
+   * related（引擎召回）。解析失败（非 JSON / 壳不符 / picks 超上限）返回 null（E4）。
    */
-  public static findToolsOffline(intent: string, entries: BrewSearchEntry[],
-    words: AiTaskWord[]): AiToolResult {
-    const result: AiToolResult = new AiToolResult();
-    const seen: Set<string> = new Set<string>();
-    const hits: AiTaskWord[] =
-      AiTasks.wordlistMatch(intent, words);
-    hits.forEach((word) => {
-      word.tokens.forEach((token: string) => {
-        if (!seen.has(token)) {
-          seen.add(token);
-          const cand: AiToolCandidate = new AiToolCandidate();
-          cand.token = token;
-          cand.why = word.note;
-          result.candidates.push(cand);
-        }
-      });
-    });
-    return AiTasks.rankCandidates(result, entries, intent);
-  }
-
-  private static wordlistMatch(intent: string, words: AiTaskWord[]): AiTaskWord[] {
-    // 与 `AiTaskWords.match()` 同口径（精确 / 前缀）。AiTaskWords 是零依赖纯工具类，
-    // 这里直接 import 不构成循环；匹配逻辑收在 AiTaskWords 一处、这里只做转发更干净。
-    return AiTaskWordsStatic.match(intent, words);
-  }
-
-  /** 目录过滤 + 引擎排序（G5 / spec §5 第 2、3 步）。AI 文本解析失败返回 null（E4）。 */
-  private static filterAndRank(aiText: string, entries: BrewSearchEntry[], intent: string,
-    outcome?: ParseOutcome): AiToolResult | null {
-    const candidates: AiToolCandidate[] | null = AiTasks.parseCandidates(aiText, outcome);
-    if (candidates === null) {
+  private static parseAnswer(aiText: string, entries: BrewSearchEntry[], intent: string,
+    outcome?: ParseOutcome): AiSearchAnswer | null {
+    const raw: AiSearchAnswer | null = AiTasks.parsePicks(aiText, outcome);
+    if (raw === null) {
       return null;
     }
     const known: Map<string, BrewSearchEntry> = new Map<string, BrewSearchEntry>();
     entries.forEach((entry: BrewSearchEntry) => {
       known.set(entry.token, entry);
     });
-    const result: AiToolResult = new AiToolResult();
+    const answer: AiSearchAnswer = new AiSearchAnswer();
+    answer.lead = raw.lead;
     const seen: Set<string> = new Set<string>();
-    candidates.forEach((cand: AiToolCandidate) => {
-      const token: string = cand.token.trim().toLowerCase();
+    raw.picks.forEach((pick: AiSearchPick) => {
+      const token: string = pick.token.trim().toLowerCase();
       if (token.length === 0 || seen.has(token)) {
         return;
       }
-      if (!known.has(token)) {
-        // 目录外名字：计数进日志，**名单不留存、不展示**（G5 防 slopsquatting）
-        result.dropped++;
+      const entry: BrewSearchEntry | undefined = known.get(token);
+      if (entry === undefined) {
+        // 目录外名字（本机源里查不到）：进 missed 名单在答案尾部披露（m01462——
+        // lead 说 5 个而只匹配 3 个会显得诡异），但不可点击、无详情、无安装入口
+        // （G5 防 slopsquatting 的本质是防诱导，披露缺失恰是反诱导）。
+        answer.dropped++;
+        answer.missed.push(token);
         return;
       }
       seen.add(token);
-      result.candidates.push(cand);
+      const kept: AiSearchPick = new AiSearchPick();
+      kept.token = entry.token; // 目录正字（单一事实源），不信模型的大小写
+      kept.intro = pick.intro;
+      answer.picks.push(kept);
     });
-    Logger.info(TAG, `d2 filtered dropped=${result.dropped} kept=${result.candidates.length}`);
-    AiTasks.rankCandidates(result, entries, intent);
-    // 目录侧补充召回（spec §5 第 2.5 步）：LLM 的知识里没有 Harmonybrew 特有包
-    // （鸿蒙生态 token 不在训练语料里），提名阶段就永远不会出现——但本地目录索引
-    // 有。结果不足 LIMIT 时用意图原文跑一次引擎排序，取未被 AI 候选覆盖的条目
-    // 补足（why 用固定模板文案，与 AI 提名行区分）。这些行**来自目录本身**，
-    // G5 无幻觉风险。空态也受益：AI 候选 + 词表全空时仍可能有目录相关结果。
-    AiTasks.supplementFromCatalog(result, entries, intent);
-    return result;
+    Logger.info(TAG, `d2 filtered dropped=${answer.dropped} kept=${answer.picks.length}`);
+    // related 尾行召回：picks 不足 AI_D2_RESULT_LIMIT 时用意图原文跑一次引擎排序，
+    // 取未被 AI 覆盖的条目补足。这些行**来自目录本身**，G5 无幻觉风险。
+    // 「目录里查得到」是它唯一的出场资格——与 AI 推荐对（有介绍段）视觉区分。
+    AiTasks.buildRelated(answer, entries, intent);
+    return answer;
   }
 
   /**
-   * 目录补充召回：引擎对意图原文的排序命中里，取未被 AI 候选覆盖的条目补进结果
-   * （补足到 AI_D2_RESULT_LIMIT 封顶）。AI 候选为空时同样生效——「候选太少」与
-   * 「空态」统一退化为「至少有目录相关结果」。dropped 只统计 AI 提名的目录外数，
-   * 补充行不计入。
+   * related 尾行召回（原 supplementFromCatalog 的问答化变体）：引擎对意图原文的
+   * 排序命中里，取未被 picks 覆盖的条目，补足到 AI_D2_RESULT_LIMIT 封顶、
+   * AI_D2_TAIL_ROWS_MAX 截断。intro 恒空——渲染层用「目录中相关」标题区分。
+   * picks 为空时同样生效（空态兜底：至少给目录相关结果）。
    */
-  private static supplementFromCatalog(result: AiToolResult, entries: BrewSearchEntry[],
+  private static buildRelated(answer: AiSearchAnswer, entries: BrewSearchEntry[],
     intent: string): void {
-    const room: number = AI_D2_RESULT_LIMIT - result.candidates.length;
+    const room: number = Math.min(AI_D2_RESULT_LIMIT - answer.picks.length, AI_D2_TAIL_ROWS_MAX);
     if (room <= 0) {
       return;
     }
     const covered: Set<string> = new Set<string>();
-    result.candidates.forEach((cand: AiToolCandidate) => {
-      covered.add(cand.token.trim().toLowerCase());
+    answer.picks.forEach((pick: AiSearchPick) => {
+      covered.add(pick.token.trim().toLowerCase());
     });
     const hits: BrewSearchHit[] = BrewSearchEngine.rank(intent, entries, 0);
     let added: number = 0;
@@ -352,70 +336,57 @@ export class AiTasks {
         continue;
       }
       covered.add(token);
-      const cand: AiToolCandidate = new AiToolCandidate();
-      cand.token = hit.token;
-      cand.why = ''; // why 由渲染层用 ai_d2_related 资源文案（补充行标记），不走 AI 文本
-      result.candidates.push(cand);
+      const rel: AiSearchPick = new AiSearchPick();
+      rel.token = hit.token;
+      rel.intro = ''; // 尾行无介绍段，由渲染层的标题承担身份
+      answer.related.push(rel);
       added++;
     }
     if (added > 0) {
-      Logger.info(TAG, `d2 supplement added=${added} total=${result.candidates.length}`);
+      Logger.info(TAG, `d2 related added=${added} total=${answer.picks.length + added}`);
     }
-  }
-
-  /** 引擎重排：AI 只提名，顺序由 BrewSearchEngine 说了算（spec §5 第 3 步）。 */
-  private static rankCandidates(result: AiToolResult, entries: BrewSearchEntry[],
-    intent: string): AiToolResult {
-    if (result.candidates.length === 0) {
-      return result;
-    }
-    const byToken: Map<string, AiToolCandidate> = new Map<string, AiToolCandidate>();
-    result.candidates.forEach((cand: AiToolCandidate) => {
-      byToken.set(cand.token.toLowerCase(), cand);
-    });
-    const intentHits: BrewSearchHit[] = BrewSearchEngine.rank(intent, entries, 0);
-    const scoreByToken: Map<string, number> = new Map<string, number>();
-    intentHits.forEach((hit: BrewSearchHit, index: number) => {
-      scoreByToken.set(hit.token, 1000 - index);
-    });
-    result.candidates.sort((a: AiToolCandidate, b: AiToolCandidate): number => {
-      const sa: number = scoreByToken.get(a.token.toLowerCase()) ?? 0;
-      const sb: number = scoreByToken.get(b.token.toLowerCase()) ?? 0;
-      if (sa !== sb) {
-        return sb - sa;
-      }
-      return a.token.localeCompare(b.token);
-    });
-    if (result.candidates.length > AI_D2_RESULT_LIMIT) {
-      result.candidates = result.candidates.slice(0, AI_D2_RESULT_LIMIT);
-    }
-    return result;
-  }
-
-  private static parseCandidates(text: string, outcome?: ParseOutcome): AiToolCandidate[] | null {
-    // 裸数组形态（结构性差异修复 ①）：部分模型对 D2 会输出 `[{token,why},...]`（不带
-    // candidates 包裹）——先探测，命中直接当候选数组解析，不走对象壳。
-    const bare: AiToolCandidate[] | null = AiTasks.parseCandidatesBareArray(text, outcome);
-    if (bare !== null) {
-      return bare;
-    }
-    return parseJsonSafe(text, (obj: Record<string, Object>): AiToolCandidate[] | null => {
-      const listObj: Object | undefined = obj['candidates'];
-      if (!Array.isArray(listObj)) {
-        return null;
-      }
-      return AiTasks.castCandidateList(listObj);
-    });
   }
 
   /**
-   * 裸数组形态探测（D2 专属）：顶层就是数组且元素是候选对象（带非空 token）。
-   * 与 parseJsonSafe 尝试 3 的「数组包裹取首元素」互补——那条路把数组当包裹，
-   * 这条路把数组当**数据本身**。非候选对象数组（如 D1/D3 的包裹形态）返回 null
-   * 交回通用壳处理。
+   * LLM 文本 → {lead, picks} 原始结构（未做目录过滤）。
+   * - 对象壳：`{"lead":"…","picks":[{token,intro}…]}`；
+   * - 裸数组形态（结构性差异修复 ① 的沿用）：部分模型输出 `[{token,intro}…]`
+   *   不带壳——接受为 picks（lead 空串）；
+   * - picks 空数组合法（宁可不推荐的空态）；超 AI_D2_MAX_CANDIDATES 判 null（E4）；
+   * - lead / intro 超长 **clamp**（不判 E4——字数溢出是内容问题不是结构问题）。
    */
-  private static parseCandidatesBareArray(text: string, outcome?: ParseOutcome):
-    AiToolCandidate[] | null {
+  private static parsePicks(text: string, outcome?: ParseOutcome): AiSearchAnswer | null {
+    // 裸数组形态探测：顶层就是数组且元素是 pick 对象（带非空 token）。
+    const bare: AiSearchAnswer | null = AiTasks.parsePicksBareArray(text, outcome);
+    if (bare !== null) {
+      return bare;
+    }
+    return parseJsonSafe(text, (obj: Record<string, Object>): AiSearchAnswer | null => {
+      const listObj: Object | undefined = obj['picks'];
+      if (!Array.isArray(listObj)) {
+        return null;
+      }
+      const picks: AiSearchPick[] | null = AiTasks.castPickList(listObj);
+      if (picks === null) {
+        return null;
+      }
+      const out: AiSearchAnswer = new AiSearchAnswer();
+      out.lead = AiTasks.clampText(obj['lead'], AI_D2_LEAD_MAX_CHARS);
+      out.picks = picks;
+      if (outcome !== undefined) {
+        outcome.reason = E4_REASON_OK;
+      }
+      return out;
+    }, outcome);
+  }
+
+  /**
+   * 裸数组形态探测（D2 专属）：顶层就是数组且元素是 pick 对象（带非空 token）。
+   * 与 parseJsonSafe 尝试 3 的「数组包裹取首元素」互补——那条路把数组当包裹，
+   * 这条路把数组当**数据本身**（lead 以空串兜底）。非 pick 数组返回 null 交回通用壳。
+   */
+  private static parsePicksBareArray(text: string, outcome?: ParseOutcome):
+    AiSearchAnswer | null {
     let parsed: Object | null = tryParseObject(text);
     if (parsed !== null) {
       // 原文直接就是 JSON 对象：不是裸数组形态，交回对象壳
@@ -427,21 +398,27 @@ export class AiTasks {
     if (parsed === null) {
       return null;
     }
-    const out: AiToolCandidate[] | null = AiTasks.castCandidateList(parsed);
-    if (out !== null && outcome !== undefined) {
+    const picks: AiSearchPick[] | null = AiTasks.castPickList(parsed);
+    if (picks === null) {
+      return null;
+    }
+    const out: AiSearchAnswer = new AiSearchAnswer();
+    out.lead = '';
+    out.picks = picks;
+    if (outcome !== undefined) {
       outcome.reason = E4_REASON_OK;
     }
     return out;
   }
 
   /**
-   * 候选数组逐条 cast（对象壳与裸数组壳共用）：
-   * - 空数组 = **合法空态**（结构性差异修复 ②）：意图太泛时模型输出 `{"candidates":[]}`
-   *   是「不确定的宁可不推荐」的正确行为，返回空列表走空态 UI，不再判 E4；
-   * - 单条缺 token **跳过该条**（与 filterAndRank 的单条 drop 精神一致），不再整页拒绝；
+   * pick 数组逐条 cast（对象壳与裸数组壳共用）：
+   * - 空数组 = **合法空态**：意图太泛时模型输出 `{"picks":[]}` 是「不确定的
+   *   宁可不推荐」的正确行为，返回空列表走空态 UI，不再判 E4；
+   * - 单条缺 token **跳过该条**（与 parseAnswer 的单条 drop 精神一致），不整页拒绝；
    * - 超上限才是格式不符（返回 null → E4）。
    */
-  private static castCandidateList(listObj: Object): AiToolCandidate[] | null {
+  private static castPickList(listObj: Object): AiSearchPick[] | null {
     if (!Array.isArray(listObj)) {
       return null;
     }
@@ -449,7 +426,7 @@ export class AiTasks {
     if (list.length > AI_D2_MAX_CANDIDATES) {
       return null;
     }
-    const out: AiToolCandidate[] = [];
+    const out: AiSearchPick[] = [];
     for (let i: number = 0; i < list.length; i++) {
       const rec: Object | undefined = list[i];
       if (rec === undefined || rec === null) {
@@ -457,23 +434,40 @@ export class AiTasks {
       }
       const recObj: Record<string, Object> = rec as Record<string, Object>;
       const token: string = typeof recObj['token'] === 'string' ? recObj['token'] as string : '';
-      const why: string = typeof recObj['why'] === 'string' ? recObj['why'] as string : '';
       if (token.trim().length === 0) {
         continue;
       }
-      const cand: AiToolCandidate = new AiToolCandidate();
-      cand.token = token;
-      cand.why = why;
-      out.push(cand);
+      const intro: string = typeof recObj['intro'] === 'string' ? recObj['intro'] as string : '';
+      const pick: AiSearchPick = new AiSearchPick();
+      pick.token = token;
+      pick.intro = AiTasks.clampText(intro, AI_D2_INTRO_MAX_CHARS);
+      out.push(pick);
     }
     return out;
   }
 
-  private static readonly D2_SYSTEM: string = '你是 Homebrew 工具推荐助手。根据用户的中文意图，' +
-    '推荐最多 5 个真实存在的通用命令行工具（Homebrew 包名）。' +
-    '输出 JSON：{"candidates":[{"token":"包名（英文小写）","why":"一句话中文理由"}]}，' +
-    '**candidates 必须是对象里的数组键，不要输出裸数组**；' +
-    '没有合适的推荐就输出 {"candidates":[]}，这是合法结果，不要编造包名。' +
+  /** 字符串字段读取 + 超长截断（clamp 不判错：字数溢出是内容问题不是结构问题）。 */
+  private static clampText(value: Object | undefined, maxChars: number): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    const text: string = value as string;
+    if (text.length <= maxChars) {
+      return text;
+    }
+    return text.substring(0, maxChars);
+  }
+
+  private static readonly D2_SYSTEM: string = '你是 Homebrew 工具推荐助手。用户会用一句话描述想做的事' +
+    '（中英文都可能），你给出一份「首选加次选」的推荐清单。' +
+    '输出 JSON：{"lead":"一两句话总起，点明共几个工具、首选是谁",' +
+    '"picks":[{"token":"包名（英文小写）","intro":"两三句中文介绍：它是什么、为什么适合用户的意图"}]}。' +
+    '规则：最多 5 个 picks，顺序就是推荐顺序（最合适的放第一）；' +
+    'token 只能是真实存在的 Homebrew 包名，**绝不编造**，拿不准就不要放进 picks；' +
+    'lead 不超过 50 字；每条 intro 不超过 120 字，写「它是什么 + 为什么适合」；' +
+    'lead 与 intro 用中文写（包名除外）；' +
+    '**picks 必须是对象里的数组键，不要输出裸数组**；' +
+    '没有合适的推荐就输出 {"lead":"","picks":[]}，这是合法结果，不要编造包名。' +
     AiTasks.PLATFORM_RULE;
 
   // ------------------------------------------------------------ D3 · 报错解读

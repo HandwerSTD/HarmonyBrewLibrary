@@ -9,6 +9,7 @@ import { preferences } from '@kit.ArkData';
 import { Logger, StorageKey } from '@ohos/common';
 import {
   AI_ASSET_ALIAS_API_KEY,
+  AI_PREFS_KEY_AI_SEARCH,
   AI_PREFS_KEY_AUTO_EXPLAIN,
   AI_PREFS_KEY_AUTO_RELEASE_INTEL,
   AI_PREFS_KEY_CONFIG,
@@ -356,6 +357,38 @@ export class AiSettingsStore {
     }
   }
 
+  /**
+   * 「AI 搜索问答」开关（搜索框 AI pill，默认**关**）。
+   *
+   * 与 autoExplain/autoReleaseIntel 不同：**不做「无 Key 恒 false」**——这是用户的
+   * 显式模式选择，开关状态忠实于用户操作；无 Key 时开着提交即 E1 →
+   * 通知条 + 自动本地搜索（G6 降级，不引导配 Key）。
+   */
+  public static aiSearch(): boolean {
+    const store: preferences.Preferences | null = AiSettingsStore.open();
+    if (store === null) {
+      return false;
+    }
+    return store.getSync(AI_PREFS_KEY_AI_SEARCH, false) === true;
+  }
+
+  /** 写「AI 搜索问答」开关（布尔单独存；不含 Key）。 */
+  public static saveAiSearch(enabled: boolean): boolean {
+    const store: preferences.Preferences | null = AiSettingsStore.open();
+    if (store === null) {
+      return false;
+    }
+    try {
+      store.putSync(AI_PREFS_KEY_AI_SEARCH, enabled === true);
+      Logger.info(TAG, `ai search saved enabled=${enabled}`);
+      return true;
+    } catch (err) {
+      const e: BusinessError = err as BusinessError;
+      Logger.error(TAG, `ai search save failed, code=${e.code}, msg=${e.message}`);
+      return false;
+    }
+  }
+
   /** 清空全部 AI 设置（含 Key）。 */
   public static async clearAll(): Promise<void> {
     await AiSettingsStore.removeApiKey();
@@ -365,6 +398,7 @@ export class AiSettingsStore {
         store.deleteSync(AI_PREFS_KEY_CONFIG);
         store.deleteSync(AI_PREFS_KEY_AUTO_EXPLAIN);
         store.deleteSync(AI_PREFS_KEY_AUTO_RELEASE_INTEL);
+        store.deleteSync(AI_PREFS_KEY_AI_SEARCH);
       } catch (err) {
         const e: BusinessError = err as BusinessError;
         Logger.error(TAG, `config delete failed, code=${e.code}`);

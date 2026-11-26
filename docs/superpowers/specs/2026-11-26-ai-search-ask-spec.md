@@ -38,7 +38,7 @@
 | G2 | AI 开关 = 搜索框内 pill；点击即切；状态经 `AiSettingsStore` 持久化（pattern 同 autoExplain），重启保持 | 手测重启 |
 | G3 | hint 切换：off=「搜索内容」，on=**"Ask me anything!"**（三语同文，英文 tagline 是产品决策，见 §4.1） | 手测切语言 |
 | G4 | AI 提交产出混排答案：lead 段 + 每包「AI 介绍段 + BrewPackageRow」成对出现，顺序 = LLM 叙事序（首选在前），**不经引擎重排** | 日志 + 目测 |
-| G5 | 幻影防御：LLM 输出的目录外 token 不展示（丢弃计数进日志）；行 kind 只信 `AiCatalogIndex` 单一事实源 | 日志 `d2 dropped=` |
+| G5 | 幻影防御：LLM 输出的目录外 token **不做可交互展示**（无详情路由/无安装入口）；进 `missed` 名单在答案尾部纯文本披露（m01462 修订，原口径为静默丢弃）；行 kind 只信 `AiCatalogIndex` 单一事实源 | 日志 `d2 dropped=` + 尾部披露行 |
 | G6 | 降级矩阵：E1/E2/E3 → 自动本地搜索 + 顶部通知条（无配 Key 引导）；E4/E5 → 错误卡 + 重试 + 「用本地搜索」次按钮 | 断网/改 Key 手测 |
 | G7 | 词表退役：`AiTaskWords.ets`、rawfile `ai/taskwords.json`、`findToolsOffline`、`AI_TASKWORDS_*` 常量全删 | grep 零残留 |
 | G8 | AI off 路径零改动：普通搜索 / 建议 / 历史 / chips / 结果列表行为与改前逐字节等价 | 回归目测 |
@@ -206,6 +206,20 @@ AI on + 有字（提交前）:
 
 ### 4.4 答案混排态（核心）
 
+> **修订（m01422 用户反馈）**：混排改为「**一篇长文，内嵌若干包 Item**」—— 全部内容收进
+> **同一张大卡**（`comp_background_list_card` 底 / level8 圆角 / clip / padding level6），文字
+> 统一正文字体（Body_M，21 行高，只靠颜色深浅分主次），行**透明嵌在文流里**（不再独立成
+> 卡）。读起来是 lead → 介绍段 → 行 → 介绍段 → 行 → 目录中相关 → 行… → footer 的连续文章，
+> 而不是「行旁边放提示文本」。下方 4.4 原图保留为初版设计存档；间距口径以本修订为准：
+> 段落紧行（intro→行 level2）、组间 level4、文字块水平缩进 level4（比行窄一档，段落感）、
+> related 连续行间 1px 分隔线（pick 行之间隔着文字段不加线）、footer 上方发丝线 + 居中落款。
+
+> **修订（m01462 用户反馈）**：目录外 token 不再静默丢弃——进 `missed` 名单在**大卡尾部**
+> （related 之后、footer 之前）纯文本单列披露：「AI 还提到了，但本机目录源里没有」+ token
+> 名单（顿号连接）。动机：lead 说 5 个推荐、实际只匹配 3 个会显得诡异，对不上账。安全口径
+> 不变：**纯文本、不可点击、无详情路由、无任何安装入口**——G5 防的本是诱导安装不存在的包
+> （slopsquatting），明示缺失恰是反诱导。`dropped` 计数与 `missed.length` 等价（日志口径不变）。
+
 **节奏**：文本段（无底色）与行卡（有底色）交替；「介绍段→行」组内间距 level2，组间距 level8。行 = 标准 `BrewPackageRow`（hideRank=true，独立卡底 `comp_background_list_card`，圆角 level8），点击走现有 openDetail 链路。
 
 ```
@@ -345,13 +359,14 @@ E4/E5 → 错误卡 (AI 模式停留在结果区):
 | AI pill | 高 28，padding 水平 level6，文本 "AI" Body_S Bold；off=tertiary 底/icon_secondary 字；on=90° 渐变 #C4B5FD→#7C3AED/白字（对比 5.70:1，沿用 D4） |
 | hint on | `brew_search_placeholder_ai` = "Ask me anything!"（base/zh_CN/en_US 三语同文） |
 | 搜索图标 | off=magnifyingglass；on=lightbulb（`sys.symbol.lightbulb`，与 D4 'ai' 板/分类同源） |
-| lead 段 | Body_L font_primary，maxLines 3，BREAK_WORD，padding 左右 level6 |
-| pick intro | Body_M font_secondary Regular，maxLines 4，padding 左右 level6 |
-| 行 | `BrewPackageRow(hideRank=true)`，itemHeight=brew_package_row_height，cardBg=comp_background_list_card，radius=level8，独立成卡 |
-| 组内/组间距 | intro→行 level2；组↔组 level8；lead→首组 level6 |
-| 尾行区 | 标题「目录中相关」Body_S font_tertiary；行同上但无 intro |
-| footer | (💡)+文案 Body_S font_tertiary 居中 |
-| 骨架 | D4 范式：灰条 font_secondary@0.18、行壳 list_card、pulse 1.2s 往返 |
+| 答案大卡 | 全文收进一张卡：list_card 底、level8 圆角、clip、padding level6（m01422 修订） |
+| lead 段 | Body_M font_primary，maxLines 3，21 行高，水平缩进 level4 |
+| pick intro | Body_M font_secondary Regular，maxLines 4，21 行高，水平缩进 level4 |
+| 行 | `BrewPackageRow(hideRank=true)`，itemHeight=brew_package_row_height，**透明底嵌入大卡**（不独立成卡） |
+| 垂直节奏 | intro→行 level2；组↔组 level4；lead→首组 level4；文字块缩进 level4（比行窄一档） |
+| 尾行区 | 标题「目录中相关」Body_M font_tertiary；行间 1px 分隔线（comp_background_tertiary） |
+| footer | 上方发丝线 + (💡)+文案 Body_S font_tertiary 居中 |
+| 骨架 | D4 范式：与答案同款大卡外壳，灰条 font_secondary@0.18、行透明嵌入，pulse 1.2s 往返 |
 | 通知条 | 高 36，tertiary 底 level4 圆角，Body_S font_secondary，可点击关闭 |
 | 错误卡 | list_card 底 level8 圆角 padding level8；主按钮紫渐变、次按钮描边 |
 
@@ -418,7 +433,7 @@ export class AiSearchAnswer {
 4. 行点击 → 详情页正常打开（G4）。
 5. 断网提交：通知条 + 本地结果（G6）；坏 Key：E5 → 错误卡 → 重试/用本地搜索均有效（G6）。
 6. 24h 内重复同问：日志 `d2 cache hit`，无第二次 LLM 调用（G10）。
-7. 模型幻觉 token：不渲染，日志 `d2 dropped=` 递增（G5）。
+7. 模型幻觉 token：不渲染为可交互行，进 `missed` 尾部披露行（纯文本、不可点击），日志 `d2 dropped=` 递增（G5）。
 8. grep `BrewAiFindCard|AiTaskWords|taskwords|AiFindRowSource` 全仓零业务残留（G1/G7）。
 9. pc_normal + pc_acl 双产品 CompileArkTS 通过。
 

@@ -380,7 +380,9 @@ export class MinePageVM extends BaseHomeViewModel<MinePageState> {
   private applyLocalSets(installed: BrewInstalledPackage[], outdated: BrewInstalledPackage[],
     updated: BrewInstalledPackage[]): void {
     this.state.installedCount = installed.length;
-    this.state.outdatedPackages = outdated;
+    // F 线：待更新预览卡与「待更新」子页同一份置顶口径 —— 关注中的包排最前面，
+    // 「优先提醒」在首页预览与二级列表上表现一致（两边共用 prioritizeFollowed）。
+    this.state.outdatedPackages = MinePackagesUtil.prioritizeFollowed(outdated);
     this.state.updatedPackages = updated;
     this.state.packagesLoading = false;
   }

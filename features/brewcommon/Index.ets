@@ -276,6 +276,15 @@ export { BrewSourceRestart } from './src/main/ets/service/BrewSourceRestart';
 // 只读 BrewInstalledLoader 的快照，不跑命令（审计脚本 hmosword-build/brew-sentinel 拦触达点）。
 export { BrewSentinelService } from './src/main/ets/service/BrewSentinelService';
 
+// 「关注更新」偏好：按包名（token）的关注开关。待更新列表置顶排序与哨兵卡片的
+// 关注过滤都读它；只在宿主进程出现（卡片数据在宿主派生，扩展进程读镜像）。
+// UPDATE_FOLLOW_VERSION_KEY 是写侧 bump / 读侧 @StorageProp 的版本号键（见其注释）。
+export { UPDATE_FOLLOW_VERSION_KEY, UpdateFollowPrefs } from './src/main/ets/service/UpdateFollowPrefs';
+
+// 关注状态变化后的卡片重推同步器：单向依赖 UpdateFollowSync → BrewSentinelService
+// → UpdateFollowPrefs，拆文件就是为了避免 brewcommon 内部循环依赖。
+export { UpdateFollowSync } from './src/main/ets/service/UpdateFollowSync';
+
 // 哨兵常量：GSKV 键 / 卡片数据键 / 卡片规格 / 三档调度开关（通知与频控常量已随二期 N 线移除）。
 // 不入 CommonEnums.StorageKey —— 哨兵键是跨进程 preferences 键，与 AppStorage 键物理分开（spec §2）。
 export {
@@ -283,6 +292,7 @@ export {
   SENTINEL_DATA_AS_OF,
   SENTINEL_DATA_COUNT,
   SENTINEL_DATA_DIMENSION,
+  SENTINEL_DATA_FOLLOW_EMPTY,
   SENTINEL_DATA_FORM_ID,
   SENTINEL_DATA_HAS_SNAPSHOT,
   SENTINEL_DATA_ITEMS,
@@ -291,6 +301,7 @@ export {
   SENTINEL_DIMENSION_2_4,
   SENTINEL_DIMENSION_4_4,
   SENTINEL_DIMENSION_DEFAULT,
+  SENTINEL_FOLLOW_FORM_NAME,
   SENTINEL_FORM_NAME,
   SENTINEL_PREFERENCES_NAME,
   SENTINEL_STALE_MS,
@@ -300,7 +311,9 @@ export {
   SENTINEL_WORK_INTERVAL_MS,
   SENTINEL_WORK_SCHEDULER_ENABLED,
 } from './src/main/ets/constant/SentinelConstants';
-// ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3）
+// ------------------------------------------------------------------ AI Companion（BYOK 底座 + D1/D2/D3/D4）
+// D2 已问答化（2026-11-26-ai-search-ask-spec）：AiSearchPick/AiSearchAnswer 替代旧
+// AiToolCandidate/AiToolResult；词表（AiTaskWords）随贴片退役一并删除。
 
 export { AiClient } from './src/main/ets/service/AiClient';
 export { AiErrorDetail } from './src/main/ets/util/AiErrorDetail';
@@ -313,14 +326,13 @@ export {
   AiProviderConfig,
   AiSettingsSnapshot,
   AiExplainCard,
-  AiToolCandidate,
-  AiToolResult,
+  AiSearchPick,
+  AiSearchAnswer,
   AiFailureCard,
   AiExplainInput,
   AiFailureInput,
   AiIntentInput,
   isKnownAiProvider,
-  d2CandidateCap,
   AiDiscoverProfile,
   AiDiscoverPick,
   AiDiscoverResult,
@@ -338,8 +350,9 @@ export {
   AI_PROMPT_MAX_CHARS,
   AI_D3_STDERR_TAIL_CHARS,
   AI_D3_STDOUT_TAIL_CHARS,
-  AI_TASKWORDS_RAWFILE,
-  AI_TASKWORDS_MIN_COUNT,
+  AI_D2_LEAD_MAX_CHARS,
+  AI_D2_INTRO_MAX_CHARS,
+  AI_D2_TAIL_ROWS_MAX,
   AI_D2_MAX_CANDIDATES,
   AI_D2_RESULT_LIMIT,
   AI_TIMEOUT_MS,
@@ -349,6 +362,7 @@ export {
   AI_DEEPSEEK_DEFAULT_MODEL,
   AI_ASSET_ALIAS_API_KEY,
   AI_PREFS_KEY_AUTO_EXPLAIN,
+  AI_PREFS_KEY_AI_SEARCH,
   AI_D4_MIN_INSTALLED,
   AI_D4_INSTALLED_CAP,
   AI_D4_POOL_FORMULA,
@@ -358,7 +372,6 @@ export {
   AI_D4_FEATURED_COUNT,
   AI_D4_RECENT_DAYS,
 } from './src/main/ets/constant/AiConstants';
-export { AiTaskWord, AiTaskWords } from './src/main/ets/util/AiTaskWords';
 // ------------------------------------------------------------------ AI 发现流（D4 · 发现页个性化推荐）
 // spec 2026-11-26-ai-discover-feed-spec.md：画像 + 推荐取数（brewcommon 侧）、
 // 装配与渲染在 brewdiscover。fnv1a32 是 install 集签名（cacheKey 材料）。

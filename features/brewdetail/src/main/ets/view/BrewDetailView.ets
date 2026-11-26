@@ -51,7 +51,7 @@ import { BrewLifecycleBanner } from '../component/BrewLifecycleBanner';
 import { BrewReleaseArchiveView } from '../component/BrewReleaseArchiveView';
 import { BrewReleaseIntelCard } from '../component/BrewReleaseIntelCard';
 import { BrewTldrSectionView } from '../component/BrewTldrSectionView';
-import { RELEASE_INTEL_PAUSE_FOREVER_MS, ReleaseIntelPrefs } from '@ohos/brewcommon';
+import { RELEASE_INTEL_PAUSE_FOREVER_MS, ReleaseIntelPrefs, UpdateFollowPrefs, UpdateFollowSync } from '@ohos/brewcommon';
 import { BrewDetailState, BrewInstallState } from '../viewmodel/BrewDetailState';
 import { BrewDetailViewModel } from '../viewmodel/BrewDetailViewModel';
 
@@ -91,6 +91,12 @@ export struct BrewDetailView {
    * 所以放在这里天然是每页独立的。
    */
   @State backPressed: boolean = false;
+  /**
+   * 本包是否关注中（F 线）。页面实例自己的 @State（与 backPressed 同理：详情页可叠详情页，
+   * state 不能跨页面共享），进页时按路由参数的 token 从 `UpdateFollowPrefs` 读一次，
+   * 点开关就地翻转 —— token 在本页生命周期内不变。
+   */
+  @State followOn: boolean = false;
 
   /**
    * 页面滚动容器。显式持有并在 `HdsNavDestination` 上 `bindToScrollable([this.scroller])`：
@@ -130,6 +136,8 @@ export struct BrewDetailView {
     this.kind = params.kind;
     this.detailState.params = params;
     this.detailState.pathStack = ctx?.pathStack;
+    // F 线：进页先读一次关注状态。token 在本页实例生命周期内不变，不需要后续重读
+    this.followOn = UpdateFollowPrefs.isFollowed(params.token);
     // 先用列表页已知的信息填标题，避免详情返回前标题栏是空的
     this.title = params.title || params.token;
     this.viewModel.load(params, this.detailState);
@@ -194,6 +202,28 @@ export struct BrewDetailView {
   }
 
   // ---------------- Y · 更新情报的页面处理器（spec §4 操作行） ----------------
+
+  /**
+   * 本包是否已安装在本机（UNKNOWN = 快照还没到）。关注行只对已安装的包渲染：
+   * 关注的是「它的更新」，没装就没有更新可言。
+   */
+  private installedOnDevice(): boolean {
+    return this.detailState.installState === BrewInstallState.INSTALLED ||
+      this.detailState.installState === BrewInstallState.OUTDATED;
+  }
+
+  /** 关注 / 取消关注（F 线）：写 `UpdateFollowPrefs` + 翻本页开关 + 让桌面卡片立即跟上 */
+  private toggleFollow(): void {
+    const token: string = this.detailState.params.token;
+    if (this.followOn) {
+      UpdateFollowPrefs.clearFollowed(token);
+      this.followOn = false;
+    } else {
+      UpdateFollowPrefs.setFollowed(token);
+      this.followOn = true;
+    }
+    UpdateFollowSync.pushCard();
+  }
 
   /** 忽略 / 撤销忽略（G6：写 ReleaseIntelPrefs + 翻 state 开关；H 通知计数随之变化） */
   private handleIntelToggleIgnore(): void {
@@ -351,6 +381,43 @@ export struct BrewDetailView {
     })
   }
 
+  /**
+   * F 线 · 关注更新行：标题 + 说明 + 「关注/取消关注」文字按钮。
+   * 视觉与「忽略弱化条」同一套（tertiary 底 + level8 圆角），按钮样式对齐
+   * `release_intel_unignore` 的强调色文字按钮。
+   */
+  @Builder
+  FollowRow() {
+    Row() {
+      Column({ space: 2 }) {
+        Text($r('app.string.detail_follow_title'))
+          .fontSize($r('sys.float.Body_M'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Text($r('app.string.detail_follow_desc'))
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      Text(this.followOn ? $r('app.string.detail_follow_off') : $r('app.string.detail_follow_on'))
+        .fontSize($r('sys.float.Body_S'))
+        .fontColor($r('sys.color.font_emphasize'))
+        .padding({ left: 12, top: 6, bottom: 6 })
+        .onClick(() => {
+          this.toggleFollow();
+        })
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding($r('sys.float.padding_level6'))
+    .backgroundColor($r('sys.color.comp_background_tertiary'))
+    .borderRadius($r('sys.float.corner_radius_level8'))
+  }
+
   @Builder
   ContentBuilder() {
     Scroll(this.scroller) {
@@ -361,6 +428,12 @@ export struct BrewDetailView {
         // 9 生命周期警示（deprecated / disabled）—— 位置靠前，因为它影响"要不要装"
         if (this.detailState.data.hasLifecycle) {
           BrewLifecycleBanner({ notice: this.detailState.data.lifecycle })
+        }
+
+        // F 线 · 关注更新：只对已安装的包渲染（快照未到 installState=UNKNOWN 时同样不渲染，
+        // 避免「先出现再消失」的闪变 —— installState 变化会触发重渲染，到位后自然出现）
+        if (this.installedOnDevice()) {
+          this.FollowRow()
         }
 
         // Y · 更新情报（release intel spec §4：生命周期之后、安装命令卡之前）。
