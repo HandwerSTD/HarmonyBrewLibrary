@@ -312,6 +312,28 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
     BrewTable.removeObserver(this.tableObserver);
   }
 
+  /**
+   * 订阅安装快照落地。与 tableObserver 同款纪律：成对订阅退订、同一函数引用。
+   *
+   * 冷启时序：进发现页的闸门判定（snapshot() 只读不执行命令）常常跑在第一次
+   * brew list 之前 —— 快照后落地时没有这里的重试，AI 区要等用户下次切页才装配。
+   */
+  private installedObserver: () => void = () => {
+    if (this.state.aiPhase !== BrewDiscoverAiPhase.HIDDEN) {
+      return;
+    }
+    Logger.debug(TAG, '[load] 安装快照已落地，重试 AI 区装配');
+    this.loadAiSection();
+  };
+
+  public subscribeInstalled(): void {
+    BrewInstalledLoader.subscribe(this.installedObserver);
+  }
+
+  public unsubscribeInstalled(): void {
+    BrewInstalledLoader.unsubscribe(this.installedObserver);
+  }
+
   /** 重试按钮：强制重取两片（跳过新鲜窗口判定） */
   public retryLoad(): void {
     this.loadDiscover();
@@ -344,8 +366,9 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
    * FAILED 等用户点重试。tableObserver 落地 → loadDiscover → 这里，所以目录迟到会自动补跑）。
    *
    * 前置闸门（任一不过 = HIDDEN 静默，G6：不引导配 Key、不占位、不打 error）：
-   *   1. 本机安装快照缺失（pc_normal 无 CLI / 首启未取）或装机数 < AI_D4_MIN_INSTALLED ——
-   *      画像无从谈起；
+   *   1. 本机安装快照缺失（pc_normal 无 CLI / 首启未取）—— 触发一次后台读取后等
+   *      installedObserver 补跑（快照不执行命令，落地才有的聊）；或装机数
+   *      < AI_D4_MIN_INSTALLED —— 画像无从谈起；
    *   2. 无 API Key（E1）；
    *   3. 包表未 ready —— 候选池不完整会推荐出错的包（G5 的池子先于 G5 的校验）。
    */
@@ -354,8 +377,19 @@ export class BrewDiscoverHomeViewModel extends BaseHomeViewModel<BrewDiscoverSta
       return;
     }
     const snap: BrewInstalledSnapshot | null = BrewInstalledLoader.snapshot();
-    if (snap === null || snap.sets.installed.length < AI_D4_MIN_INSTALLED) {
-      Logger.debug(TAG, 'd4 hidden: installed snapshot missing or below minimum');
+    if (snap === null) {
+      // 冷启首跑快照还没读：触发一次后台读取（loadSets 合并在途请求，不会重复执行
+      // brew），落地时 installedObserver 会重跑本方法补装配 —— 用户停在发现页也能
+      // 看到 AI 区自己出现，不需要先去「我的」页绕一圈。CLI 关闭时 loadSets
+      // 静默返回空集，不执行命令，所以这里不用再判 BrewCli.isEnabled。
+      BrewInstalledLoader.loadSets().catch((error: Error) => {
+        Logger.warn(TAG, `d4 installed load failed: ${error.message}`);
+      });
+      Logger.debug(TAG, 'd4 hidden: installed snapshot missing, background load kicked');
+      return;
+    }
+    if (snap.sets.installed.length < AI_D4_MIN_INSTALLED) {
+      Logger.debug(TAG, 'd4 hidden: installed below minimum');
       return;
     }
     if (!AiSettingsStore.hasApiKey()) {

@@ -2,7 +2,7 @@
 
 > 日期：2026-11-26（v2，按 m00133 反馈重写 UX：AI 推荐复用现有大图卡 + 榜卡，插进瀑布流，不再做 Hero+横滑 Rail）。状态：待评审。
 > 范围：`features/brewcommon`（`AiTypes` / `AiConstants` / `AiTasks` 新增 D4 任务层）；`features/brewdiscover`（VM/State/FeedItem 扩展、`BrewBoardStyle`/`BrewDiscoverBoardCard` 小改、骨架与失败卡、字符串资源）。
-> 不做：画像编辑与反馈闭环、推荐解释二级页、AI 榜二级页（「查看全部」）、向量检索、服务端缓存、pc_normal 假安装数据。
+> 不做：画像编辑与反馈闭环、推荐解释二级页、向量检索、服务端缓存、pc_normal 假安装数据。
 > 依据：`2026-11-22-ai-companion-spec.md`（BYOK 底座 / D1–D3 / G5 / G6 / G13）、`docs/brew-discover-algo.md`（六榜与瀑布流现状）、`2026-11-24-ai-search-unified-spec.md`（D2 管线口径）。
 > 需求原文（m00001）：「AI发现流，支持AI分析本地用户安装的包从而推断用户画像，然后在发现页使用AI推荐符合用户画像的包。这是一个演示用Mvp所以原理可以暴力一点，直接用Byok的LLM进行推荐生成，假定用户Token管够。但是生成缓存还是要做的。先写Spec」
 > UX 反馈原文（m00133）：「哦不不我想的是有好几张卡，占在现在的推荐卡片前面，其中可以有若干的专门展示一个包的大图卡，Subtitle写工具简介，然后一个榜卡用于显示推荐的所有包列表，后面再排上现有的Stat驱动的卡」
@@ -34,7 +34,7 @@
 | --- | --- | --- |
 | 瀑布流 feed（`BrewDiscoverBaseView.ets:130-216` + `BrewDiscoverVM.ets`） | WaterFlow 3 sections `[spacer, feed, footer]`；feed = `BrewDiscoverFeedItem.mix(featured, boards)` 进 LazyForEach，crossCount sm1/md2/lg3，`BrewDiscoverFeedType` FEATURED/BOARD 两分支渲染；spacer/footer 是空白 FlowItem 让位（不能用容器 padding——会裁剪内容破坏标题栏模糊） | **AI 卡前插 feed 数组**：`[AI featured ×3, AI board ×1, ...mix(featured, boards)]`。骨架/失败态也是 feed item（新 feedType）。sections 数量与 crossCount 零改动，AI 卡天然参与多列瀑布 |
 | 单包大图卡（`BrewDiscoverFeaturedCard.ets`） | Stack：渐变底（`BrewFeaturedArtStyle` 7 套，按 `item.id` 确定性选取）+ 裸 symbol 140vp + 底部内容块（右上徽章=增速 `↑22.0×`；desc 大字 Title_M Medium 2 行；`HdsListItemCard` 行 = icon + 市场名 + 安装量 + chevron）；卡高 400vp | **零改动复用**：AI 大图卡 = `BrewDiscoverFeatured`（`boardKey='ai'`）。徽章文案走 `BrewBoardStyle.titleOf(boardKey)` → 'ai' 映射「AI 为你推荐」；desc = 目录工具简介；id 走 `tokenId(token)` → 配色与其他卡一样从池子确定性取。可选加分项：`installedOf` 命中时右上徽章改「已安装」 |
-| 榜单大卡（`BrewDiscoverBoardCard.ets`） | Hero（`BrewDiscoverHero`：kindLabel + title + symbol + 渐变，`BrewBoardStyle` 按板配色）+ 预览 5 行（`BrewDiscoverRow`）+ `entryCount > 5` 时「查看全部」行（jumpBoard 进二级页） | **AI 榜卡 = `BrewDiscoverBoard`（`boardKey='ai'`）+ 两个特判**：① 行列表**全显不截 5**（用户要求「显示推荐的所有包列表」）；② **不渲染「查看全部」**（AI 榜无二级页，boardId 不入路由）；③ Hero 标题位 = 画像 headline（动态注入），kindLabel =「AI 为你推荐」，Hero 右上角「换一批」↻ 小按钮 |
+| 榜单大卡（`BrewDiscoverBoardCard.ets`） | Hero（`BrewDiscoverHero`：kindLabel + title + symbol + 渐变，`BrewBoardStyle` 按板配色）+ 预览 5 行（`BrewDiscoverRow`）+ `entryCount > 5` 时「查看全部」行（jumpBoard 进二级页） | **AI 榜卡 = `BrewDiscoverBoard`（`boardKey='ai'`）+ 两个特判**：① 行列表**全显不截 5**（用户要求「显示推荐的所有包列表」）；② 保留「查看全部」行（boardId=0 进现有榜单二级页，数据取首页 VM 的 aiBoard）；③ Hero 标题位 = 画像 headline（动态注入），kindLabel =「AI 为你推荐」，Hero 右上角「换一批」↻ 小按钮 |
 | 榜内行（`BrewDiscoverRow.ets`） | 行 = icon + 市场名 + 副文案（`entry.desc`） | **零改动**：AI 榜行的 `desc` 字段直接填 pick 的 why（推荐理由）——同一字段、不同内容源，渲染自动生效 |
 | 安装数据（`BrewInstalledLoader.ets`） | `snapshot()` / `installedOf(token)` / `subscribe`；pc_normal `BrewCli.isEnabled()=false` → 静默空集 | D4 用 `snapshot()` 同步取（不执行命令）；`installedOf` 画「已安装」角标 |
 | 目录（`BrewTable.ets`） | `rows(kind)` 全量 `CatalogEntry[]` 按 vol30d 降序；`descOf(kind, token)`；`state()`；epoch=`BrewCacheEpoch.current()` 世代号 | 候选池 = rows 截 top N（去已安装）；epoch 进 cacheKey；`BrewBrowseBuilder.tokenId(token)` 派生详情 id |
@@ -59,7 +59,8 @@
 loadDiscover()（既有，不动）
   └─► loadAiSection()（新增，并行，不阻塞六榜渲染）
         ├─ 前置闸门（任一不满足 → phase='hidden'，AI 区不出现）：
-        │    ① BrewInstalledLoader.snapshot() 为 null 或 installed.length < AI_D4_MIN_INSTALLED(3)
+        │    ① BrewInstalledLoader.snapshot() 为 null（触发一次后台 loadSets，
+        │       快照落地后 installedObserver 重跑本装配）或 installed.length < AI_D4_MIN_INSTALLED(3)
         │    ② AiSettingsStore 快照无 Key（E1 静默语义，不发请求）
         │    ③ BrewTable.state() !== 'ready'（候选池无依据）→ hidden；
         │       tableObserver 落地回调里若因 ③ 隐藏则重试（BrewDiscoverVM 已订阅，复用）
@@ -82,7 +83,7 @@ loadDiscover()（既有，不动）
 ```
 
 - 事件：`LOAD_AI`（进入页面 / 表落地）、`AI_RETRY`（失败占位重试）、`AI_REGENERATE`（换一批，force=true，骨架只罩榜卡位，已显示的大图卡不动——画像由安装集决定，换的是推荐不是画像）。
-- `BrewInstalledLoader.subscribe` 不接：安装集变化由下次进入页面自然重查（cacheKey 变了自动 MISS）；页面存活期间装新包不追求实时刷新（演示无此诉求）。
+- `BrewInstalledLoader.subscribe` **接入**（与 tableObserver 同款成对订阅纪律）：冷启时序里进页的闸门判定常跑在第一次 `brew list` 之前，快照后落地时由 observer 重跑 `loadAiSection` 补装配。闸门发现快照缺失时还会主动触发一次后台 `loadSets()`（在途合并，不重复执行命令），用户停在发现页也能看到 AI 区自己出现。安装集变化（换批装的包）仍由 cacheKey 变化在下次装配时自然重查；页面存活期间装新包不追求实时刷新（演示无此诉求）。
 - feed 重建纪律：phase 每次变化，VM 重建整个 feed 数组（AI items + `mix()` 结果）→ `cardSource.setDataArray`。AI items 的 LazyForEach key 带 phase/round（`ai_feat_${token}` / `ai_board` / `ai_skel_${i}` / `ai_failed` / `ai_skel_board`），骨架→实体切换时旧骨架 item 自然被替换；现有六榜 key（`featured_${id}` / `board_${id}`）不变，LazyForEach 复用节点不闪。
 
 ### 3.2 Prompt（单次调用，产出画像 + 推荐两个对象）
@@ -176,7 +177,7 @@ exclude: 上一次推荐的 token 列表（仅 force 时出现此段）
 | `boardKey` | `'ai'`（徽章文案分支） | （board 对象上）`'ai'` |
 | `kind`（featured 对象上） | pick.kind | — |
 
-- AI 榜卡：`BrewDiscoverBoard{id: 0, kind: '', boardKey: 'ai', entryCount: picks.length, entries: picks 全量}`；**id=0 且 `boardKey='ai'`** → `BrewDiscoverBoardCard` 特判全显 + 不渲染「查看全部」+ Hero 标题 = profile.headline（动态注入）、kindLabel = 资源「AI 为你推荐」、Hero 渐变 = `BrewBoardStyle` 的 'ai' 映射（第八套，不与六榜重叠）、Hero 右上「换一批」↻。
+- AI 榜卡：`BrewDiscoverBoard{id: 0, kind: '', boardKey: 'ai', entryCount: picks.length, entries: picks 全量}`；**id=0 且 `boardKey='ai'`** → `BrewDiscoverBoardCard` 特判全显 + Hero 标题 = profile.headline（动态注入）、kindLabel = 资源「AI 为你推荐」、Hero 渐变 = `BrewBoardStyle` 的 'ai' 映射（第八套，不与六榜重叠）、Hero 右上「换一批」↻。二级页：`BrewDiscoverBoardView` 复用，`boardId=0` 时 VM 直接取首页单例的 `aiBoard`（点进去时内容必然已生成）；行 kind 逐行取 `BrewDiscoverAiEntry.kind`（AI 榜 board.kind 恒空），标题走 `titleOf('ai')`，数据窗口行不显示。
 - 画像 headline 注入：`BrewDiscoverBoard` 加一个可选 `heroTitle?: string`（默认 undefined → BoardCard 走 `BrewBoardStyle.titleOf(boardKey)` 静态表；AI 榜填 headline）。tags / basis 字段保留在 profile 里但 MVP 不渲染（headline 已承载画像主信息；后续可做画像二级页）。
 - 已装角标（可选加分项）：渲染前批量 `BrewInstalledLoader.installedOf(token)`；命中 → 大图卡右上徽章位显示「已安装」（替换增速徽章），榜行尾加小角标。做不做不阻塞 G1–G8。
 
@@ -202,7 +203,7 @@ exclude: 上一次推荐的 token 列表（仅 force 时出现此段）
 │ ║        （'ai' 渐变 Hero，第八套）            ║ │
 │ ║ ─────────────────────────────────────── ║ │
 │ ║ [icon] k9s      AI 榜行副文案=why          ║ │ ← 10 行全显
-│ ║ [icon] lazygit  why（推荐理由）             ║ │    （不截 5、无「查看全部」）
+│ ║ [icon] lazygit  why（推荐理由）             ║ │    （不截 5，尾部「查看全部」进二级页）
 │ ║ …（全部推荐包，每行带推荐理由）               ║ │
 │ ╚═════════════════════════════════════════╝  │
 ├────────────────────────────────────────────┤
@@ -285,7 +286,7 @@ AI_D4_RECENT_DAYS = 30           // 「近装」标记窗口
 | `features/brewdiscover/src/main/ets/viewmodel/BrewDiscoverVM.ets` | 改 | +`loadAiSection()`（闸门→AiTasks.discover→渲染模型补全→phase→重建 feed）；事件 `LOAD_AI`/`AI_RETRY`/`AI_REGENERATE`；feed 拼接 `[AI items, ...mix(featured, boards)]`；tableObserver 落地重试 hidden 态 |
 | `features/brewdiscover/src/main/ets/model/BrewDiscoverFeedItem.ets` | 改 | `BrewDiscoverFeedType` +`AI_SKELETON_FEATURED`/`AI_SKELETON_BOARD`/`AI_FAILED`；key 分支（`ai_feat_${token}`/`ai_board`/`ai_skel_${i}`/`ai_failed`）；骨架/失败 item 的工厂方法 |
 | `features/brewdiscover/src/main/ets/view/BrewDiscoverBaseView.ets` | 改 | LazyForEach 渲染分支 +3（骨架大图卡/骨架榜卡/失败卡 → 新小组件）；`jumpDetail` 对 AI 榜行/大图卡复用（kind 从 entry/board 判定同现状） |
-| `features/brewdiscover/src/main/ets/component/BrewDiscoverBoardCard.ets` | 改 | `boardKey==='ai'` 特判：行全显（不 slice 5）、不渲染「查看全部」、Hero 走 `heroTitle ?? titleOf`（board 对象新增可选字段） |
+| `features/brewdiscover/src/main/ets/component/BrewDiscoverBoardCard.ets` | 改 | `boardKey==='ai'` 特判：行全显（不 slice 5）、Hero 走 `heroTitle ?? titleOf`（board 对象新增可选字段）、「查看全部」行进 boardId=0 二级页 |
 | `features/brewdiscover/src/main/ets/component/BrewDiscoverAiSkeletonFeaturedCard.ets` | 新 | 大图卡形骨架（灰卡 + 脉冲），尺寸=400vp 常量复用 |
 | `features/brewdiscover/src/main/ets/component/BrewDiscoverAiSkeletonBoardCard.ets` | 新 | 榜卡形骨架（Hero 灰块 + 行灰条 ×4） |
 | `features/brewdiscover/src/main/ets/component/BrewDiscoverAiFailedCard.ets` | 新 | 失败占位卡：'ai' 渐变 Hero + 文案 + 重试按钮 |
@@ -314,7 +315,7 @@ AI_D4_RECENT_DAYS = 30           // 「近装」标记窗口
 - **大图卡数「若干」= 3**：评审可调（2–5 均合理；过大则 AI 区太重压过六榜）。同理 picks=10、池 200+130 都是拍脑袋值，评审定。
 - **'ai' Hero 渐变具体色值**：按 `BrewBoardStyle` 六套的明度/对比纪律选一对，实现时定；不与现有六套重叠。
 - **sparkle 类 symbol 是否在 HDS 集合**：实现时确认；不存在用通用「推荐」形或分类字形兜底，不阻塞。
-- **AI 榜卡行数**：10 行全显使 AI 榜卡比六榜榜卡（5+查看全部）长一截；若视觉太重可改「前 8 行 + 尾行『还有 N 个』（不可点）」——但「查看全部」二级页不做（MVP 边界），全显是用户指定行为。
+- **AI 榜卡行数**：10 行全显使 AI 榜卡比六榜榜卡（5+查看全部）长一截；尾部「查看全部」进 boardId=0 二级页（复用现有 `BrewDiscoverBoardView`，数据取首页 VM 的 aiBoard）。
 - **已装角标**：加分项不阻塞；做的话大图卡右上徽章位替换逻辑要与增速徽章互斥（已装优先）。
 - **JSON 输出稳定性**：DeepSeek jsonObject 模式 + maxTokens 1200 下 10 picks 中文输出实测预算内；截断 → E4-truncated，重试可解。
 - **候选池新鲜度**：epoch 进 cacheKey，目录换代自动重算；「换一批」同 key 覆盖写（刻意：安装集没变，画像不该变）。

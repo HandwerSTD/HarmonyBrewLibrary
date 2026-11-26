@@ -7,6 +7,8 @@ import { LoadingStatus, Logger, PageContext, PageEnum, RequestErrorCode, Storage
 import { BrewDiscoverModel, BrewFormat, BrewTable } from '@ohos/brewcommon';
 import type { BrewDetailParams, BrewDiscoverBoard, BrewDiscoverEntry, BrewDiscoverPageData } from '@ohos/brewcommon';
 import { BrewDiscoverBoardState } from './BrewDiscoverBoardState';
+import { BrewDiscoverAiEntry } from '@ohos/brewcommon';
+import { BrewDiscoverHomeViewModel } from './BrewDiscoverVM';
 
 const TAG: string = '[BrewDiscoverBoardVM]';
 
@@ -36,11 +38,24 @@ export class BrewDiscoverBoardVM {
    * 按 id 取整张榜。
    *
    * 不新增端点、不发请求：数据全部来自包表（`brew_table` 的 `boards` 一半）。
+   *
+   * boardId=0 是 AI 榜（D4 虚拟榜）：数据不在包表里，在首页 VM 单例的
+   * `aiBoard` 上 —— 点「查看全部」时内容必然已生成（没生成就没有这张卡），
+   * 直接取 state 即可；为空（极端时序下 AI 区被回置）给 FAILED。
    */
   public load(boardId: number, state: BrewDiscoverBoardState): void {
     state.boardId = boardId;
     const tableState: string = BrewTable.state();
     Logger.debug(TAG, `[load] 榜单二级页构建开始 boardId=${boardId} tableState=${tableState}`);
+    if (boardId === 0) {
+      const aiBoard: BrewDiscoverBoard | null =
+        BrewDiscoverHomeViewModel.getInstance().getState().aiBoard;
+      state.board = aiBoard ?? undefined;
+      state.snapshotDate = '';
+      state.loadingModel.loadingStatus = aiBoard !== null ? LoadingStatus.SUCCESS : LoadingStatus.FAILED;
+      Logger.info(TAG, `load ai board: ${aiBoard?.entryCount ?? 0} entries`);
+      return;
+    }
     state.loadingModel.loadingStatus = tableState === 'building' ? LoadingStatus.BUILDING :
       (tableState === 'ready' ? LoadingStatus.LOADING : LoadingStatus.EMPTY_DATA);
     this.discoverModel.getDiscoverPage()
@@ -78,8 +93,10 @@ export class BrewDiscoverBoardVM {
     if (!entry.id) {
       return;
     }
+    // AI 榜行自带 kind（候选池单一事实源，formula/cask 逐行混排），board.kind 恒空
+    const kindOf: string = kind.length > 0 ? kind : (entry as BrewDiscoverAiEntry).kind;
     const param: BrewDetailParams = {
-      kind: BrewFormat.brewKindOf(kind),
+      kind: BrewFormat.brewKindOf(kindOf),
       title: entry.token,
       id: entry.id,
       token: entry.token,
